@@ -1,0 +1,554 @@
+"""
+Orbital energy-level diagram and cube-file isosurface visualization.
+
+Two capabilities, each with progressively heavier dependencies:
+
+1. **Orbital energy diagram** (matplotlib only) — works everywhere.
+   Draws a horizontal‐line energy‐level diagram with HOMO/LUMO labels,
+   colour-coded by occupation.  Input is a NumPy array of MO energies
+   (from ``results.npz`` or a live ``SessionResult``).
+
+2. **Cube-file isosurface** (plotly + PySCF ``cubegen``) — Linux only.
+   Generates a volumetric cube file for a selected MO, then renders an
+   isosurface in 3-D using ``plotly.graph_objects.Isosurface``.  This
+   requires PySCF at *generation* time; the viewer works on any platform
+   once the cube data is saved.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+# Conversion factor — PySCF stores MO energies in Hartree
+HARTREE_TO_EV: float = 27.211386245988
+
+
+# ============================================================================
+# Data container
+# ============================================================================
+
+
+@dataclass
+class OrbitalInfo:
+    """Lightweight container extracted from a PySCF results file."""
+
+    mo_energies_ev: np.ndarray  # shape (n_mo,)
+    n_occupied: int
+    homo_energy_ev: float
+    lumo_energy_ev: float
+    homo_lumo_gap_ev: float
+    formula: str  # for chart title
+
+    @property
+    def n_virtual(self) -> int:
+        return len(self.mo_energies_ev) - self.n_occupied
+
+
+def load_orbital_info(
+    results_path: Path,
+    *,
+    formula: str = "",
+    mo_occ: Optional[np.ndarray] = None,
+) -> OrbitalInfo:
+    """
+    Load orbital energies from a ``results.npz`` file.
+
+    Parameters
+    ----------
+    results_path : Path
+        Path to the ``.npz`` file saved by the PySCF calculation script.
+        Must contain at least ``mo_energy``; optionally ``mo_occ``.
+    formula : str
+        Molecule formula (used in chart title).  If empty, uses the
+        stem of *results_path*.
+    mo_occ : ndarray, optional
+        Occupation numbers.  If *None*, they are read from the file or
+        inferred by assuming all orbitals with energy below the midpoint
+        between the two lowest-energy unoccupied orbitals are filled.
+
+    Returns
+    -------
+    OrbitalInfo
+    """
+    data = np.load(results_path, allow_pickle=False)
+    mo_energy_ha: np.ndarray = data["mo_energy"]
+
+    # Handle UHF (2, n_mo) — use alpha spin
+    if mo_energy_ha.ndim == 2:
+        mo_energy_ha = mo_energy_ha[0]
+
+    mo_energy_ev = mo_energy_ha * HARTREE_TO_EV
+
+    # Determine occupation
+    if mo_occ is not None:
+        occ = np.asarray(mo_occ)
+    elif "mo_occ" in data:
+        occ = data["mo_occ"]
+        if occ.ndim == 2:
+            occ = occ[0]
+    else:
+        # Fallback: assume first n orbitals with energy < 0 are occupied
+        occ = (mo_energy_ha < 0).astype(float)
+
+    n_occ = int((occ > 0).sum())
+    if n_occ == 0 or n_occ >= len(mo_energy_ev):
+        raise ValueError(
+            f"Cannot determine HOMO/LUMO: n_occupied={n_occ}, n_total={len(mo_energy_ev)}"
+        )
+
+    homo_ev = float(mo_energy_ev[n_occ - 1])
+    lumo_ev = float(mo_energy_ev[n_occ])
+    gap_ev = lumo_ev - homo_ev
+
+    return OrbitalInfo(
+        mo_energies_ev=mo_energy_ev,
+        n_occupied=n_occ,
+        homo_energy_ev=homo_ev,
+        lumo_energy_ev=lumo_ev,
+        homo_lumo_gap_ev=gap_ev,
+        formula=formula or results_path.stem,
+    )
+
+
+def orbital_info_from_arrays(
+    mo_energy: np.ndarray,
+    mo_occ: np.ndarray,
+    formula: str = "",
+) -> OrbitalInfo:
+    """
+    Build an :class:`OrbitalInfo` directly from NumPy arrays.
+
+    Useful when working with a live ``SessionResult`` where the data is
+    already in memory (no ``.npz`` on disk).
+    """
+    mo_energy = np.asarray(mo_energy)
+    mo_occ = np.asarray(mo_occ)
+
+    if mo_energy.ndim == 2:
+        mo_energy = mo_energy[0]
+    if mo_occ.ndim == 2:
+        mo_occ = mo_occ[0]
+
+    mo_ev = mo_energy * HARTREE_TO_EV
+    n_occ = int((mo_occ > 0).sum())
+
+    if n_occ == 0 or n_occ >= len(mo_ev):
+        raise ValueError(
+            f"Cannot determine HOMO/LUMO: n_occupied={n_occ}, n_total={len(mo_ev)}"
+        )
+
+    return OrbitalInfo(
+        mo_energies_ev=mo_ev,
+        n_occupied=n_occ,
+        homo_energy_ev=float(mo_ev[n_occ - 1]),
+        lumo_energy_ev=float(mo_ev[n_occ]),
+        homo_lumo_gap_ev=float(mo_ev[n_occ] - mo_ev[n_occ - 1]),
+        formula=formula,
+    )
+
+
+# ============================================================================
+# Matplotlib energy-level diagram
+# ============================================================================
+
+
+def plot_orbital_diagram(
+    info: OrbitalInfo,
+    *,
+    max_orbitals: int = 20,
+    figsize: Tuple[float, float] = (6, 8),
+    title: Optional[str] = None,
+):
+    """
+    Draw a horizontal-line orbital energy-level diagram using matplotlib.
+
+    Occupied orbitals are drawn in blue, virtual in grey.  HOMO and LUMO
+    are highlighted and labelled.  An arrow annotates the gap.
+
+    Parameters
+    ----------
+    info : OrbitalInfo
+        Orbital data to plot.
+    max_orbitals : int
+        Show at most this many orbitals centred on the HOMO–LUMO region.
+        Keeps the diagram readable for large basis sets.
+    figsize : tuple
+        Matplotlib figure size ``(width, height)`` in inches.
+    title : str, optional
+        Custom title; defaults to ``"Orbital Energy Levels — {formula}"``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+
+    energies = info.mo_energies_ev
+    n_occ = info.n_occupied
+    n_total = len(energies)
+
+    # Window around HOMO/LUMO
+    half = max_orbitals // 2
+    start = max(0, n_occ - half)
+    end = min(n_total, n_occ + half)
+    subset = energies[start:end]
+    subset_occ = np.arange(start, end) < n_occ
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Draw energy levels
+    line_half_width = 0.3
+    for i, (e, occ) in enumerate(zip(subset, subset_occ)):
+        color = "#2171b5" if occ else "#bdbdbd"
+        lw = 2.5 if (start + i == n_occ - 1 or start + i == n_occ) else 1.5
+        ax.plot(
+            [-line_half_width, line_half_width],
+            [e, e],
+            color=color,
+            linewidth=lw,
+            solid_capstyle="round",
+        )
+
+    # HOMO / LUMO labels
+    homo_idx_in_subset = n_occ - 1 - start
+    lumo_idx_in_subset = n_occ - start
+
+    if 0 <= homo_idx_in_subset < len(subset):
+        ax.annotate(
+            "HOMO",
+            xy=(line_half_width + 0.05, subset[homo_idx_in_subset]),
+            fontsize=10,
+            fontweight="bold",
+            color="#2171b5",
+            va="center",
+        )
+
+    if 0 <= lumo_idx_in_subset < len(subset):
+        ax.annotate(
+            "LUMO",
+            xy=(line_half_width + 0.05, subset[lumo_idx_in_subset]),
+            fontsize=10,
+            fontweight="bold",
+            color="#e6550d",
+            va="center",
+        )
+
+    # Gap arrow
+    if 0 <= homo_idx_in_subset < len(subset) and 0 <= lumo_idx_in_subset < len(subset):
+        mid_x = -line_half_width - 0.15
+        ax.annotate(
+            "",
+            xy=(mid_x, info.lumo_energy_ev),
+            xytext=(mid_x, info.homo_energy_ev),
+            arrowprops=dict(arrowstyle="<->", color="#e6550d", lw=1.5),
+        )
+        gap_mid = (info.homo_energy_ev + info.lumo_energy_ev) / 2.0
+        ax.text(
+            mid_x - 0.05,
+            gap_mid,
+            f"{info.homo_lumo_gap_ev:.2f} eV",
+            fontsize=9,
+            color="#e6550d",
+            ha="right",
+            va="center",
+            fontweight="bold",
+        )
+
+    # Axis labels and styling
+    ax.set_ylabel("Energy (eV)", fontsize=12)
+    ax.set_xlim(-0.9, 1.0)
+    ax.set_xticks([])
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.set_title(
+        title or f"Orbital Energy Levels — {info.formula}",
+        fontsize=13,
+        fontweight="bold",
+        pad=12,
+    )
+
+    # Legend
+    occ_patch = mpatches.Patch(color="#2171b5", label="Occupied")
+    virt_patch = mpatches.Patch(color="#bdbdbd", label="Virtual")
+    ax.legend(handles=[occ_patch, virt_patch], loc="lower right", fontsize=9)
+
+    fig.tight_layout()
+    return fig
+
+
+# ============================================================================
+# Summary HTML (for notebooks)
+# ============================================================================
+
+
+def orbital_summary_html(info: OrbitalInfo) -> str:
+    """
+    Return an HTML card summarising orbital energies.
+
+    Designed for ``IPython.display.HTML`` inside a Jupyter cell.
+    """
+    return (
+        '<div style="background:#f8f9fa; padding:12px; border-radius:6px; '
+        'border-left:4px solid #2171b5; margin:8px 0; font-family:monospace;">'
+        f"<b>Orbital Summary — {info.formula}</b><br>"
+        f"Occupied MOs: {info.n_occupied} &nbsp;|&nbsp; "
+        f"Virtual MOs: {info.n_virtual} &nbsp;|&nbsp; "
+        f"Total: {len(info.mo_energies_ev)}<br>"
+        f"HOMO energy: {info.homo_energy_ev:+.4f} eV &nbsp;|&nbsp; "
+        f"LUMO energy: {info.lumo_energy_ev:+.4f} eV<br>"
+        f"<b>HOMO–LUMO gap: {info.homo_lumo_gap_ev:.4f} eV</b>"
+        "</div>"
+    )
+
+
+# ============================================================================
+# Cube-file generation (PySCF — Linux only)
+# ============================================================================
+
+
+def generate_cube_file(
+    results_path: Path,
+    orbital_index: int,
+    output_path: Path,
+    *,
+    nx: int = 60,
+    ny: int = 60,
+    nz: int = 60,
+    margin: float = 5.0,
+) -> Path:
+    """
+    Generate a Gaussian cube file for a molecular orbital.
+
+    Requires PySCF and the original ``mol`` object data.  This function
+    is Linux/WSL only.
+
+    Parameters
+    ----------
+    results_path : Path
+        Path to ``results.npz`` (must also contain ``mol_atom`` and
+        ``mol_basis`` keys, added by an extended script template).
+    orbital_index : int
+        0-based MO index to visualise.
+    output_path : Path
+        Where to write the ``.cube`` file.
+    nx, ny, nz : int
+        Grid resolution along each axis.
+    margin : float
+        Extra space (Bohr) beyond atomic extents.
+
+    Returns
+    -------
+    Path
+        The written cube file path.
+
+    Raises
+    ------
+    ImportError
+        If PySCF is not available.
+    """
+    try:
+        from pyscf import gto
+        from pyscf.tools import cubegen
+    except ImportError as exc:
+        raise ImportError(
+            "PySCF is required for cube file generation (Linux/WSL only).\n"
+            "  conda install -c conda-forge pyscf"
+        ) from exc
+
+    data = np.load(results_path, allow_pickle=True)
+    mo_coeff = data["mo_coeff"]
+    if mo_coeff.ndim == 3:
+        mo_coeff = mo_coeff[0]
+
+    atom_str = str(data["mol_atom"]) if "mol_atom" in data else None
+    basis_str = str(data["mol_basis"]) if "mol_basis" in data else None
+
+    if atom_str is None or basis_str is None:
+        raise ValueError(
+            "results.npz does not contain 'mol_atom'/'mol_basis' keys. "
+            "Re-run the calculation with the updated script template."
+        )
+
+    mol = gto.M(atom=atom_str, basis=basis_str, unit="Angstrom")
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cubegen.orbital(
+        mol,
+        str(output_path),
+        mo_coeff[:, orbital_index],
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        margin=margin,
+    )
+    logger.info("Wrote cube file: %s", output_path)
+    return output_path
+
+
+# ============================================================================
+# Cube-file isosurface viewer (plotly — works anywhere)
+# ============================================================================
+
+
+def parse_cube_file(cube_path: Path) -> dict:
+    """
+    Parse a Gaussian cube file into a dict of NumPy arrays.
+
+    Returns
+    -------
+    dict with keys:
+        atoms : list of (Z, x, y, z)
+        origin : ndarray (3,)
+        axes : ndarray (3, 3) — row i is the step vector for axis i
+        nx, ny, nz : int
+        data : ndarray (nx, ny, nz) — volumetric data
+    """
+    with open(cube_path) as fh:
+        # First two lines are comments
+        fh.readline()
+        fh.readline()
+
+        parts = fh.readline().split()
+        n_atoms = abs(int(parts[0]))
+        origin = np.array([float(x) for x in parts[1:4]])
+
+        axes = np.zeros((3, 3))
+        dims = []
+        for i in range(3):
+            parts = fh.readline().split()
+            dims.append(int(parts[0]))
+            axes[i] = [float(x) for x in parts[1:4]]
+
+        nx, ny, nz = dims
+
+        atoms = []
+        for _ in range(n_atoms):
+            parts = fh.readline().split()
+            z = int(parts[0])
+            x, y, zz = float(parts[2]), float(parts[3]), float(parts[4])
+            atoms.append((z, x, y, zz))
+
+        # Volumetric data
+        vals: List[float] = []
+        for line in fh:
+            vals.extend(float(v) for v in line.split())
+
+        data = np.array(vals).reshape((nx, ny, nz))
+
+    return {
+        "atoms": atoms,
+        "origin": origin,
+        "axes": axes,
+        "nx": nx,
+        "ny": ny,
+        "nz": nz,
+        "data": data,
+    }
+
+
+def plot_cube_isosurface(
+    cube_path: Path,
+    *,
+    isovalue: float = 0.02,
+    opacity: float = 0.4,
+    width: int = 650,
+    height: int = 550,
+    title: Optional[str] = None,
+):
+    """
+    Render an orbital isosurface from a cube file using Plotly.
+
+    Draws both positive and negative lobes (blue / red) of the MO at
+    the given *isovalue*.
+
+    Parameters
+    ----------
+    cube_path : Path
+        Path to a Gaussian ``.cube`` file.
+    isovalue : float
+        Isosurface threshold (e.g. 0.02 for orbitals).
+    opacity : float
+        Surface opacity (0–1).
+    width, height : int
+        Figure size in pixels.
+    title : str, optional
+        Figure title.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    import plotly.graph_objects as go
+
+    cube = parse_cube_file(cube_path)
+    nx, ny, nz = cube["nx"], cube["ny"], cube["nz"]
+    data = cube["data"]
+    origin = cube["origin"]
+    axes = cube["axes"]
+
+    # Build coordinate grids (Bohr)
+    x = origin[0] + np.arange(nx) * axes[0, 0]
+    y = origin[1] + np.arange(ny) * axes[1, 1]
+    z = origin[2] + np.arange(nz) * axes[2, 2]
+    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+
+    fig = go.Figure()
+
+    # Positive lobe (blue)
+    fig.add_trace(
+        go.Isosurface(
+            x=X.flatten(),
+            y=Y.flatten(),
+            z=Z.flatten(),
+            value=data.flatten(),
+            isomin=isovalue,
+            isomax=isovalue,
+            surface_count=1,
+            opacity=opacity,
+            colorscale=[[0, "rgb(49,130,189)"], [1, "rgb(49,130,189)"]],
+            showscale=False,
+            name=f"+{isovalue}",
+        )
+    )
+
+    # Negative lobe (red)
+    fig.add_trace(
+        go.Isosurface(
+            x=X.flatten(),
+            y=Y.flatten(),
+            z=Z.flatten(),
+            value=data.flatten(),
+            isomin=-isovalue,
+            isomax=-isovalue,
+            surface_count=1,
+            opacity=opacity,
+            colorscale=[[0, "rgb(222,45,38)"], [1, "rgb(222,45,38)"]],
+            showscale=False,
+            name=f"-{isovalue}",
+        )
+    )
+
+    fig.update_layout(
+        width=width,
+        height=height,
+        title=title or "Molecular Orbital Isosurface",
+        scene=dict(
+            xaxis_title="X (Bohr)",
+            yaxis_title="Y (Bohr)",
+            zaxis_title="Z (Bohr)",
+            aspectmode="data",
+        ),
+    )
+
+    return fig

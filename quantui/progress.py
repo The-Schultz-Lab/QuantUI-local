@@ -1,0 +1,112 @@
+"""
+Visual progress indicators for multi-step notebook operations.
+
+Provides a lightweight ``StepProgress`` widget that displays numbered
+steps with status icons, designed for showing students what QuantUI
+is doing during operations like molecule validation, PubChem fetches,
+and job submission.
+
+Usage::
+
+    from quantui.progress import StepProgress
+
+    steps = StepProgress(["Parse coordinates", "Validate atoms", "Check spin"])
+    display(steps.widget)
+
+    steps.start(0)
+    # ... do step 0 ...
+    steps.complete(0)
+
+    steps.start(1)
+    # ... do step 1 ...
+    steps.fail(1, "Invalid element symbol 'Xx'")
+"""
+
+from __future__ import annotations
+
+from typing import List, Optional
+
+import ipywidgets as widgets
+
+
+class StepProgress:
+    """
+    A numbered step-by-step progress indicator using HTML.
+
+    Each step shows an icon reflecting its state:
+
+    - ⬜ not started
+    - ⏳ in progress
+    - ✅ completed
+    - ❌ failed
+
+    Args:
+        step_labels: Human-readable labels for each step.
+    """
+
+    _ICONS = {
+        "pending": "⬜",
+        "active": "⏳",
+        "done": "✅",
+        "fail": "❌",
+    }
+
+    def __init__(self, step_labels: List[str]) -> None:
+        self._labels = list(step_labels)
+        self._states: List[str] = ["pending"] * len(self._labels)
+        self._messages: List[Optional[str]] = [None] * len(self._labels)
+        self._html = widgets.HTML()
+        self._render()
+
+    @property
+    def widget(self) -> widgets.HTML:
+        """The displayable widget."""
+        return self._html
+
+    def start(self, index: int) -> None:
+        """Mark step *index* as in-progress."""
+        self._states[index] = "active"
+        self._messages[index] = None
+        self._render()
+
+    def complete(self, index: int, message: Optional[str] = None) -> None:
+        """Mark step *index* as successfully completed."""
+        self._states[index] = "done"
+        self._messages[index] = message
+        self._render()
+
+    def fail(self, index: int, message: Optional[str] = None) -> None:
+        """Mark step *index* as failed."""
+        self._states[index] = "fail"
+        self._messages[index] = message
+        self._render()
+
+    def reset(self) -> None:
+        """Reset all steps to pending."""
+        self._states = ["pending"] * len(self._labels)
+        self._messages = [None] * len(self._labels)
+        self._render()
+
+    def _render(self) -> None:
+        lines = []
+        for i, (label, state) in enumerate(zip(self._labels, self._states)):
+            icon = self._ICONS[state]
+            weight = "bold" if state == "active" else "normal"
+            color = "#d32f2f" if state == "fail" else "#333"
+            line = (
+                f'<div style="font-size:13px; padding:2px 0; '
+                f'font-weight:{weight}; color:{color};">'
+                f'{icon} <b>Step {i + 1}:</b> {label}'
+            )
+            if self._messages[i]:
+                line += f' — <i>{self._messages[i]}</i>'
+            line += '</div>'
+            lines.append(line)
+
+        self._html.value = (
+            '<div style="border:1px solid #e0e0e0; border-radius:6px; '
+            'padding:8px 12px; margin:6px 0; background:#fafafa; '
+            'max-width:600px;">'
+            + "\n".join(lines)
+            + '</div>'
+        )

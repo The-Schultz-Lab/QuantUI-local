@@ -1,0 +1,98 @@
+Bootstrap: docker
+FROM: continuumio/miniconda3:latest
+
+%help
+  QuantUI-local — Educational Quantum Chemistry Interface
+
+  Lightweight local version of QuantUI for teaching PySCF calculations
+  without a cluster. Includes PySCF, ASE, py3Dmol, and Voilà.
+
+  Usage:
+    # Clean widget UI (students see no code — recommended for class)
+    apptainer run quantui-local.sif app
+
+    # JupyterLab (exploration / development mode)
+    apptainer run quantui-local.sif
+
+  Build:
+    # From the repo root:
+    apptainer build quantui-local.sif apptainer/quantui-local.def
+
+%labels
+  Maintainer "Jonathan Schultz"
+  Purpose "Local teaching interface for quantum chemistry calculations"
+  Version "0.1.0"
+
+%environment
+  export PATH="/opt/conda/bin:${PATH}"
+  export PYTHONPATH="/opt/quantui:${PYTHONPATH}"
+
+  # Disable user site-packages for reproducibility
+  export PYTHONNOUSERSITE=1
+
+%files
+  # Source path is relative to where you run `apptainer build` (repo root).
+  # Run the build command from the repo root, not from apptainer/.
+  . /opt/quantui
+
+%post
+  export PATH="/opt/conda/bin:${PATH}"
+
+  echo "Installing dependencies via conda..."
+  conda install -y -c conda-forge \
+    jupyter \
+    jupyterlab \
+    ipywidgets \
+    notebook \
+    pyscf \
+    numpy \
+    scipy \
+    matplotlib \
+    plotly \
+    h5py
+
+  echo "Installing pip packages..."
+  pip install --no-cache-dir \
+    voila \
+    ase \
+    py3dmol \
+    requests
+
+  echo "Installing QuantUI-local..."
+  cd /opt/quantui
+  pip install --no-cache-dir -e .
+
+  echo "Verifying installation..."
+  python -c "import quantui; print('QuantUI OK')"
+  python -c "import pyscf; print('PySCF OK')"
+  python -c "import py3Dmol; print('py3Dmol OK')"
+  python -c "import ase; print('ASE OK')"
+
+  echo "Cleaning up unnecessary files..."
+  rm -rf /opt/quantui/.git
+  find /opt/quantui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  find /opt/quantui -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+
+  conda clean --all -y
+  pip cache purge
+
+  echo "Build complete!"
+
+%runscript
+  MODE="${1:-lab}"
+  shift 2>/dev/null || true
+  if [ "$MODE" = "app" ]; then
+    exec voila /opt/quantui/notebooks/molecule_computations.ipynb \
+         --no-browser --port=8866 "${@}"
+  else
+    exec jupyter lab --ip=0.0.0.0 --no-browser --allow-root "${@}"
+  fi
+
+%test
+  echo "Testing container..."
+  python -c "import quantui" || exit 1
+  python -c "import pyscf" || exit 1
+  python -c "import py3Dmol" || exit 1
+  python -c "import ase" || exit 1
+  python -c "from quantui import Molecule; print('Molecule OK')" || exit 1
+  echo "All tests passed!"

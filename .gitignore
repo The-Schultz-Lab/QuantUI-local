@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Local config (user-specific overrides — never commit)
+config.local.py
+
+# AI working context (local only — not for public repo)
+CLAUDE.md
+
+# Calculation output files
+*.npz
+*.out
+*.err
+results/
+
+# Test / coverage output
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Mypy
+.mypy_cache/
+
+# Apptainer build artefacts
+*.sif
+*.sandbox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,142 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantui-local"
+version = "0.1.0"
+description = "Educational quantum chemistry interface for local PySCF calculations"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    {name = "Jonathan Schultz", email = "nccu-schultz-lab@users.noreply.github.com"},
+]
+keywords = ["quantum chemistry", "education", "PySCF", "jupyter", "local", "teaching"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "jupyter>=1.0.0",
+    "ipywidgets>=8.0.0",
+    "notebook>=7.0.0",
+    "numpy>=1.24.0",
+    "requests>=2.28.0",
+    "py3Dmol>=2.0.0",
+    "matplotlib>=3.7.0",
+    "plotly>=5.0.0",
+]
+
+[tool.setuptools]
+packages = ["quantui"]
+
+[project.optional-dependencies]
+# PySCF requires Linux/macOS/WSL — not available on Windows natively.
+# Use the Apptainer container (apptainer/quantui-local.def) for Windows.
+pyscf = [
+    "pyscf>=2.3.0",
+]
+
+# ASE: structure I/O, extended molecule library, geometry optimisation
+ase = [
+    "ase>=3.22.0",
+]
+
+# Voilà app server — hides notebook code; students see only the widget UI.
+# Run with: voila notebooks/molecule_computations.ipynb
+app = [
+    "voila>=0.5.0",
+    "ipykernel>=6.0.0",
+]
+
+# Notebook smoke-test dependencies
+notebook = [
+    "nbmake>=1.4.0",
+    "ipykernel>=6.0.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "mypy>=1.0.0",
+    "types-requests>=2.28.0",
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pyscf.*",
+    "py3Dmol.*",
+    "IPython.*",
+    "ipywidgets.*",
+    "psutil",
+    "ase.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=quantui",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests requiring PySCF",
+    "unit: marks tests as unit tests",
+    "network: marks tests that require network connectivity",
+    "notebook: marks notebook smoke tests",
+]
+
+[tool.coverage.run]
+source = ["quantui"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+precision = 2
+show_missing = true
+
+[tool.coverage.html]
+directory = "htmlcov"
