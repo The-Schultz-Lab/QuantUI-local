@@ -1,0 +1,49 @@
+repos:
+  # ── Standard file hygiene ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        exclude: "notebooks/"   # notebooks manage their own line endings
+      - id: check-yaml
+      - id: check-json
+        exclude: "notebooks/"   # notebook JSON is managed by Jupyter
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: debug-statements     # catch leftover breakpoint() / pdb calls
+
+  # ── Strip notebook outputs before commit ─────────────────────────────────
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+        files: notebooks/
+
+  # ── Code formatting (black) ───────────────────────────────────────────────
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        language_version: python3
+        files: ^(quantui|tests)/
+
+  # ── Linting (ruff — superset of flake8) ──────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.7
+    hooks:
+      - id: ruff
+        args: ["--fix"]         # auto-fix safe issues (unused imports, etc.)
+        files: ^(quantui|tests)/
+
+  # ── Type checking (mypy) ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^quantui/        # type-check the package only, not tests
+        args: ["--ignore-missing-imports", "--no-error-summary"]
+        additional_dependencies:
+          - "numpy"
+          - "types-requests"

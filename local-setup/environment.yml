@@ -13,11 +13,6 @@ dependencies:
   - notebook>=7.0.0
   - ipykernel>=6.0.0
 
-  # Quantum chemistry
-  # NOTE: PySCF requires Linux/macOS/WSL. Windows users should use the
-  # Apptainer container instead: apptainer run quantui-local.sif
-  - pyscf>=2.3.0  # [not win]
-
   # Scientific computing
   - numpy>=1.24.0
   - ase>=3.22.0          # Structure I/O, molecule library, geometry optimisation
@@ -46,5 +41,9 @@ dependencies:
       - voila>=0.5.0
       # Notebook smoke testing
       - nbmake>=1.4.0
+      # Code formatting and linting (not on conda-forge)
+      - black>=24.0.0
+      - ruff>=0.4.0
       # Install QuantUI-local in editable mode
-      - -e .
+      # On Linux/WSL also run: conda install -c conda-forge pyscf
+      - -e ..
