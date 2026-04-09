@@ -5,25 +5,24 @@ Covers CalcSummary construction, the builders (from JobMetadata and
 SessionResult), the HTML table renderer, and the matplotlib comparison chart.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
 from quantui.comparison import (
+    HARTREE_TO_EV,
     CalcSummary,
     comparison_table_html,
     plot_comparison,
     summary_from_job_metadata,
     summary_from_session_result,
-    HARTREE_TO_EV,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def two_summaries():
@@ -91,11 +90,13 @@ def mock_session_result():
 # CalcSummary basics
 # ---------------------------------------------------------------------------
 
+
 class TestCalcSummary:
 
     def test_energy_ev_conversion(self):
-        s = CalcSummary(label="x", formula="H2", method="RHF", basis="STO-3G",
-                        energy_hartree=-1.0)
+        s = CalcSummary(
+            label="x", formula="H2", method="RHF", basis="STO-3G", energy_hartree=-1.0
+        )
         assert abs(s.energy_ev - (-1.0 * HARTREE_TO_EV)) < 1e-6
 
     def test_energy_ev_none(self):
@@ -112,6 +113,7 @@ class TestCalcSummary:
 # ---------------------------------------------------------------------------
 # Builders
 # ---------------------------------------------------------------------------
+
 
 class TestSummaryFromJobMetadata:
 
@@ -173,6 +175,7 @@ class TestSummaryFromSessionResult:
 # HTML table
 # ---------------------------------------------------------------------------
 
+
 class TestComparisonTableHtml:
 
     def test_empty_list(self):
@@ -199,8 +202,9 @@ class TestComparisonTableHtml:
         assert "✅" in html
 
     def test_not_converged_icon(self):
-        s = CalcSummary(label="x", formula="H2", method="RHF", basis="STO-3G",
-                        converged=False)
+        s = CalcSummary(
+            label="x", formula="H2", method="RHF", basis="STO-3G", converged=False
+        )
         html = comparison_table_html([s])
         assert "❌" in html
 
@@ -210,8 +214,12 @@ class TestComparisonTableHtml:
         assert "—" in html
 
     def test_html_escaping(self):
-        s = CalcSummary(label="<script>alert(1)</script>", formula="H2",
-                        method="RHF", basis="STO-3G")
+        s = CalcSummary(
+            label="<script>alert(1)</script>",
+            formula="H2",
+            method="RHF",
+            basis="STO-3G",
+        )
         html = comparison_table_html([s])
         assert "<script>" not in html
         assert "&lt;script&gt;" in html
@@ -226,10 +234,12 @@ class TestComparisonTableHtml:
 # Matplotlib comparison chart
 # ---------------------------------------------------------------------------
 
+
 class TestPlotComparison:
 
     def test_returns_figure(self, two_summaries):
         import matplotlib
+
         matplotlib.use("Agg")
         fig = plot_comparison(two_summaries)
         assert fig is not None
@@ -237,12 +247,14 @@ class TestPlotComparison:
 
     def test_custom_title(self, two_summaries):
         import matplotlib
+
         matplotlib.use("Agg")
         fig = plot_comparison(two_summaries, title="My Comparison")
         assert fig._suptitle.get_text() == "My Comparison"
 
     def test_no_data_message(self):
         import matplotlib
+
         matplotlib.use("Agg")
         summaries = [
             CalcSummary(label="a", formula="H2", method="RHF", basis="STO-3G"),
@@ -254,10 +266,16 @@ class TestPlotComparison:
 
     def test_partial_data(self):
         import matplotlib
+
         matplotlib.use("Agg")
         summaries = [
-            CalcSummary(label="a", formula="H2", method="RHF", basis="STO-3G",
-                        energy_hartree=-1.0),
+            CalcSummary(
+                label="a",
+                formula="H2",
+                method="RHF",
+                basis="STO-3G",
+                energy_hartree=-1.0,
+            ),
             CalcSummary(label="b", formula="H2", method="RHF", basis="6-31G"),
         ]
         fig = plot_comparison(summaries)

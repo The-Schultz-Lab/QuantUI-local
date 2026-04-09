@@ -188,8 +188,8 @@ def plot_orbital_diagram(
     -------
     matplotlib.figure.Figure
     """
-    import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
 
     energies = info.mo_energies_ev
     n_occ = info.n_occupied

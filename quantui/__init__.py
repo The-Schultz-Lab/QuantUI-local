@@ -9,76 +9,72 @@ PySCF requires Linux/macOS/WSL. Windows users should use the Apptainer container
 
 __version__ = "0.1.0"
 
-from .config import (
-    MOLECULE_LIBRARY,
-    SUPPORTED_METHODS,
-    SUPPORTED_BASIS_SETS,
-    DEFAULT_METHOD,
-    DEFAULT_BASIS,
-    DEFAULT_CHARGE,
-    DEFAULT_MULTIPLICITY,
-    DEFAULT_FMAX,
-    DEFAULT_OPT_STEPS,
-    VALID_ATOMS,
-    QUICK_START_TEMPLATES,
-    WIDGET_LAYOUT,
-    DESCRIPTION_WIDTH,
-    PYSCF_SCRIPT_TEMPLATE,
-    LOG_LEVEL,
-    LOG_FORMAT,
-)
-
-from .utils import (
-    get_username,
-    sanitize_filename,
-    get_session_resources,
-    session_can_handle,
-)
-
-from .molecule import Molecule, parse_xyz_input
 from .calculator import PySCFCalculation, create_calculation
 
-# Security — catchable exception for constraint violations
-from .security import SecurityError
+# Calculation comparison (session results only — no job metadata)
+from .comparison import (
+    CalcSummary,
+    comparison_table_html,
+    plot_comparison,
+    summary_from_session_result,
+)
+from .config import (
+    DEFAULT_BASIS,
+    DEFAULT_CHARGE,
+    DEFAULT_FMAX,
+    DEFAULT_METHOD,
+    DEFAULT_MULTIPLICITY,
+    DEFAULT_OPT_STEPS,
+    DESCRIPTION_WIDTH,
+    MOLECULE_LIBRARY,
+    PYSCF_SCRIPT_TEMPLATE,
+    QUICK_START_TEMPLATES,
+    SUPPORTED_BASIS_SETS,
+    SUPPORTED_METHODS,
+    VALID_ATOMS,
+    WIDGET_LAYOUT,
+)
 
 # Educational help content (requires ipywidgets at display time)
-from .help_content import help_panel, HELP_TOPICS, VALID_TOPICS
-
-# Progress indicators
-from .progress import StepProgress
+from .help_content import HELP_TOPICS, VALID_TOPICS, help_panel
+from .molecule import Molecule, parse_xyz_input
 
 # Orbital visualization (matplotlib energy diagrams, cube-file viewer)
 from .orbital_visualization import (
     OrbitalInfo,
     load_orbital_info,
     orbital_info_from_arrays,
-    plot_orbital_diagram,
     orbital_summary_html,
     parse_cube_file,
+    plot_orbital_diagram,
 )
 
-# Calculation comparison (session results only — no job metadata)
-from .comparison import (
-    CalcSummary,
-    summary_from_session_result,
-    comparison_table_html,
-    plot_comparison,
+# Progress indicators
+from .progress import StepProgress
+
+# Security — catchable exception for constraint violations
+from .security import SecurityError
+from .utils import (
+    get_session_resources,
+    get_username,
+    sanitize_filename,
+    session_can_handle,
 )
 
 # ASE bridge (optional — requires ase>=3.22.0)
 try:
     from .ase_bridge import (
-        is_ase_available,
-        molecule_to_atoms,
-        atoms_to_molecule,
-        read_structure_file,
-        ase_molecule_library,
         ASE_AVAILABLE,
         ASE_MOLECULE_PRESETS,
+        ase_molecule_library,
+        atoms_to_molecule,
+        is_ase_available,
+        molecule_to_atoms,
+        read_structure_file,
     )
 except ImportError:
     ASE_AVAILABLE = False
-    ASE_MOLECULE_PRESETS: dict = {}
+    ASE_MOLECULE_PRESETS: dict = {}  # type: ignore[misc,no-redef]
 
 # ASE pre-optimization (optional — requires ase_bridge)
 try:
@@ -101,19 +97,20 @@ except ImportError:
 # PubChem integration (optional — requires internet)
 try:
     from .pubchem import (
-        fetch_molecule,
-        student_friendly_fetch,
-        get_common_molecules,
-        check_pubchem_availability,
-        PubChemError,
         MoleculeNotFoundError,
-        smiles_to_xyz,
-        student_friendly_smiles_to_xyz,
-        generate_2d_structure_svg,
+        PubChemError,
+        check_pubchem_availability,
         display_2d_structure,
+        fetch_molecule,
+        generate_2d_structure_svg,
+        get_common_molecules,
         get_smiles_examples,
+        smiles_to_xyz,
+        student_friendly_fetch,
+        student_friendly_smiles_to_xyz,
         validate_smiles,
     )
+
     PUBCHEM_AVAILABLE = True
 except ImportError:
     PUBCHEM_AVAILABLE = False
@@ -121,10 +118,11 @@ except ImportError:
 # Visualization — py3Dmol only (no PlotlyMol fallback)
 try:
     from .visualization_py3dmol import (
+        display_molecule,
         is_visualization_available,
         visualize_molecule,
-        display_molecule,
     )
+
     VISUALIZATION_AVAILABLE = True
     PY3DMOL_AVAILABLE = True
 except ImportError:

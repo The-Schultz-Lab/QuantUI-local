@@ -6,8 +6,13 @@ methods/basis sets, and can be used to create valid Molecule objects.
 """
 
 import pytest
-from quantui.config import QUICK_START_TEMPLATES, SUPPORTED_METHODS, SUPPORTED_BASIS_SETS
+
 from quantui import Molecule, parse_xyz_input
+from quantui.config import (
+    QUICK_START_TEMPLATES,
+    SUPPORTED_BASIS_SETS,
+    SUPPORTED_METHODS,
+)
 
 # 'resources' key removed from local templates (no SLURM resource allocation needed)
 # 'job_name' removed from calc_settings (no batch job submission)
@@ -40,8 +45,9 @@ class TestQuickStartTemplatesStructure:
     def test_learning_goals_is_non_empty_list(self):
         for tid, t in QUICK_START_TEMPLATES.items():
             goals = t["learning_goals"]
-            assert isinstance(goals, list) and len(goals) > 0, \
-                f"{tid} has empty or invalid learning_goals"
+            assert (
+                isinstance(goals, list) and len(goals) > 0
+            ), f"{tid} has empty or invalid learning_goals"
 
 
 class TestQuickStartTemplatesValidity:
@@ -49,14 +55,16 @@ class TestQuickStartTemplatesValidity:
     def test_methods_are_supported(self):
         for tid, t in QUICK_START_TEMPLATES.items():
             method = t["calc_settings"]["method"]
-            assert method in SUPPORTED_METHODS, \
-                f"{tid} uses unsupported method '{method}'"
+            assert (
+                method in SUPPORTED_METHODS
+            ), f"{tid} uses unsupported method '{method}'"
 
     def test_basis_sets_are_supported(self):
         for tid, t in QUICK_START_TEMPLATES.items():
             basis = t["calc_settings"]["basis"]
-            assert basis in SUPPORTED_BASIS_SETS, \
-                f"{tid} uses unsupported basis '{basis}'"
+            assert (
+                basis in SUPPORTED_BASIS_SETS
+            ), f"{tid} uses unsupported basis '{basis}'"
 
     def test_charges_are_integers(self):
         for tid, t in QUICK_START_TEMPLATES.items():
@@ -66,8 +74,9 @@ class TestQuickStartTemplatesValidity:
     def test_multiplicities_are_positive_integers(self):
         for tid, t in QUICK_START_TEMPLATES.items():
             mult = t["molecule"]["multiplicity"]
-            assert isinstance(mult, int) and mult >= 1, \
-                f"{tid} multiplicity invalid: {mult!r}"
+            assert (
+                isinstance(mult, int) and mult >= 1
+            ), f"{tid} multiplicity invalid: {mult!r}"
 
     def test_xyz_can_be_parsed_to_molecule(self):
         """Each template XYZ string should parse into a valid Molecule."""
@@ -77,7 +86,7 @@ class TestQuickStartTemplatesValidity:
             multiplicity = t["molecule"]["multiplicity"]
             try:
                 atoms, coords = parse_xyz_input(xyz)
-                mol = Molecule(
+                Molecule(
                     atoms=atoms,
                     coordinates=coords,
                     charge=charge,

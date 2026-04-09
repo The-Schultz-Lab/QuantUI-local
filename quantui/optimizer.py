@@ -39,9 +39,9 @@ import logging
 import math
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, List, Optional, Tuple
+from typing import IO, List, Optional
 
 from .ase_bridge import ASE_AVAILABLE, atoms_to_molecule, molecule_to_atoms
 from .molecule import Molecule
@@ -50,8 +50,8 @@ from .session_calc import HARTREE_TO_EV
 logger = logging.getLogger(__name__)
 
 # Defaults also exposed in config.py for the notebook UI
-DEFAULT_FMAX: float = 0.05       # eV/Å — tight enough for educational use
-DEFAULT_OPT_STEPS: int = 200     # generous upper limit for small molecules
+DEFAULT_FMAX: float = 0.05  # eV/Å — tight enough for educational use
+DEFAULT_OPT_STEPS: int = 200  # generous upper limit for small molecules
 
 
 # ============================================================================
@@ -316,7 +316,11 @@ def optimize_geometry(
     logger.info(
         "Geometry optimization: %s %s/%s  steps=%d  converged=%s  "
         "E_final=%.8f Ha  RMSD~%.4f Å",
-        formula, method, basis, n_steps, converged,
+        formula,
+        method,
+        basis,
+        n_steps,
+        converged,
         energies_hartree[-1] if energies_hartree else float("nan"),
         _rmsd(molecule, trajectory[-1]) if len(trajectory) > 1 else 0.0,
     )

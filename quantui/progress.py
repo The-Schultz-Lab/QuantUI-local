@@ -96,17 +96,15 @@ class StepProgress:
             line = (
                 f'<div style="font-size:13px; padding:2px 0; '
                 f'font-weight:{weight}; color:{color};">'
-                f'{icon} <b>Step {i + 1}:</b> {label}'
+                f"{icon} <b>Step {i + 1}:</b> {label}"
             )
             if self._messages[i]:
-                line += f' — <i>{self._messages[i]}</i>'
-            line += '</div>'
+                line += f" — <i>{self._messages[i]}</i>"
+            line += "</div>"
             lines.append(line)
 
         self._html.value = (
             '<div style="border:1px solid #e0e0e0; border-radius:6px; '
-            'padding:8px 12px; margin:6px 0; background:#fafafa; '
-            'max-width:600px;">'
-            + "\n".join(lines)
-            + '</div>'
+            "padding:8px 12px; margin:6px 0; background:#fafafa; "
+            'max-width:600px;">' + "\n".join(lines) + "</div>"
         )

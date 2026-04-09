@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Dict, Tuple, Union
 
 if TYPE_CHECKING:
     import ase as _ase_type
+
     from .molecule import Molecule
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 ASE_AVAILABLE = False
 try:
     import ase as _ase  # noqa: F401 — presence check only
+
     ASE_AVAILABLE = True
 except ImportError:
     pass
@@ -44,29 +46,29 @@ except ImportError:
 
 ASE_MOLECULE_PRESETS: Dict[str, Tuple[str, int, int]] = {
     # Diatomics
-    "H₂ — Hydrogen":             ("H2",    0, 1),
-    "N₂ — Nitrogen":             ("N2",    0, 1),
-    "O₂ — Oxygen (triplet)":     ("O2",    0, 3),
-    "F₂ — Fluorine":             ("F2",    0, 1),
-    "HF — Hydrogen fluoride":    ("HF",    0, 1),
-    "HCl — Hydrogen chloride":   ("HCl",   0, 1),
-    "CO — Carbon monoxide":      ("CO",    0, 1),
+    "H₂ — Hydrogen": ("H2", 0, 1),
+    "N₂ — Nitrogen": ("N2", 0, 1),
+    "O₂ — Oxygen (triplet)": ("O2", 0, 3),
+    "F₂ — Fluorine": ("F2", 0, 1),
+    "HF — Hydrogen fluoride": ("HF", 0, 1),
+    "HCl — Hydrogen chloride": ("HCl", 0, 1),
+    "CO — Carbon monoxide": ("CO", 0, 1),
     # Triatomics
-    "H₂O — Water":               ("H2O",   0, 1),
-    "CO₂ — Carbon dioxide":      ("CO2",   0, 1),
-    "SO₂ — Sulfur dioxide":      ("SO2",   0, 1),
-    "H₂S — Hydrogen sulfide":    ("H2S",   0, 1),
+    "H₂O — Water": ("H2O", 0, 1),
+    "CO₂ — Carbon dioxide": ("CO2", 0, 1),
+    "SO₂ — Sulfur dioxide": ("SO2", 0, 1),
+    "H₂S — Hydrogen sulfide": ("SH2", 0, 1),
     # Polyatomics
-    "NH₃ — Ammonia":             ("NH3",   0, 1),
-    "PH₃ — Phosphine":           ("PH3",   0, 1),
-    "CH₄ — Methane":             ("CH4",   0, 1),
+    "NH₃ — Ammonia": ("NH3", 0, 1),
+    "PH₃ — Phosphine": ("PH3", 0, 1),
+    "CH₄ — Methane": ("CH4", 0, 1),
     # Organic
-    "C₂H₂ — Acetylene":          ("C2H2",  0, 1),
-    "C₂H₄ — Ethylene":           ("C2H4",  0, 1),
-    "C₂H₆ — Ethane":             ("C2H6",  0, 1),
-    "CH₃OH — Methanol":          ("CH3OH", 0, 1),
+    "C₂H₂ — Acetylene": ("C2H2", 0, 1),
+    "C₂H₄ — Ethylene": ("C2H4", 0, 1),
+    "C₂H₆ — Ethane": ("C2H6", 0, 1),
+    "CH₃OH — Methanol": ("CH3OH", 0, 1),
     # Aromatic
-    "C₆H₆ — Benzene":            ("C6H6",  0, 1),
+    "C₆H₆ — Benzene": ("C6H6", 0, 1),
 }
 
 
@@ -74,12 +76,13 @@ ASE_MOLECULE_PRESETS: Dict[str, Tuple[str, int, int]] = {
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def is_ase_available() -> bool:
     """Return True if ASE is installed and importable."""
     return ASE_AVAILABLE
 
 
-def molecule_to_atoms(molecule: "Molecule") -> "_ase_type.Atoms":
+def molecule_to_atoms(molecule: Molecule) -> _ase_type.Atoms:
     """
     Convert a QuantUI Molecule to an ASE Atoms object.
 
@@ -113,10 +116,10 @@ def molecule_to_atoms(molecule: "Molecule") -> "_ase_type.Atoms":
 
 
 def atoms_to_molecule(
-    atoms: "_ase_type.Atoms",
+    atoms: _ase_type.Atoms,
     charge: int = 0,
     multiplicity: int = 1,
-) -> "Molecule":
+) -> Molecule:
     """
     Convert an ASE Atoms object to a QuantUI Molecule.
 
@@ -149,7 +152,7 @@ def read_structure_file(
     charge: int = 0,
     multiplicity: int = 1,
     **ase_kwargs: object,
-) -> "Molecule":
+) -> Molecule:
     """
     Read a molecular structure file using ``ase.io`` and return a Molecule.
 
@@ -194,7 +197,7 @@ def read_structure_file(
     return atoms_to_molecule(atoms, charge=charge, multiplicity=multiplicity)
 
 
-def ase_molecule_library(name: str) -> "Molecule":
+def ase_molecule_library(name: str) -> Molecule:
     """
     Fetch a molecule from ASE's built-in molecular library.
 

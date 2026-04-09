@@ -56,12 +56,18 @@ class TestAseMoleculePresets:
 
     def test_values_are_three_tuples(self):
         for label, entry in ASE_MOLECULE_PRESETS.items():
-            assert isinstance(entry, tuple), f"'{label}': expected tuple, got {type(entry)}"
-            assert len(entry) == 3, f"'{label}': expected 3-tuple (ase_name, charge, mult)"
+            assert isinstance(
+                entry, tuple
+            ), f"'{label}': expected tuple, got {type(entry)}"
+            assert (
+                len(entry) == 3
+            ), f"'{label}': expected 3-tuple (ase_name, charge, mult)"
 
     def test_ase_names_are_nonempty_strings(self):
-        for label, (ase_name, charge, mult) in ASE_MOLECULE_PRESETS.items():
-            assert isinstance(ase_name, str) and ase_name, f"'{label}': ase_name must be non-empty string"
+        for label, (ase_name, _charge, _mult) in ASE_MOLECULE_PRESETS.items():
+            assert (
+                isinstance(ase_name, str) and ase_name
+            ), f"'{label}': ase_name must be non-empty string"
 
     def test_charges_are_ints(self):
         for label, (_, charge, _) in ASE_MOLECULE_PRESETS.items():
@@ -69,7 +75,9 @@ class TestAseMoleculePresets:
 
     def test_multiplicities_are_positive_ints(self):
         for label, (_, _, mult) in ASE_MOLECULE_PRESETS.items():
-            assert isinstance(mult, int) and mult >= 1, f"'{label}': multiplicity must be int >= 1"
+            assert (
+                isinstance(mult, int) and mult >= 1
+            ), f"'{label}': multiplicity must be int >= 1"
 
     def test_contains_water(self):
         ase_names = {v[0] for v in ASE_MOLECULE_PRESETS.values()}
@@ -85,7 +93,9 @@ class TestAseMoleculePresets:
 
     def test_o2_is_triplet(self):
         """O2 ground state is a triplet — verify preset encodes this correctly."""
-        o2_entries = [(label, v) for label, v in ASE_MOLECULE_PRESETS.items() if v[0] == "O2"]
+        o2_entries = [
+            (label, v) for label, v in ASE_MOLECULE_PRESETS.items() if v[0] == "O2"
+        ]
         assert o2_entries, "O2 should be in ASE_MOLECULE_PRESETS"
         _, (_, _, mult) = o2_entries[0]
         assert mult == 3, "O2 ground state should be multiplicity 3 (triplet)"
@@ -95,8 +105,12 @@ class TestAseMoleculePresets:
         """Every preset label should produce a valid Molecule via ase_molecule_library."""
         for label, (ase_name, _charge, _mult) in ASE_MOLECULE_PRESETS.items():
             mol = ase_molecule_library(ase_name)
-            assert isinstance(mol, Molecule), f"Preset '{label}' ({ase_name}) did not return a Molecule"
-            assert len(mol.atoms) > 0, f"Preset '{label}' ({ase_name}) returned empty Molecule"
+            assert isinstance(
+                mol, Molecule
+            ), f"Preset '{label}' ({ase_name}) did not return a Molecule"
+            assert (
+                len(mol.atoms) > 0
+            ), f"Preset '{label}' ({ase_name}) returned empty Molecule"
 
 
 # ============================================================================
@@ -267,7 +281,9 @@ class TestMoleculeAtomsRoundTrip:
         coords = [[0.0, 0.0, 0.0], [0.757, 0.587, 0.0], [-0.757, 0.587, 0.0]]
         original = Molecule(["O", "H", "H"], coords)
         restored = atoms_to_molecule(molecule_to_atoms(original))
-        np.testing.assert_allclose(restored.coordinates, original.coordinates, atol=1e-6)
+        np.testing.assert_allclose(
+            restored.coordinates, original.coordinates, atol=1e-6
+        )
 
     @ase_only
     def test_roundtrip_charged_radical(self):

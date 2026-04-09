@@ -5,21 +5,20 @@ Provides functions to search and retrieve molecular structures from PubChem
 for educational use in quantum chemistry calculations.
 """
 
-import requests
 import logging
-from typing import Optional, List, Dict, Tuple, Any
-from pathlib import Path
-import time
 from functools import lru_cache
+from typing import Any, Dict, Optional, Tuple
+
+import requests
 
 try:
     from rdkit import Chem
     from rdkit.Chem import AllChem
+
     RDKIT_AVAILABLE = True
 except ImportError:
     RDKIT_AVAILABLE = False
 
-from . import config
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +29,19 @@ PUBCHEM_TIMEOUT = 10  # seconds
 
 class PubChemError(Exception):
     """Base exception for PubChem-related errors."""
+
     pass
 
 
 class MoleculeNotFoundError(PubChemError):
     """Raised when a molecule cannot be found in PubChem."""
+
     pass
 
 
 class PubChemAPIError(PubChemError):
     """Raised when PubChem API request fails."""
+
     pass
 
 
@@ -181,7 +183,7 @@ def sdf_to_xyz(sdf_content: str) -> Tuple[str, Dict[str, Any]]:
             "molecular_weight": Chem.Descriptors.MolWt(mol),
             "charge": Chem.GetFormalCharge(mol),
             "num_atoms": mol.GetNumAtoms(),
-            "num_heavy_atoms": mol.GetNumHeavyAtoms()
+            "num_heavy_atoms": mol.GetNumHeavyAtoms(),
         }
 
         logger.debug(f"Converted SDF to XYZ: {metadata['formula']}")
@@ -192,7 +194,9 @@ def sdf_to_xyz(sdf_content: str) -> Tuple[str, Dict[str, Any]]:
         raise ValueError(f"Failed to convert SDF to XYZ: {e}")
 
 
-def fetch_molecule(name: str, conformer_3d: bool = True) -> Tuple[str, Dict[str, Any], int]:
+def fetch_molecule(
+    name: str, conformer_3d: bool = True
+) -> Tuple[str, Dict[str, Any], int]:
     """
     High-level function to fetch molecule from PubChem by name.
 
@@ -243,7 +247,6 @@ def get_common_molecules() -> Dict[str, str]:
         "Carbon Dioxide (CO₂)": "carbon dioxide",
         "Ammonia (NH₃)": "ammonia",
         "Methane (CH₄)": "methane",
-
         # Organic molecules
         "Ethanol (CH₃CH₂OH)": "ethanol",
         "Acetic Acid (CH₃COOH)": "acetic acid",
@@ -251,7 +254,6 @@ def get_common_molecules() -> Dict[str, str]:
         "Benzene (C₆H₆)": "benzene",
         "Toluene (C₆H₅CH₃)": "toluene",
         "Phenol (C₆H₅OH)": "phenol",
-
         # Biochemical molecules
         "Glucose (C₆H₁₂O₆)": "glucose",
         "Glycine (NH₂CH₂COOH)": "glycine",
@@ -259,7 +261,6 @@ def get_common_molecules() -> Dict[str, str]:
         "Caffeine": "caffeine",
         "Aspirin": "aspirin",
         "Vitamin C": "ascorbic acid",
-
         # Ions (may need special handling)
         "Hydronium (H₃O⁺)": "hydronium",
         "Hydroxide (OH⁻)": "hydroxide",
@@ -306,10 +307,10 @@ def student_friendly_fetch(name: str) -> Tuple[Optional[str], str]:
 
     except PubChemAPIError:
         message = (
-            f"❌ Connection to PubChem failed.\n"
-            f"   • Check your internet connection\n"
-            f"   • Try again in a moment\n"
-            f"   • Use preset molecules if problem persists"
+            "❌ Connection to PubChem failed.\n"
+            "   • Check your internet connection\n"
+            "   • Try again in a moment\n"
+            "   • Use preset molecules if problem persists"
         )
         return None, message
 
@@ -340,6 +341,7 @@ def check_pubchem_availability() -> bool:
 # ============================================================================
 # SMILES Input and 2D Structure Rendering
 # ============================================================================
+
 
 def smiles_to_xyz(smiles: str, optimize_3d: bool = True) -> Tuple[str, Dict[str, Any]]:
     """
@@ -411,7 +413,7 @@ def smiles_to_xyz(smiles: str, optimize_3d: bool = True) -> Tuple[str, Dict[str,
             "num_atoms": mol.GetNumAtoms(),
             "num_heavy_atoms": mol.GetNumHeavyAtoms(),
             "smiles": smiles,
-            "canonical_smiles": Chem.MolToSmiles(mol)
+            "canonical_smiles": Chem.MolToSmiles(mol),
         }
 
         logger.info(f"Converted SMILES '{smiles}' to XYZ: {metadata['formula']}")
@@ -467,8 +469,8 @@ def student_friendly_smiles_to_xyz(smiles: str) -> Tuple[Optional[str], str]:
 
     except ImportError:
         message = (
-            f"❌ RDKit is required for SMILES conversion.\n"
-            f"   Install with: conda install -c conda-forge rdkit"
+            "❌ RDKit is required for SMILES conversion.\n"
+            "   Install with: conda install -c conda-forge rdkit"
         )
         return None, message
 
@@ -477,15 +479,19 @@ def student_friendly_smiles_to_xyz(smiles: str) -> Tuple[Optional[str], str]:
             f"❌ Error converting SMILES: {str(e)}\n"
             f"   Please try a different molecule or contact your instructor."
         )
-        logger.error(f"Unexpected error in student_friendly_smiles_to_xyz: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error in student_friendly_smiles_to_xyz: {e}", exc_info=True
+        )
         return None, message
 
 
-def generate_2d_structure_svg(smiles: Optional[str] = None,
-                               mol: Optional[object] = None,
-                               xyz_string: Optional[str] = None,
-                               width: int = 300,
-                               height: int = 300) -> Optional[str]:
+def generate_2d_structure_svg(
+    smiles: Optional[str] = None,
+    mol: Optional[object] = None,
+    xyz_string: Optional[str] = None,
+    width: int = 300,
+    height: int = 300,
+) -> Optional[str]:
     """
     Generate 2D structure diagram as SVG string.
 
@@ -509,8 +515,8 @@ def generate_2d_structure_svg(smiles: Optional[str] = None,
         raise ImportError("RDKit is required for 2D structure rendering")
 
     try:
+
         from rdkit.Chem import Draw
-        from io import BytesIO
 
         # Get RDKit molecule from input
         if mol is not None:
@@ -522,12 +528,13 @@ def generate_2d_structure_svg(smiles: Optional[str] = None,
         elif xyz_string is not None:
             # Convert XYZ to SMILES (requires RDKit bond perception)
             # Parse XYZ
-            lines = xyz_string.strip().split('\n')
+            lines = xyz_string.strip().split("\n")
             if len(lines) < 3:
                 raise ValueError("Invalid XYZ format")
 
             # Build mol from XYZ
             from rdkit.Chem import rdDetermineBonds
+
             rdkit_mol = Chem.Mol()
             conf = Chem.Conformer()
 
@@ -539,10 +546,10 @@ def generate_2d_structure_svg(smiles: Optional[str] = None,
                 x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
 
                 atom = Chem.Atom(symbol)
-                rdkit_mol.AddAtom(atom)
+                rdkit_mol.AddAtom(atom)  # type: ignore[attr-defined]
                 conf.SetAtomPosition(i, (x, y, z))
 
-            rdkit_mol.AddConformer(conf)
+            rdkit_mol.AddConformer(conf)  # type: ignore[attr-defined]
 
             # Determine bonds
             rdDetermineBonds.DetermineBonds(rdkit_mol)
@@ -566,11 +573,13 @@ def generate_2d_structure_svg(smiles: Optional[str] = None,
         return None
 
 
-def display_2d_structure(smiles: Optional[str] = None,
-                         mol: Optional[object] = None,
-                         xyz_string: Optional[str] = None,
-                         width: int = 400,
-                         height: int = 300):
+def display_2d_structure(
+    smiles: Optional[str] = None,
+    mol: Optional[object] = None,
+    xyz_string: Optional[str] = None,
+    width: int = 400,
+    height: int = 300,
+):
     """
     Display 2D structure diagram in Jupyter notebook.
 
@@ -585,14 +594,11 @@ def display_2d_structure(smiles: Optional[str] = None,
         IPython display object or None if fails
     """
     try:
-        from IPython.display import SVG, display as ipython_display
+        from IPython.display import SVG
+        from IPython.display import display as ipython_display
 
         svg = generate_2d_structure_svg(
-            smiles=smiles,
-            mol=mol,
-            xyz_string=xyz_string,
-            width=width,
-            height=height
+            smiles=smiles, mol=mol, xyz_string=xyz_string, width=width, height=height
         )
 
         if svg:
@@ -626,25 +632,21 @@ def get_smiles_examples() -> Dict[str, str]:
         "Methane": "C",
         "Ethane": "CC",
         "Propane": "CCC",
-
         # Functional groups
         "Methanol": "CO",
         "Ethanol": "CCO",
         "Acetic Acid": "CC(=O)O",
         "Acetone": "CC(=O)C",
         "Formaldehyde": "C=O",
-
         # Aromatics
         "Benzene": "c1ccccc1",
         "Toluene": "Cc1ccccc1",
         "Phenol": "Oc1ccccc1",
         "Aniline": "Nc1ccccc1",
-
         # Biochemical
         "Glycine": "NCC(=O)O",
         "Alanine": "CC(N)C(=O)O",
         "Glucose": "C(C1C(C(C(C(O1)O)O)O)O)O",
-
         # Common molecules
         "Carbon Dioxide": "O=C=O",
         "Hydrogen Peroxide": "OO",
@@ -677,7 +679,10 @@ def validate_smiles(smiles: str) -> Tuple[bool, str]:
             return False, "Molecule has no atoms"
 
         if num_atoms > 200:
-            return False, f"Molecule too large ({num_atoms} atoms). Consider smaller molecules for calculations."
+            return (
+                False,
+                f"Molecule too large ({num_atoms} atoms). Consider smaller molecules for calculations.",
+            )
 
         return True, f"Valid SMILES ({num_atoms} atoms)"
 

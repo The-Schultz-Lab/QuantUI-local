@@ -18,7 +18,7 @@ With both ase and pyscf installed in your conda environment:
 """
 
 import io
-import math
+
 import pytest
 
 from quantui.ase_bridge import ASE_AVAILABLE
@@ -29,6 +29,7 @@ from quantui.optimizer import DEFAULT_FMAX, DEFAULT_OPT_STEPS, OptimizationResul
 _PYSCF_AVAILABLE = False
 try:
     import pyscf as _p  # noqa: F401
+
     _PYSCF_AVAILABLE = True
 except ImportError:
     pass
@@ -36,6 +37,7 @@ except ImportError:
 _ASE_PYSCF_AVAILABLE = False
 try:
     from ase.calculators.pyscf import PySCF as _c  # noqa: F401
+
     _ASE_PYSCF_AVAILABLE = True
 except ImportError:
     pass
@@ -49,6 +51,7 @@ pyscf_only = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _h2(bond_length: float = 0.74) -> Molecule:
     """H2 molecule — fastest meaningful QM calculation."""
@@ -94,6 +97,7 @@ class TestOptimizationResultDataclass:
 
     def test_energy_ev_conversion(self):
         from quantui.session_calc import HARTREE_TO_EV
+
         result = _make_result(energies_hartree=[-1.0, -1.117])
         assert result.energy_ev == pytest.approx(-1.117 * HARTREE_TO_EV, rel=1e-9)
 
@@ -173,6 +177,7 @@ class TestModuleConstants:
 
     def test_config_exports_match(self):
         from quantui import config
+
         assert hasattr(config, "DEFAULT_FMAX")
         assert hasattr(config, "DEFAULT_OPT_STEPS")
         assert config.DEFAULT_FMAX == DEFAULT_FMAX
@@ -187,10 +192,13 @@ class TestModuleConstants:
 class TestOptimizeGeometryImportGuards:
     def test_raises_when_ase_unavailable(self, monkeypatch):
         import quantui.ase_bridge as bridge
+
         monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
 
         import importlib
+
         import quantui.optimizer as opt_mod
+
         importlib.reload(opt_mod)
         from quantui.optimizer import optimize_geometry
 
@@ -199,10 +207,13 @@ class TestOptimizeGeometryImportGuards:
 
     def test_error_message_is_actionable(self, monkeypatch):
         import quantui.ase_bridge as bridge
+
         monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
 
         import importlib
+
         import quantui.optimizer as opt_mod
+
         importlib.reload(opt_mod)
         from quantui.optimizer import optimize_geometry
 
@@ -225,7 +236,9 @@ class TestOptimizeGeometryBasic:
     def test_returns_optimization_result(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert isinstance(result, OptimizationResult)
 
     @pyscf_only
@@ -233,7 +246,9 @@ class TestOptimizeGeometryBasic:
     def test_trajectory_is_nonempty(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert len(result.trajectory) >= 1
 
     @pyscf_only
@@ -241,7 +256,9 @@ class TestOptimizeGeometryBasic:
     def test_trajectory_frames_are_molecules(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         for frame in result.trajectory:
             assert isinstance(frame, Molecule)
 
@@ -250,7 +267,9 @@ class TestOptimizeGeometryBasic:
     def test_energies_list_matches_trajectory_length(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert len(result.energies_hartree) == len(result.trajectory)
 
     @pyscf_only
@@ -258,7 +277,9 @@ class TestOptimizeGeometryBasic:
     def test_final_molecule_has_correct_atoms(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert result.molecule.atoms == ["H", "H"]
 
     @pyscf_only
@@ -266,7 +287,9 @@ class TestOptimizeGeometryBasic:
     def test_n_steps_consistent_with_trajectory(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert result.n_steps == len(result.trajectory) - 1
 
     @pyscf_only
@@ -274,7 +297,9 @@ class TestOptimizeGeometryBasic:
     def test_formula_matches_input(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert result.formula == "H2"
 
     @pyscf_only
@@ -282,7 +307,9 @@ class TestOptimizeGeometryBasic:
     def test_method_basis_recorded(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=20
+        )
         assert result.method == "RHF"
         assert result.basis == "STO-3G"
 
@@ -298,20 +325,24 @@ class TestOptimizeGeometryEnergyAndConvergence:
 
         # Start from a slightly compressed H2 — forces will push it to equilibrium
         mol = _h2(bond_length=0.60)
-        result = optimize_geometry(mol, method="RHF", basis="STO-3G", fmax=0.05, steps=50)
+        result = optimize_geometry(
+            mol, method="RHF", basis="STO-3G", fmax=0.05, steps=50
+        )
         energies = result.energies_hartree
         # Allow small numerical noise (<1e-5 Ha) between consecutive steps
         for i in range(1, len(energies)):
-            assert energies[i] <= energies[i - 1] + 1e-4, (
-                f"Energy increased at step {i}: {energies[i - 1]:.8f} → {energies[i]:.8f}"
-            )
+            assert (
+                energies[i] <= energies[i - 1] + 1e-4
+            ), f"Energy increased at step {i}: {energies[i - 1]:.8f} → {energies[i]:.8f}"
 
     @pyscf_only
     @pytest.mark.slow
     def test_h2_optimization_converges(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(0.60), method="RHF", basis="STO-3G", fmax=0.05, steps=50)
+        result = optimize_geometry(
+            _h2(0.60), method="RHF", basis="STO-3G", fmax=0.05, steps=50
+        )
         assert result.converged is True
 
     @pyscf_only
@@ -320,7 +351,9 @@ class TestOptimizeGeometryEnergyAndConvergence:
         """When steps=1, optimizer should stop and converged=False for most molecules."""
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(0.60), method="RHF", basis="STO-3G", fmax=1e-6, steps=1)
+        result = optimize_geometry(
+            _h2(0.60), method="RHF", basis="STO-3G", fmax=1e-6, steps=1
+        )
         # With only 1 step and a very tight fmax it should NOT converge
         assert result.n_steps <= 1
 
@@ -333,7 +366,9 @@ class TestOptimizeGeometryMetadataPreservation:
     def test_charge_preserved_neutral(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=10)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=10
+        )
         assert result.molecule.charge == 0
         for frame in result.trajectory:
             assert frame.charge == 0
@@ -343,7 +378,9 @@ class TestOptimizeGeometryMetadataPreservation:
     def test_multiplicity_preserved_singlet(self):
         from quantui.optimizer import optimize_geometry
 
-        result = optimize_geometry(_h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=10)
+        result = optimize_geometry(
+            _h2(), method="RHF", basis="STO-3G", fmax=0.1, steps=10
+        )
         assert result.molecule.multiplicity == 1
 
 
@@ -356,8 +393,14 @@ class TestOptimizeGeometryOutputStream:
         from quantui.optimizer import optimize_geometry
 
         buf = io.StringIO()
-        optimize_geometry(_h2(0.60), method="RHF", basis="STO-3G",
-                          fmax=0.05, steps=20, progress_stream=buf)
+        optimize_geometry(
+            _h2(0.60),
+            method="RHF",
+            basis="STO-3G",
+            fmax=0.05,
+            steps=20,
+            progress_stream=buf,
+        )
         output = buf.getvalue()
         # BFGS writes "BFGS: step  fmax" table — expect at least some content
         assert len(output) > 0
@@ -369,8 +412,14 @@ class TestOptimizeGeometryOutputStream:
         from quantui.optimizer import optimize_geometry
 
         buf = io.StringIO()
-        optimize_geometry(_h2(0.60), method="RHF", basis="STO-3G",
-                          fmax=0.05, steps=20, progress_stream=buf)
+        optimize_geometry(
+            _h2(0.60),
+            method="RHF",
+            basis="STO-3G",
+            fmax=0.05,
+            steps=20,
+            progress_stream=buf,
+        )
         output = buf.getvalue()
         # PySCF cycle lines contain "converge" or "SCF energy"
         # At verbose=0 these should be absent from our stream

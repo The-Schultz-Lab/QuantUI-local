@@ -15,17 +15,17 @@ Removed vs. source repo (SLURM-specific helpers no longer present):
   - TestUtilsIntegration.test_generate_and_parse_job_workflow (generate_job_id removed)
 """
 
-import pytest
 import os
-import re
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-from quantui import utils
+from unittest.mock import patch
 
+import pytest
+
+from quantui import utils
 
 # ============================================================================
 # Username and Path Tests
 # ============================================================================
+
 
 class TestGetUsername:
     """Test username detection."""
@@ -48,7 +48,9 @@ class TestGetUsername:
         username = utils.get_username()
         assert username == "janedoe"
 
-    @patch.dict(os.environ, {"USER": "", "USERNAME": "", "JUPYTERHUB_USER": ""}, clear=True)
+    @patch.dict(
+        os.environ, {"USER": "", "USERNAME": "", "JUPYTERHUB_USER": ""}, clear=True
+    )
     def test_get_username_none_found(self):
         """Test error when no username can be detected."""
         with pytest.raises(RuntimeError, match="Could not detect username"):
@@ -128,6 +130,7 @@ class TestEnsureDirectory:
 # ============================================================================
 # Validation Tests
 # ============================================================================
+
 
 class TestValidateAtomSymbol:
     """Test atomic symbol validation."""
@@ -244,6 +247,7 @@ class TestValidateMultiplicity:
 # Formatting Tests
 # ============================================================================
 
+
 class TestFormatFileSize:
     """Test file size formatting."""
 
@@ -294,6 +298,7 @@ class TestTruncateString:
 # Error Handling Tests
 # ============================================================================
 
+
 class TestStudentFriendlyError:
     """Test student-friendly error message generation."""
 
@@ -336,6 +341,7 @@ class TestStudentFriendlyError:
 # Timestamp Tests
 # ============================================================================
 
+
 class TestGetTimestamp:
     """Test timestamp generation."""
 
@@ -352,6 +358,7 @@ class TestGetTimestamp:
         """Test that timestamps are unique (or very close)."""
         ts1 = utils.get_timestamp()
         import time
+
         time.sleep(0.01)  # Small delay
         ts2 = utils.get_timestamp()
 
@@ -363,6 +370,7 @@ class TestGetTimestamp:
 # ============================================================================
 # Session Resource Tests
 # ============================================================================
+
 
 class TestSessionCanHandle:
     """Tests for session_can_handle and get_session_resources."""
@@ -402,6 +410,7 @@ class TestSessionCanHandle:
 # ============================================================================
 # Integration Tests
 # ============================================================================
+
 
 class TestUtilsIntegration:
     """Test combined utility function workflows."""

@@ -208,7 +208,9 @@ def run_in_session(
         mo_energy = mf.mo_energy
         import numpy as _np
 
-        if isinstance(mo_energy, (list, _np.ndarray)) and hasattr(mo_energy[0], "__len__"):
+        if isinstance(mo_energy, (list, _np.ndarray)) and hasattr(
+            mo_energy[0], "__len__"
+        ):
             # UHF: mo_energy is (2, n_mo) — use alpha spin for the gap estimate
             mo_energy_ref = mo_energy[0]
             mo_occ_ref = mo_occ[0]
@@ -227,7 +229,12 @@ def run_in_session(
     formula = molecule.get_formula()
     logger.info(
         "Session calculation: %s %s/%s  E=%.8f Ha  converged=%s  iters=%d",
-        formula, method, basis, energy_hartree, converged, n_iterations,
+        formula,
+        method,
+        basis,
+        energy_hartree,
+        converged,
+        n_iterations,
     )
 
     return SessionResult(

@@ -92,7 +92,15 @@ select = [
 ]
 ignore = [
     "E501",  # line too long — black handles this
-    "B008",  # do not perform function calls in default args (too noisy for notebooks-style code)
+    "B008",  # function calls in default args — common in teaching code
+    # The rules below fire on verbatim-copied source files that we don't
+    # want to diverge from the upstream QuantUI repo unnecessarily.
+    # They are style-only and do not affect correctness.
+    "UP006",  # use built-in dict/list/tuple for annotations (requires 3.9 runtime)
+    "UP007",  # use X | Y for unions (requires 3.10 at runtime)
+    "UP035",  # typing.Dict/List/Tuple deprecated — same as UP006
+    "B904",   # raise-without-from in except — cosmetic, verbatim copies
+    "E722",   # bare except — cosmetic, verbatim copies
 ]
 
 [tool.ruff.lint.isort]
@@ -105,7 +113,6 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 check_untyped_defs = true
 warn_redundant_casts = true
-warn_unused_ignores = true
 no_implicit_optional = true
 strict_equality = true
 
@@ -117,6 +124,7 @@ module = [
     "ipywidgets.*",
     "psutil",
     "ase.*",
+    "rdkit.*",
 ]
 ignore_missing_imports = true
 

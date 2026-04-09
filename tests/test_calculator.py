@@ -8,14 +8,14 @@ run_in_session(), not via batch submission.
 """
 
 import pytest
-from pathlib import Path
+
 from quantui.calculator import PySCFCalculation, create_calculation
 from quantui.molecule import Molecule
-
 
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def water_molecule():
@@ -24,7 +24,7 @@ def water_molecule():
         atoms=["O", "H", "H"],
         coordinates=[[0.0, 0.0, 0.0], [0.757, 0.587, 0.0], [-0.757, 0.587, 0.0]],
         charge=0,
-        multiplicity=1
+        multiplicity=1,
     )
 
 
@@ -35,7 +35,7 @@ def h2_molecule():
         atoms=["H", "H"],
         coordinates=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]],
         charge=0,
-        multiplicity=1
+        multiplicity=1,
     )
 
 
@@ -46,13 +46,14 @@ def radical_molecule():
         atoms=["O", "H"],
         coordinates=[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]],
         charge=0,
-        multiplicity=2
+        multiplicity=2,
     )
 
 
 # ============================================================================
 # PySCFCalculation Initialization Tests
 # ============================================================================
+
 
 class TestPySCFCalculationInit:
     """Test PySCFCalculation initialization."""
@@ -97,6 +98,7 @@ class TestPySCFCalculationInit:
 # ============================================================================
 # Script Generation Tests
 # ============================================================================
+
 
 class TestScriptGeneration:
     """Test calculation script generation."""
@@ -154,7 +156,7 @@ class TestScriptGeneration:
             atoms=["O", "H", "H", "H"],
             coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
             charge=1,
-            multiplicity=1
+            multiplicity=1,
         )
         calc = PySCFCalculation(mol, method="RHF", basis="6-31G")
         script_path = tmp_path / "calc.py"
@@ -169,9 +171,7 @@ class TestScriptGeneration:
         assert not script_path.parent.exists()
 
         calc = PySCFCalculation(
-            Molecule(["H", "H"], [[0, 0, 0], [1, 0, 0]]),
-            method="RHF",
-            basis="6-31G"
+            Molecule(["H", "H"], [[0, 0, 0], [1, 0, 0]]), method="RHF", basis="6-31G"
         )
         calc.generate_calculation_script(script_path)
 
@@ -182,6 +182,7 @@ class TestScriptGeneration:
 # ============================================================================
 # Description and Educational Notes Tests
 # ============================================================================
+
 
 class TestDescriptionAndNotes:
     """Test description and educational note generation."""
@@ -265,16 +266,13 @@ class TestDescriptionAndNotes:
 # Factory Function Tests
 # ============================================================================
 
+
 class TestCreateCalculation:
     """Test create_calculation factory function."""
 
     def test_create_calculation_simple(self, water_molecule):
         """Test factory function creates calculation correctly."""
-        calc = create_calculation(
-            molecule=water_molecule,
-            method="RHF",
-            basis="6-31G"
-        )
+        calc = create_calculation(molecule=water_molecule, method="RHF", basis="6-31G")
 
         assert isinstance(calc, PySCFCalculation)
         assert calc.molecule == water_molecule
@@ -284,9 +282,7 @@ class TestCreateCalculation:
     def test_create_calculation_uhf(self, radical_molecule):
         """Test factory function with UHF."""
         calc = create_calculation(
-            molecule=radical_molecule,
-            method="UHF",
-            basis="STO-3G"
+            molecule=radical_molecule, method="UHF", basis="STO-3G"
         )
 
         assert isinstance(calc, PySCFCalculation)
@@ -296,6 +292,7 @@ class TestCreateCalculation:
 # ============================================================================
 # Integration Tests
 # ============================================================================
+
 
 class TestCalculationIntegration:
     """Test complete calculation workflows."""
@@ -333,9 +330,7 @@ class TestCalculationIntegration:
     def test_calculation_with_factory(self, water_molecule, tmp_path):
         """Test using factory function in workflow."""
         calc = create_calculation(
-            molecule=water_molecule,
-            method="RHF",
-            basis="cc-pVDZ"
+            molecule=water_molecule, method="RHF", basis="cc-pVDZ"
         )
 
         # Should work just like direct instantiation
@@ -349,6 +344,7 @@ class TestCalculationIntegration:
 # Edge Cases and Error Handling
 # ============================================================================
 
+
 class TestEdgeCases:
     """Test edge cases and error conditions."""
 
@@ -361,10 +357,7 @@ class TestEdgeCases:
     def test_highly_charged_molecule(self):
         """Test calculation with high charge."""
         mol = Molecule(
-            ["C"] * 5,
-            [[i, 0, 0] for i in range(5)],
-            charge=4,
-            multiplicity=1
+            ["C"] * 5, [[i, 0, 0] for i in range(5)], charge=4, multiplicity=1
         )
         calc = PySCFCalculation(mol, method="RHF", basis="6-31G")
         assert calc is not None
@@ -375,7 +368,7 @@ class TestEdgeCases:
             ["O"] * 4,
             [[i, 0, 0] for i in range(4)],
             charge=0,
-            multiplicity=5  # Quintuplet
+            multiplicity=5,  # Quintuplet
         )
         calc = PySCFCalculation(mol, method="UHF", basis="6-31G")
 

@@ -29,7 +29,7 @@ Built for classroom teaching at the
 ## Platform requirements
 
 | Platform | Works? | Notes |
-|----------|--------|-------|
+| --- | --- | --- |
 | Linux / macOS | Full | PySCF installs natively |
 | WSL (Windows) | Full | Use an Ubuntu WSL environment |
 | Windows (native) | Partial | All UI and visualization features work; PySCF calculations require the Apptainer container |
@@ -39,7 +39,7 @@ Built for classroom teaching at the
 PySCF does not install on Windows natively. The
 [`apptainer/quantui-local.def`](apptainer/quantui-local.def) container bundles
 the complete environment and runs anywhere Apptainer/Singularity is available.
-See [`apptainer/BUILD.md`](apptainer/BUILD.md) for build and run instructions.
+See [`apptainer/README.md`](apptainer/README.md) for build and run instructions.
 
 ---
 
@@ -64,7 +64,7 @@ python -m pip install quantui-local[pyscf,ase,app]
 
 ### Option C — Apptainer container (Windows / reproducible deployment)
 
-See [apptainer/BUILD.md](apptainer/BUILD.md).
+See [apptainer/README.md](apptainer/README.md).
 
 ---
 
@@ -91,7 +91,7 @@ Open the notebook, pick a molecule, choose a method and basis set, and click
 Five step-by-step notebooks in [`notebooks/tutorials/`](notebooks/tutorials/):
 
 | Notebook | Topic |
-|----------|-------|
+| --- | --- |
 | [01_first_calculation.ipynb](notebooks/tutorials/01_first_calculation.ipynb) | Your first RHF calculation |
 | [02_basis_set_study.ipynb](notebooks/tutorials/02_basis_set_study.ipynb) | Comparing STO-3G, 6-31G, cc-pVDZ |
 | [03_multiplicity_radicals.ipynb](notebooks/tutorials/03_multiplicity_radicals.ipynb) | Open-shell molecules and UHF |
@@ -103,7 +103,7 @@ Five step-by-step notebooks in [`notebooks/tutorials/`](notebooks/tutorials/):
 ## Supported calculations
 
 | Method | When to use |
-|--------|------------|
+| --- | --- |
 | RHF | Closed-shell molecules — all electrons paired |
 | UHF | Open-shell molecules — radicals or unpaired electrons |
 
@@ -131,7 +131,7 @@ pytest -m "not network" \
 
 ## Project structure
 
-```
+```text
 quantui/                  Main package
   molecule.py             Molecule input and validation
   session_calc.py         In-session PySCF runner

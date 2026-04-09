@@ -33,15 +33,15 @@ class TestHelpTopics:
 
     def test_titles_are_nonempty_strings(self):
         for key, entry in HELP_TOPICS.items():
-            assert isinstance(entry["title"], str) and entry["title"], (
-                f"Topic '{key}': title must be non-empty string"
-            )
+            assert (
+                isinstance(entry["title"], str) and entry["title"]
+            ), f"Topic '{key}': title must be non-empty string"
 
     def test_bodies_are_nonempty_strings(self):
         for key, entry in HELP_TOPICS.items():
-            assert isinstance(entry["body"], str) and entry["body"], (
-                f"Topic '{key}': body must be non-empty string"
-            )
+            assert (
+                isinstance(entry["body"], str) and entry["body"]
+            ), f"Topic '{key}': body must be non-empty string"
 
     def test_valid_topics_matches_keys(self):
         assert VALID_TOPICS == frozenset(HELP_TOPICS.keys())
@@ -52,6 +52,7 @@ class TestHelpPanel:
 
     def test_returns_html_widget(self):
         import ipywidgets as widgets
+
         panel = help_panel("charge")
         assert isinstance(panel, widgets.HTML)
 

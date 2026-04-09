@@ -5,18 +5,19 @@ Tests molecule creation, validation, parsing, and formatting functions.
 """
 
 import pytest
+
 from quantui.molecule import (
     Molecule,
-    parse_xyz_input,
-    suggest_multiplicity,
     get_preset_molecule,
     list_preset_molecules,
+    parse_xyz_input,
+    suggest_multiplicity,
 )
-
 
 # ============================================================================
 # Molecule Class Tests
 # ============================================================================
+
 
 class TestMoleculeCreation:
     """Test basic molecule creation and initialization."""
@@ -162,8 +163,7 @@ class TestMoleculeProperties:
     def test_get_formula_water(self):
         """Test molecular formula for water."""
         mol = Molecule(
-            atoms=["O", "H", "H"],
-            coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
+            atoms=["O", "H", "H"], coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
         )
 
         assert mol.get_formula() == "H2O"
@@ -172,7 +172,7 @@ class TestMoleculeProperties:
         """Test molecular formula for methane."""
         mol = Molecule(
             atoms=["C", "H", "H", "H", "H"],
-            coordinates=[[0, 0, 0], [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]
+            coordinates=[[0, 0, 0], [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]],
         )
 
         assert mol.get_formula() == "CH4"
@@ -181,7 +181,7 @@ class TestMoleculeProperties:
         """Test molecular formula for more complex molecule."""
         mol = Molecule(
             atoms=["C", "C", "O", "H", "H", "H", "H", "H", "H"],
-            coordinates=[[0, 0, 0] for _ in range(9)]
+            coordinates=[[0, 0, 0] for _ in range(9)],
         )
 
         assert mol.get_formula() == "C2H6O"
@@ -189,8 +189,7 @@ class TestMoleculeProperties:
     def test_electron_count_neutral(self):
         """Test electron count for neutral molecule."""
         mol = Molecule(
-            atoms=["O", "H", "H"],
-            coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
+            atoms=["O", "H", "H"], coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
         )
 
         assert mol.get_electron_count() == 10  # O(8) + 2H(2) = 10
@@ -201,7 +200,7 @@ class TestMoleculeProperties:
             atoms=["O", "H", "H"],
             coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
             charge=1,
-            multiplicity=2  # 9 electrons (odd) requires even multiplicity
+            multiplicity=2,  # 9 electrons (odd) requires even multiplicity
         )
 
         assert mol.get_electron_count() == 9  # 10 - 1 = 9
@@ -224,7 +223,7 @@ class TestMoleculeProperties:
         """Test that count_electrons is an alias for get_electron_count."""
         mol = Molecule(
             atoms=["C", "H", "H", "H", "H"],
-            coordinates=[[0, 0, 0], [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]
+            coordinates=[[0, 0, 0], [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]],
         )
 
         assert mol.count_electrons() == mol.get_electron_count()
@@ -236,12 +235,11 @@ class TestMoleculeFormatting:
     def test_to_pyscf_format(self):
         """Test conversion to PySCF format."""
         mol = Molecule(
-            atoms=["H", "H"],
-            coordinates=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]
+            atoms=["H", "H"], coordinates=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]
         )
 
         pyscf_str = mol.to_pyscf_format()
-        lines = pyscf_str.split('\n')
+        lines = pyscf_str.split("\n")
 
         assert len(lines) == 2
         assert "H" in lines[0]
@@ -252,11 +250,11 @@ class TestMoleculeFormatting:
         """Test conversion to XYZ string format."""
         mol = Molecule(
             atoms=["O", "H", "H"],
-            coordinates=[[0.0, 0.0, 0.0], [0.757, 0.587, 0.0], [-0.757, 0.587, 0.0]]
+            coordinates=[[0.0, 0.0, 0.0], [0.757, 0.587, 0.0], [-0.757, 0.587, 0.0]],
         )
 
         xyz_str = mol.to_xyz_string()
-        lines = xyz_str.split('\n')
+        lines = xyz_str.split("\n")
 
         assert len(lines) == 3
         assert lines[0].startswith("O")
@@ -269,7 +267,7 @@ class TestMoleculeFormatting:
             atoms=["C", "H"],
             coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
             charge=1,
-            multiplicity=1  # 6 electrons (even) requires odd multiplicity
+            multiplicity=1,  # 6 electrons (even) requires odd multiplicity
         )
 
         data = mol.to_dict()
@@ -285,7 +283,7 @@ class TestMoleculeFormatting:
             "atoms": ["N", "H", "H", "H"],
             "coordinates": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
             "charge": 0,
-            "multiplicity": 1
+            "multiplicity": 1,
         }
 
         mol = Molecule.from_dict(data)
@@ -297,10 +295,7 @@ class TestMoleculeFormatting:
 
     def test_str_representation(self):
         """Test string representation."""
-        mol = Molecule(
-            atoms=["H", "H"],
-            coordinates=[[0, 0, 0], [1, 0, 0]]
-        )
+        mol = Molecule(atoms=["H", "H"], coordinates=[[0, 0, 0], [1, 0, 0]])
 
         str_repr = str(mol)
 
@@ -312,6 +307,7 @@ class TestMoleculeFormatting:
 # ============================================================================
 # XYZ Parsing Tests
 # ============================================================================
+
 
 class TestParseXYZInput:
     """Test XYZ coordinate parsing."""
@@ -525,6 +521,7 @@ H  -0.757  0.587  0.0
 # Helper Function Tests
 # ============================================================================
 
+
 class TestSuggestMultiplicity:
     """Test multiplicity suggestion logic."""
 
@@ -617,6 +614,7 @@ class TestPresetMolecules:
 # Integration Tests
 # ============================================================================
 
+
 class TestMoleculeIntegration:
     """Test complete molecule workflows."""
 
@@ -638,7 +636,7 @@ H  -0.757  0.587  0.0"""
             atoms=["C", "O", "H", "H"],
             coordinates=[[0, 0, 0], [1.2, 0, 0], [0, 1, 0], [0, 0, 1]],
             charge=-1,
-            multiplicity=2
+            multiplicity=2,
         )
 
         # Convert to dict and back

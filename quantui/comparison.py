@@ -16,9 +16,9 @@ dicts built from ``results.npz`` files.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -70,7 +70,11 @@ def summary_from_job_metadata(metadata, *, label: str = "") -> CalcSummary:
     If the job's ``results.npz`` file exists, the energy and convergence
     data are loaded.  Otherwise only metadata is included.
     """
-    formula = metadata.job_name.split("_")[0] if "_" in metadata.job_name else metadata.job_name
+    formula = (
+        metadata.job_name.split("_")[0]
+        if "_" in metadata.job_name
+        else metadata.job_name
+    )
     calc = CalcSummary(
         label=label or metadata.job_name,
         formula=formula,
@@ -220,8 +224,15 @@ def plot_comparison(
     n_panels = int(has_energies) + int(has_gaps)
     if n_panels == 0:
         fig, ax = plt.subplots(figsize=(6, 2))
-        ax.text(0.5, 0.5, "No energy data available for comparison.",
-                ha="center", va="center", fontsize=12, transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "No energy data available for comparison.",
+            ha="center",
+            va="center",
+            fontsize=12,
+            transform=ax.transAxes,
+        )
         ax.axis("off")
         return fig
 

@@ -9,8 +9,8 @@ Author: Jonathan Schultz, NCCU
 Created: 2026-02-17
 """
 
-from typing import Optional, Literal, cast
 import logging
+from typing import Literal, cast
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ BackendName = Literal["auto", "py3dmol", "plotlymol"]
 # Check available visualization backends
 try:
     import py3Dmol
+
     PY3DMOL_AVAILABLE = True
 except ImportError:
     PY3DMOL_AVAILABLE = False
@@ -27,6 +28,7 @@ except ImportError:
 
 try:
     from plotlymol3d import draw_3D_rep
+
     PLOTLYMOL_AVAILABLE = True
 except ImportError:
     PLOTLYMOL_AVAILABLE = False
@@ -52,9 +54,9 @@ def get_available_backends() -> list[str]:
     """
     backends = []
     if PY3DMOL_AVAILABLE:
-        backends.append('py3dmol')
+        backends.append("py3dmol")
     if PLOTLYMOL_AVAILABLE:
-        backends.append('plotlymol')
+        backends.append("plotlymol")
     return backends
 
 
@@ -81,7 +83,7 @@ def visualize_molecule_py3dmol(
     style: Py3DmolStyle = "stick",
     width: int = 600,
     height: int = 500,
-    bgcolor: str = "white"
+    bgcolor: str = "white",
 ):
     """
     Create interactive 3D visualization using py3Dmol.
@@ -157,7 +159,7 @@ def visualize_molecule_plotlymol(
     resolution: int = 32,
     width: int = 600,
     height: int = 500,
-    bgcolor: str = "#ffffff"
+    bgcolor: str = "#ffffff",
 ):
     """
     Create interactive 3D visualization using PlotlyMol (optional backend).
@@ -207,14 +209,14 @@ def visualize_molecule_plotlymol(
         charge=charge,
         mode=mode,
         resolution=resolution,
-        bgcolor=bgcolor
+        bgcolor=bgcolor,
     )
 
     # Set figure size and title
     fig.update_layout(
         width=width,
         height=height,
-        title=f"{molecule.get_formula()} - {mode.replace('+', ' & ').title()}"
+        title=f"{molecule.get_formula()} - {mode.replace('+', ' & ').title()}",
     )
 
     return fig
@@ -227,7 +229,7 @@ def visualize_molecule(
     width: int = 600,
     height: int = 500,
     bgcolor: str = "white",
-    **kwargs
+    **kwargs,
 ):
     """
     Create interactive 3D visualization (backend-agnostic).
@@ -298,7 +300,7 @@ def display_molecule(
     style: str = "stick",
     show_info: bool = True,
     width: int = 600,
-    height: int = 500
+    height: int = 500,
 ):
     """
     Display molecule in Jupyter notebook with optional info box.
@@ -319,7 +321,7 @@ def display_molecule(
         >>> mol = Molecule(['H', 'H'], [[0, 0, 0], [0, 0, 0.74]])
         >>> display_molecule(mol)  # Uses py3Dmol by default
     """
-    from IPython.display import display, HTML
+    from IPython.display import HTML, display
 
     if not is_visualization_available():
         # Fallback: show text representation

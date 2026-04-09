@@ -7,25 +7,23 @@ synthetic minimal cube string.
 """
 
 import textwrap
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from quantui.orbital_visualization import (
-    OrbitalInfo,
+    HARTREE_TO_EV,
     load_orbital_info,
     orbital_info_from_arrays,
     orbital_summary_html,
     parse_cube_file,
     plot_orbital_diagram,
-    HARTREE_TO_EV,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def simple_mo_data(tmp_path):
@@ -48,8 +46,7 @@ def uhf_mo_data(tmp_path):
     alpha = np.array([-0.7, -0.4, 0.1, 0.5])
     beta = np.array([-0.65, -0.35, 0.15, 0.55])
     mo_energy = np.stack([alpha, beta])  # shape (2, 4)
-    mo_occ = np.array([[1.0, 1.0, 0.0, 0.0],
-                        [1.0, 1.0, 0.0, 0.0]])
+    mo_occ = np.array([[1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 0.0, 0.0]])
     np.savez(
         tmp_path / "results.npz",
         mo_energy=mo_energy,
@@ -63,7 +60,8 @@ def uhf_mo_data(tmp_path):
 @pytest.fixture()
 def minimal_cube_file(tmp_path):
     """Write a trivially small cube file (1 atom, 2x2x2 grid)."""
-    content = textwrap.dedent("""\
+    content = textwrap.dedent(
+        """\
         Comment line 1
         Comment line 2
          1  0.000000  0.000000  0.000000
@@ -73,7 +71,8 @@ def minimal_cube_file(tmp_path):
          1  0.000000  0.000000  0.000000  0.000000
          0.1  0.2  0.3  0.4
          0.5  0.6  0.7  0.8
-    """)
+    """
+    )
     p = tmp_path / "test.cube"
     p.write_text(content)
     return p
@@ -82,6 +81,7 @@ def minimal_cube_file(tmp_path):
 # ---------------------------------------------------------------------------
 # OrbitalInfo construction
 # ---------------------------------------------------------------------------
+
 
 class TestLoadOrbitalInfo:
 
@@ -119,7 +119,9 @@ class TestLoadOrbitalInfo:
     def test_external_mo_occ(self, tmp_path):
         """Pass mo_occ explicitly, overriding what's in the file."""
         mo_energy = np.array([-1.0, -0.5, 0.3, 1.0])
-        np.savez(tmp_path / "results.npz", mo_energy=mo_energy, energy=-50.0, converged=True)
+        np.savez(
+            tmp_path / "results.npz", mo_energy=mo_energy, energy=-50.0, converged=True
+        )
         info = load_orbital_info(
             tmp_path / "results.npz",
             mo_occ=np.array([2.0, 0.0, 0.0, 0.0]),
@@ -166,10 +168,12 @@ class TestOrbitalInfoFromArrays:
 # Matplotlib diagram
 # ---------------------------------------------------------------------------
 
+
 class TestPlotOrbitalDiagram:
 
     def test_returns_figure(self, simple_mo_data):
         import matplotlib
+
         matplotlib.use("Agg")
         info = load_orbital_info(simple_mo_data, formula="H2O")
         fig = plot_orbital_diagram(info)
@@ -178,6 +182,7 @@ class TestPlotOrbitalDiagram:
 
     def test_custom_title(self, simple_mo_data):
         import matplotlib
+
         matplotlib.use("Agg")
         info = load_orbital_info(simple_mo_data, formula="H2O")
         fig = plot_orbital_diagram(info, title="Custom Title")
@@ -188,24 +193,34 @@ class TestPlotOrbitalDiagram:
     def test_max_orbitals_limits_lines(self, tmp_path):
         """With 20 MOs and max_orbitals=6, only ~6 levels are drawn."""
         import matplotlib
+
         matplotlib.use("Agg")
         mo_e = np.linspace(-2, 2, 20)
         mo_occ = np.zeros(20)
         mo_occ[:10] = 2.0
-        np.savez(tmp_path / "results.npz", mo_energy=mo_e, mo_occ=mo_occ,
-                 energy=-100.0, converged=True)
+        np.savez(
+            tmp_path / "results.npz",
+            mo_energy=mo_e,
+            mo_occ=mo_occ,
+            energy=-100.0,
+            converged=True,
+        )
         info = load_orbital_info(tmp_path / "results.npz", formula="big")
         fig = plot_orbital_diagram(info, max_orbitals=6)
         # Should have plotted 6 lines (each is a Line2D object)
         ax = fig.axes[0]
-        lines = [c for c in ax.get_children()
-                 if hasattr(c, "get_xdata") and len(c.get_xdata()) == 2]
+        lines = [
+            c
+            for c in ax.get_children()
+            if hasattr(c, "get_xdata") and len(c.get_xdata()) == 2
+        ]
         assert len(lines) == 6
 
 
 # ---------------------------------------------------------------------------
 # Summary HTML
 # ---------------------------------------------------------------------------
+
 
 class TestOrbitalSummaryHtml:
 
@@ -228,6 +243,7 @@ class TestOrbitalSummaryHtml:
 # ---------------------------------------------------------------------------
 # Cube-file parser
 # ---------------------------------------------------------------------------
+
 
 class TestParseCubeFile:
 

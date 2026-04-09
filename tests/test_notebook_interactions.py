@@ -11,22 +11,18 @@ Usage:
     pytest tests/test_notebook_interactions.py -v -s     # show artifact paths
 """
 
-import pytest
 from unittest.mock import patch
 
-from quantui.molecule import Molecule, parse_xyz_input
-from quantui.calculator import create_calculation
+import pytest
+
 import quantui.visualization_py3dmol as viz_mod
+from quantui.molecule import Molecule, parse_xyz_input
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-WATER_XYZ = (
-    "O  0.0  0.0  0.0\n"
-    "H  0.757  0.587  0.0\n"
-    "H  -0.757  0.587  0.0"
-)
+WATER_XYZ = "O  0.0  0.0  0.0\n" "H  0.757  0.587  0.0\n" "H  -0.757  0.587  0.0"
 
 H2_XYZ = "H  0.0  0.0  0.0\nH  0.0  0.0  0.74"
 
@@ -54,6 +50,7 @@ py3dmol_only = pytest.mark.skipif(
 #    The on_validate_molecule callback: parse XYZ -> build Molecule -> display
 # ---------------------------------------------------------------------------
 
+
 class TestValidateMoleculeButton:
     """Logic invoked by the Validate Molecule button in the notebook."""
 
@@ -69,14 +66,12 @@ class TestValidateMoleculeButton:
         assert water.get_electron_count() == 10
 
     def test_invalid_xyz_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, KeyError)):
             parse_xyz_input("NOTANELEMENT 0.0 0.0 0.0")
 
     def test_charged_molecule(self):
         atoms, coords = parse_xyz_input(WATER_XYZ)
-        mol = Molecule(
-            atoms=atoms, coordinates=coords, charge=1, multiplicity=2
-        )
+        mol = Molecule(atoms=atoms, coordinates=coords, charge=1, multiplicity=2)
         assert mol.charge == 1
         assert mol.multiplicity == 2
         assert mol.get_electron_count() == 9  # one electron removed
@@ -93,12 +88,14 @@ class TestValidateMoleculeButton:
 #    The on_manual_visualize callback: display_molecule(mol, style=...)
 # ---------------------------------------------------------------------------
 
+
 class TestVisualizeMoleculeButton:
     """Logic invoked by the Visualize button."""
 
     @py3dmol_only
     def test_visualize_returns_view_object(self, water):
         import py3Dmol
+
         view = viz_mod.visualize_molecule_py3dmol(water, style="stick")
         assert isinstance(view, py3Dmol.view)
 
@@ -149,14 +146,26 @@ class TestVisualizeMoleculeButton:
 
 # CPK colour scheme + van-der-Waals radii (Angstrom) scaled to scatter size
 _ATOM_COLOR = {
-    "H": "#dddddd", "C": "#555555", "N": "#3355ff",
-    "O": "#ff2222", "F": "#22aa22", "S": "#ddcc00",
-    "Cl": "#22cc22", "P": "#ff8800", "Br": "#993300",
+    "H": "#dddddd",
+    "C": "#555555",
+    "N": "#3355ff",
+    "O": "#ff2222",
+    "F": "#22aa22",
+    "S": "#ddcc00",
+    "Cl": "#22cc22",
+    "P": "#ff8800",
+    "Br": "#993300",
 }
 _ATOM_SIZE = {
-    "H": 150,  "C": 400, "N": 380,
-    "O": 360,  "F": 320, "S": 600,
-    "Cl": 550, "P": 520, "Br": 700,
+    "H": 150,
+    "C": 400,
+    "N": 380,
+    "O": 360,
+    "F": 320,
+    "S": 600,
+    "Cl": 550,
+    "P": 520,
+    "Br": 700,
 }
 
 
@@ -166,7 +175,8 @@ def _mol_to_png(mol, out_path, elev=20, azim=30):
     as a PNG.  Works offline — no CDN, no WebGL required.
     """
     import matplotlib
-    matplotlib.use("Agg")          # non-interactive backend, safe in tests
+
+    matplotlib.use("Agg")  # non-interactive backend, safe in tests
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -177,12 +187,29 @@ def _mol_to_png(mol, out_path, elev=20, azim=30):
 
     fig = plt.figure(figsize=(7, 6))
     ax = fig.add_subplot(111, projection="3d")
-    ax.scatter(xs, ys, zs, c=colors, s=sizes,
-               edgecolors="black", linewidth=0.4, alpha=0.92, zorder=5)
+    ax.scatter(
+        xs,
+        ys,
+        zs,
+        c=colors,
+        s=sizes,
+        edgecolors="black",
+        linewidth=0.4,
+        alpha=0.92,
+        zorder=5,
+    )
 
     for atom, (x, y, z) in zip(mol.atoms, mol.coordinates):
-        ax.text(x, y, z + 0.12, atom,
-                fontsize=9, ha="center", va="bottom", fontweight="bold")
+        ax.text(
+            x,
+            y,
+            z + 0.12,
+            atom,
+            fontsize=9,
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+        )
 
     ax.set_title(f"{mol.get_formula()}  ({len(mol.atoms)} atoms)", pad=20)
     ax.set_xlabel("X (A)")
@@ -196,6 +223,7 @@ def _mol_to_png(mol, out_path, elev=20, azim=30):
 def _artifact_dir(tmp_path):
     import os
     from pathlib import Path
+
     env_dir = os.environ.get("QUANTUI_ARTIFACT_DIR")
     if env_dir:
         d = Path(env_dir)
@@ -216,6 +244,7 @@ def _artifact_dir(tmp_path):
 #            ::TestGenerateVisualizationArtifacts -v -s --no-cov
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateVisualizationArtifacts:
     """
     Produce offline PNG images via matplotlib — no CDN, no WebGL needed.
@@ -235,7 +264,7 @@ class TestGenerateVisualizationArtifacts:
         out = _artifact_dir(tmp_path) / "water.png"
         _mol_to_png(water, out)
         assert out.exists()
-        assert out.stat().st_size > 1000   # non-trivial file
+        assert out.stat().st_size > 1000  # non-trivial file
         print(f"\n  [artifact] {out}")
 
     def test_h2_png(self, h2, tmp_path):
@@ -246,11 +275,10 @@ class TestGenerateVisualizationArtifacts:
     def test_benzene_png(self, tmp_path):
         """Benzene from Quick Start Templates — larger molecule."""
         from quantui.config import QUICK_START_TEMPLATES
+
         template = QUICK_START_TEMPLATES["benzene"]
         atoms, coords = parse_xyz_input(template["molecule"]["xyz"])
-        mol = Molecule(
-            atoms=atoms, coordinates=coords, charge=0, multiplicity=1
-        )
+        mol = Molecule(atoms=atoms, coordinates=coords, charge=0, multiplicity=1)
         out = _artifact_dir(tmp_path) / "benzene.png"
         _mol_to_png(mol, out)
         assert out.exists()
@@ -259,10 +287,12 @@ class TestGenerateVisualizationArtifacts:
     def test_oxygen_radical_png(self, tmp_path):
         """Radical from Quick Start Templates — open-shell molecule."""
         from quantui.config import QUICK_START_TEMPLATES
+
         template = QUICK_START_TEMPLATES["radical_oxygen"]
         atoms, coords = parse_xyz_input(template["molecule"]["xyz"])
         mol = Molecule(
-            atoms=atoms, coordinates=coords,
+            atoms=atoms,
+            coordinates=coords,
             charge=template["molecule"]["charge"],
             multiplicity=template["molecule"]["multiplicity"],
         )

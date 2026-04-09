@@ -6,20 +6,17 @@ utilities used across the application. SLURM-specific helpers (job ID
 parsing, walltime formatting, job directory management) have been removed.
 """
 
+import logging
 import os
 import re
-import logging
-from pathlib import Path
-from typing import Optional, List, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 from . import config
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL),
-    format=config.LOG_FORMAT
-)
+logging.basicConfig(level=getattr(logging, config.LOG_LEVEL), format=config.LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 
@@ -39,9 +36,7 @@ def get_username() -> str:
         RuntimeError: If username cannot be detected
     """
     username = (
-        os.getenv('JUPYTERHUB_USER') or
-        os.getenv('USER') or
-        os.getenv('USERNAME')
+        os.getenv("JUPYTERHUB_USER") or os.getenv("USER") or os.getenv("USERNAME")
     )
 
     if not username:
@@ -65,8 +60,8 @@ def sanitize_filename(filename: str) -> str:
     Returns:
         str: Sanitized string safe for use in filenames
     """
-    filename = filename.replace(' ', '_')
-    filename = re.sub(r'[^\w\-.]', '', filename)
+    filename = filename.replace(" ", "_")
+    filename = re.sub(r"[^\w\-.]", "", filename)
     return filename
 
 
@@ -204,7 +199,7 @@ def format_file_size(size_bytes: int) -> str:
         str: Formatted size (e.g., "1.5 MB")
     """
     size = float(size_bytes)
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024.0:
             return f"{size:.1f} {unit}"
         size /= 1024.0
@@ -234,7 +229,7 @@ def truncate_string(s: str, max_length: int = 100) -> str:
     """
     if len(s) <= max_length:
         return s
-    return s[:max_length - 3] + "..."
+    return s[: max_length - 3] + "..."
 
 
 def get_session_resources() -> Tuple[int, Optional[int]]:
@@ -247,8 +242,9 @@ def get_session_resources() -> Tuple[int, Optional[int]]:
     """
     available_cores = os.cpu_count() or 1
     try:
-        import psutil  # type: ignore[import-untyped]
-        mem_gb: Optional[int] = psutil.virtual_memory().available // (1024 ** 3)
+        import psutil
+
+        mem_gb: Optional[int] = psutil.virtual_memory().available // (1024**3)
     except ImportError:
         mem_gb = None
     return available_cores, mem_gb

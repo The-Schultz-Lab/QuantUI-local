@@ -4,8 +4,6 @@ Tests for quantui.progress
 Validates the StepProgress widget's state machine and HTML rendering.
 """
 
-import pytest
-
 from quantui.progress import StepProgress
 
 

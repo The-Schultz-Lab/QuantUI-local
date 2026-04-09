@@ -5,7 +5,6 @@ Shared test fixtures for QuantUI test suite.
 """
 
 import pytest
-from pathlib import Path
 
 
 @pytest.fixture
@@ -57,9 +56,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "network: tests that require network connectivity"
     )
-    config.addinivalue_line(
-        "markers", "slow: tests that take significant time to run"
-    )
+    config.addinivalue_line("markers", "slow: tests that take significant time to run")
     config.addinivalue_line(
         "markers", "integration: integration tests requiring external services"
     )

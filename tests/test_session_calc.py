@@ -21,6 +21,7 @@ Run only the fast, platform-independent tests anywhere:
 """
 
 import io
+
 import pytest
 
 from quantui.ase_bridge import ASE_AVAILABLE
@@ -31,6 +32,7 @@ from quantui.session_calc import HARTREE_TO_EV, SessionResult
 _PYSCF_AVAILABLE = False
 try:
     import pyscf as _pyscf  # noqa: F401
+
     _PYSCF_AVAILABLE = True
 except ImportError:
     pass
@@ -38,6 +40,7 @@ except ImportError:
 _ASE_PYSCF_AVAILABLE = False
 try:
     from ase.calculators.pyscf import PySCF as _check  # noqa: F401
+
     _ASE_PYSCF_AVAILABLE = True
 except ImportError:
     pass
@@ -52,6 +55,7 @@ pyscf_only = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _h2() -> Molecule:
     """H2 with equilibrium geometry — fastest meaningful QM calculation."""
@@ -155,10 +159,13 @@ class TestRunInSessionImportGuards:
 
     def test_raises_when_ase_unavailable(self, monkeypatch):
         import quantui.ase_bridge as bridge
+
         monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
 
         import importlib
+
         import quantui.session_calc as sc
+
         importlib.reload(sc)
         from quantui.session_calc import run_in_session
 
@@ -167,10 +174,13 @@ class TestRunInSessionImportGuards:
 
     def test_import_error_message_is_actionable(self, monkeypatch):
         import quantui.ase_bridge as bridge
+
         monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
 
         import importlib
+
         import quantui.session_calc as sc
+
         importlib.reload(sc)
         from quantui.session_calc import run_in_session
 
@@ -265,7 +275,9 @@ class TestRunInSessionOutputStream:
         from quantui.session_calc import run_in_session
 
         buf = io.StringIO()
-        run_in_session(_h2(), method="RHF", basis="STO-3G", verbose=3, progress_stream=buf)
+        run_in_session(
+            _h2(), method="RHF", basis="STO-3G", verbose=3, progress_stream=buf
+        )
         output = buf.getvalue()
         # With verbose=3, PySCF writes SCF cycle information
         assert len(output) > 0
@@ -276,7 +288,9 @@ class TestRunInSessionOutputStream:
         from quantui.session_calc import run_in_session
 
         buf = io.StringIO()
-        run_in_session(_h2(), method="RHF", basis="STO-3G", verbose=0, progress_stream=buf)
+        run_in_session(
+            _h2(), method="RHF", basis="STO-3G", verbose=0, progress_stream=buf
+        )
         output = buf.getvalue()
         # verbose=0 should produce little or no output
         assert len(output) < 500  # allow for minimal header lines

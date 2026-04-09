@@ -10,7 +10,6 @@ Ported from QuantUI test_phase1.py with SLURM-specific checks removed:
 """
 
 import sys
-import pytest
 from pathlib import Path
 
 
@@ -18,8 +17,7 @@ def _run_imports_check() -> bool:
     """Test that all modules can be imported."""
     print("Testing imports...")
     try:
-        import quantui
-        from quantui import config, utils, molecule, calculator
+
         print("  All imports successful")
         return True
     except Exception as e:
@@ -62,6 +60,7 @@ def _run_molecule_check() -> bool:
     except Exception as e:
         print(f"  Molecule test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -78,16 +77,17 @@ def _run_calculator_check() -> bool:
         from quantui import Molecule, create_calculation
 
         # Create simple molecule
-        atoms = ['H', 'H']
+        atoms = ["H", "H"]
         coords = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]
         mol = Molecule(atoms, coords)
 
         # Create calculation
-        calc = create_calculation(mol, 'RHF', '6-31G')
+        calc = create_calculation(mol, "RHF", "6-31G")
         print(f"  Created calculation: {calc.method}/{calc.basis}")
 
         # Test script generation
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = Path(tmpdir) / "test_calc.py"
             calc.generate_calculation_script(script_path)
@@ -99,6 +99,7 @@ def _run_calculator_check() -> bool:
     except Exception as e:
         print(f"  Calculator test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -126,8 +127,8 @@ def _run_utils_check() -> bool:
         print(f"  Sanitized filename: {sanitized}")
 
         # Test validation
-        assert utils.validate_atom_symbol('H') is True
-        assert utils.validate_atom_symbol('Xx') is False
+        assert utils.validate_atom_symbol("H") is True
+        assert utils.validate_atom_symbol("Xx") is False
         print("  Validation functions working")
 
         # Test session resource detection
@@ -140,6 +141,7 @@ def _run_utils_check() -> bool:
     except Exception as e:
         print(f"  Utils test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -154,14 +156,15 @@ def _run_visualization_check() -> bool:
     print("\nTesting visualization module...")
     try:
         from quantui.visualization_py3dmol import (
+            PY3DMOL_AVAILABLE,
             is_visualization_available,
             visualize_molecule,
-            display_molecule,
-            PY3DMOL_AVAILABLE,
         )
+
         print("  Visualization module imports successfully")
 
         from quantui import Molecule
+
         mol = Molecule(
             atoms=["O", "H", "H"],
             coordinates=[[0.0, 0.0, 0.0], [0.757, 0.587, 0.0], [-0.757, 0.587, 0.0]],
@@ -191,6 +194,7 @@ def _run_visualization_check() -> bool:
     except Exception as e:
         print(f"  Visualization test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -204,7 +208,8 @@ def _run_session_calc_check() -> bool:
     """Test in-session PySCF runner availability (optional — Linux/WSL only)."""
     print("\nTesting in-session calculator...")
     try:
-        from quantui import run_in_session, SessionResult
+        from quantui import run_in_session  # noqa: F401
+
         print("  run_in_session imported successfully (PySCF available)")
         return True
     except (ImportError, AttributeError):

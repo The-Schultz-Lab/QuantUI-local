@@ -6,7 +6,7 @@ These interactive tutorials guide you through quantum chemistry calculations ste
 
 - 🎓 **Learning objectives** - What you'll master
 - 📝 **Pre-filled code** - Ready to run
-- ✅ **Checkpoints** - Verify your understanding  
+- ✅ **Checkpoints** - Verify your understanding
 - 💡 **Explanations** - Why things work the way they do
 - 🎯 **Expected results** - Know if you got it right
 
@@ -15,8 +15,8 @@ These interactive tutorials guide you through quantum chemistry calculations ste
 ## Tutorial Series
 
 ### 1. [First Calculation](01_first_calculation.ipynb) - **Start Here!**
-**Time:** ~15 minutes  
-**Difficulty:** Beginner  
+**Time:** ~15 minutes
+**Difficulty:** Beginner
 
 Your first quantum chemistry calculation!
 - Submit a water molecule calculation
@@ -29,8 +29,8 @@ Your first quantum chemistry calculation!
 ---
 
 ### 2. [Basis Set Study](02_basis_set_study.ipynb)
-**Time:** ~30 minutes  
-**Difficulty:** Intermediate  
+**Time:** ~30 minutes
+**Difficulty:** Intermediate
 
 Compare different basis sets on the same molecule.
 - Run H₂O with STO-3G, 6-31G, and cc-pVDZ
@@ -43,7 +43,7 @@ Compare different basis sets on the same molecule.
 ---
 
 ### 3. [Multiplicity & Radicals](03_multiplicity_radicals.ipynb)
-**Time:** ~25 minutes  
+**Time:** ~25 minutes
 **Difficulty:** Intermediate
 
 Learn about spin states with oxygen molecule.
@@ -57,8 +57,8 @@ Learn about spin states with oxygen molecule.
 ---
 
 ### 4. [Charged Species](04_charged_species.ipynb)
-**Time:** ~20 minutes  
-**Difficulty:** Intermediate  
+**Time:** ~20 minutes
+**Difficulty:** Intermediate
 
 Work with ions and charged molecules.
 - Calculate NH₃ (neutral)
@@ -71,8 +71,8 @@ Work with ions and charged molecules.
 ---
 
 ### 5. [Comparing Results](05_comparing_results.ipynb)
-**Time:** ~25 minutes  
-**Difficulty:** Intermediate  
+**Time:** ~25 minutes
+**Difficulty:** Intermediate
 
 Analyze and compare multiple calculations.
 - Load multiple job results
@@ -123,26 +123,26 @@ Instructors can:
 
 ## Tips for Success
 
-✅ **Run cells in order** - Don't skip ahead  
-✅ **Read all text** - Explanations are important  
-✅ **Experiment** - Try changing molecules  
-✅ **Use checkpoints** - Verify before proceeding  
+✅ **Run cells in order** - Don't skip ahead
+✅ **Read all text** - Explanations are important
+✅ **Experiment** - Try changing molecules
+✅ **Use checkpoints** - Verify before proceeding
 ✅ **Ask questions** - Contact your instructor
 
 ---
 
 ## Troubleshooting
 
-**Problem:** Jobs fail immediately  
+**Problem:** Jobs fail immediately
 **Solution:** Check your molecule setup in checkpoint cells
 
-**Problem:** Can't see visualizations  
+**Problem:** Can't see visualizations
 **Solution:** Ensure py3Dmol is installed (see main notebook setup)
 
-**Problem:** Jobs stuck in PENDING  
+**Problem:** Jobs stuck in PENDING
 **Solution:** Cluster may be busy - check status in main notebook
 
-**Problem:** Different energy than expected  
+**Problem:** Different energy than expected
 **Solution:** Small differences are okay - check units and significant figures
 
 ---

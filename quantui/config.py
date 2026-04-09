@@ -7,7 +7,7 @@ removed — this version runs calculations in the current Jupyter session.
 """
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict
 
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -33,8 +33,8 @@ DEFAULT_CHARGE = 0
 DEFAULT_MULTIPLICITY = 1
 
 # Geometry optimization defaults
-DEFAULT_FMAX: float = 0.05     # eV/Å force convergence threshold
-DEFAULT_OPT_STEPS: int = 200   # maximum BFGS optimizer steps
+DEFAULT_FMAX: float = 0.05  # eV/Å force convergence threshold
+DEFAULT_OPT_STEPS: int = 200  # maximum BFGS optimizer steps
 
 # Widget styling
 WIDGET_LAYOUT = {
@@ -88,7 +88,6 @@ MOLECULE_LIBRARY: Dict[str, Dict[str, Any]] = {
         "multiplicity": 1,
         "description": "Hydrogen chloride",
     },
-
     # ========== SIMPLE TRIATOMIC MOLECULES ==========
     "H2O": {
         "atoms": ["O", "H", "H"],
@@ -135,7 +134,6 @@ MOLECULE_LIBRARY: Dict[str, Dict[str, Any]] = {
         "multiplicity": 1,
         "description": "Hydrogen peroxide (non-planar)",
     },
-
     # ========== SIMPLE ORGANIC MOLECULES ==========
     "CH4": {
         "atoms": ["C", "H", "H", "H", "H"],
@@ -261,7 +259,6 @@ MOLECULE_LIBRARY: Dict[str, Dict[str, Any]] = {
         "multiplicity": 1,
         "description": "Acetic acid (carboxylic acid)",
     },
-
     # ========== AROMATIC MOLECULES ==========
     "C6H6": {
         "atoms": ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H"],
@@ -287,11 +284,42 @@ MOLECULE_LIBRARY: Dict[str, Dict[str, Any]] = {
 
 # Valid atomic symbols (periodic table subset commonly used)
 VALID_ATOMS = [
-    "H", "He",
-    "Li", "Be", "B", "C", "N", "O", "F", "Ne",
-    "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar",
-    "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
-    "Ga", "Ge", "As", "Se", "Br", "Kr",
+    "H",
+    "He",
+    "Li",
+    "Be",
+    "B",
+    "C",
+    "N",
+    "O",
+    "F",
+    "Ne",
+    "Na",
+    "Mg",
+    "Al",
+    "Si",
+    "P",
+    "S",
+    "Cl",
+    "Ar",
+    "K",
+    "Ca",
+    "Sc",
+    "Ti",
+    "V",
+    "Cr",
+    "Mn",
+    "Fe",
+    "Co",
+    "Ni",
+    "Cu",
+    "Zn",
+    "Ga",
+    "Ge",
+    "As",
+    "Se",
+    "Br",
+    "Kr",
 ]
 
 # Quick-start templates for the notebook UI
@@ -475,8 +503,7 @@ if __name__ == "__main__":
 #   PUBCHEM_API_KEY = "your-key-here"
 #   DEBUG = True
 
-import os
-import importlib.util
+import importlib.util  # noqa: E402
 
 _local_config_path = PROJECT_ROOT / "config.local.py"
 

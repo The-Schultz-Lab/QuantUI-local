@@ -184,6 +184,6 @@ def help_panel(topic: str) -> widgets.HTML:
         f'<summary style="cursor:pointer; font-weight:bold; color:#0366d6;">'
         f'ℹ️ {entry["title"]}</summary>'
         f'<div style="margin-top:6px; font-size:13px;">{entry["body"]}</div>'
-        f'</details>'
+        f"</details>"
     )
     return widgets.HTML(value=html)

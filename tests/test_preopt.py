@@ -25,6 +25,7 @@ ase_only = pytest.mark.skipif(not ASE_AVAILABLE, reason="ase not installed")
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _water() -> Molecule:
     """Return a water molecule with a reasonable geometry."""
     return Molecule(
@@ -60,33 +61,27 @@ class TestPreoptimizeImportGuard:
     """preoptimize() raises ImportError with helpful message when ASE is absent."""
 
     def test_raises_import_error_when_ase_unavailable(self, monkeypatch):
-        import quantui.ase_bridge as bridge
-
-        monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
-
-        # Reimport preoptimize so it picks up the patched flag
-        import importlib
         import quantui.preopt as preopt_mod
-        importlib.reload(preopt_mod)
-        from quantui.preopt import preoptimize
+
+        # Patch ASE_AVAILABLE directly in preopt's namespace — no reload needed;
+        # monkeypatch auto-reverts after the test so later tests are unaffected.
+        monkeypatch.setattr(preopt_mod, "ASE_AVAILABLE", False)
 
         mol = _water()
         with pytest.raises(ImportError, match="pip install ase"):
-            preoptimize(mol)
+            preopt_mod.preoptimize(mol)
 
     def test_import_error_message_mentions_conda(self, monkeypatch):
-        import quantui.ase_bridge as bridge
-
-        monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
-
-        import importlib
         import quantui.preopt as preopt_mod
-        importlib.reload(preopt_mod)
-        from quantui.preopt import preoptimize
+
+        monkeypatch.setattr(preopt_mod, "ASE_AVAILABLE", False)
 
         with pytest.raises(ImportError) as exc_info:
-            preoptimize(_water())
-        assert "conda" in str(exc_info.value).lower() or "pip" in str(exc_info.value).lower()
+            preopt_mod.preoptimize(_water())
+        assert (
+            "conda" in str(exc_info.value).lower()
+            or "pip" in str(exc_info.value).lower()
+        )
 
 
 # ============================================================================
@@ -251,6 +246,7 @@ class TestPreoptimizeImmutability:
     @ase_only
     def test_original_coordinates_unchanged(self):
         import copy
+
         from quantui.preopt import preoptimize
 
         original = _water()
