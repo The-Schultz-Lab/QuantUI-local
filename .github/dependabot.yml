@@ -1,0 +1,49 @@
+version: 2
+
+updates:
+  # Python dependencies (pyproject.toml)
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Batch minor/patch bumps for core scientific deps into one PR
+      scientific-core:
+        patterns:
+          - "numpy"
+          - "matplotlib"
+          - "plotly"
+      # ASE + PySCF together since they interact
+      qc-engines:
+        patterns:
+          - "ase"
+          - "pyscf"
+      # Jupyter ecosystem together
+      jupyter:
+        patterns:
+          - "jupyter*"
+          - "ipywidgets"
+          - "notebook"
+          - "voila"
+          - "ipykernel"
+      # Dev/test tools together
+      dev-tools:
+        patterns:
+          - "pytest*"
+          - "mypy"
+          - "types-*"
+          - "ruff"
+    ignore:
+      # PySCF major versions may break API — review manually
+      - dependency-name: pyscf
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions pinned to SHA via Dependabot — keeps runners current
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
