@@ -10,6 +10,7 @@ import pytest
 import requests
 
 from quantui.pubchem import (
+    RDKIT_AVAILABLE,
     MoleculeNotFoundError,
     PubChemAPIError,
     check_pubchem_availability,
@@ -20,6 +21,8 @@ from quantui.pubchem import (
     search_molecule_by_name,
     student_friendly_fetch,
 )
+
+rdkit_only = pytest.mark.skipif(not RDKIT_AVAILABLE, reason="rdkit not installed")
 
 # ============================================================================
 # Mocked API Tests (No Network Required)
@@ -76,6 +79,7 @@ class TestGetMoleculeSDF:
     @patch("quantui.pubchem.requests.get")
     def test_get_sdf_3d_success(self, mock_get, sample_sdf_water):
         """Test successful 3D SDF retrieval."""
+        get_molecule_sdf.cache_clear()  # avoid cross-test cache pollution
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.text = sample_sdf_water
@@ -91,6 +95,7 @@ class TestGetMoleculeSDF:
     @patch("quantui.pubchem.requests.get")
     def test_get_sdf_2d_fallback(self, mock_get, sample_sdf_water):
         """Test fallback to 2D when 3D not available."""
+        get_molecule_sdf.cache_clear()  # avoid cross-test cache pollution
         # First call (3D) returns 404, second call (2D) succeeds
         mock_response_404 = Mock()
         mock_response_404.status_code = 404
@@ -117,8 +122,9 @@ class TestGetMoleculeSDF:
 
 
 class TestSDFToXYZ:
-    """Test SDF to XYZ conversion."""
+    """Test SDF to XYZ conversion (requires RDKit)."""
 
+    @rdkit_only
     def test_sdf_to_xyz_water(self, sample_sdf_water):
         """Test conversion of water SDF to XYZ."""
         xyz_string, metadata = sdf_to_xyz(sample_sdf_water)
@@ -136,6 +142,7 @@ class TestSDFToXYZ:
         # Water should have 3 atoms (O + 2H)
         assert metadata["num_atoms"] == 3
 
+    @rdkit_only
     def test_sdf_to_xyz_invalid(self):
         """Test conversion of invalid SDF."""
         invalid_sdf = "Not a valid SDF file"
@@ -143,6 +150,7 @@ class TestSDFToXYZ:
         with pytest.raises(ValueError):
             sdf_to_xyz(invalid_sdf)
 
+    @rdkit_only
     def test_sdf_to_xyz_metadata_fields(self, sample_sdf_water):
         """Test all metadata fields are present."""
         xyz_string, metadata = sdf_to_xyz(sample_sdf_water)
@@ -162,10 +170,11 @@ class TestSDFToXYZ:
 class TestFetchMolecule:
     """Test high-level molecule fetching."""
 
+    @rdkit_only
     @patch("quantui.pubchem.get_molecule_sdf")
     @patch("quantui.pubchem.search_molecule_by_name")
     def test_fetch_molecule_complete(self, mock_search, mock_get_sdf, sample_sdf_water):
-        """Test complete molecule fetch workflow."""
+        """Test complete molecule fetch workflow (requires RDKit for sdf_to_xyz)."""
         mock_search.return_value = 962
         mock_get_sdf.return_value = sample_sdf_water
 
@@ -363,12 +372,14 @@ class TestErrorHandling:
             search_molecule_by_name("water")
 
     def test_sdf_conversion_no_rdkit(self):
-        """Test SDF conversion failure handling."""
-        # This test assumes RDKit is available for the test suite
-        # In a real scenario where RDKit isn't available, we'd test ImportError
+        """Test SDF conversion failure handling.
+
+        Raises ValueError for invalid SDF when RDKit is available;
+        raises ImportError when RDKit is not installed.
+        """
         invalid_sdf = "INVALID SDF CONTENT"
 
-        with pytest.raises(ValueError):
+        with pytest.raises((ValueError, ImportError)):
             sdf_to_xyz(invalid_sdf)
 
 
