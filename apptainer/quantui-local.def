@@ -30,6 +30,10 @@ FROM: continuumio/miniconda3:latest
   # Disable user site-packages for reproducibility
   export PYTHONNOUSERSITE=1
 
+  # Save calculation results to the user's home directory so they persist
+  # across kernel restarts. The home dir is bind-mounted by Apptainer.
+  export QUANTUI_RESULTS_DIR="${HOME}/.quantui/results"
+
 %files
   # Source path is relative to where you run `apptainer build` (repo root).
   # Run the build command from the repo root, not from apptainer/.

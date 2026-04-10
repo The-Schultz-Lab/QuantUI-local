@@ -89,6 +89,9 @@ try:
 except ImportError:
     pass
 
+# Results persistence — pure Python, always available
+from .results_storage import list_results, load_result, save_result
+
 # QM geometry optimizer (optional — requires ase>=3.22 + pyscf, Linux/WSL)
 try:
     from .optimizer import OptimizationResult, optimize_geometry
@@ -189,6 +192,10 @@ __all__ = [
     # In-session calculator (optional — Linux/WSL)
     "SessionResult",
     "run_in_session",
+    # Results persistence
+    "save_result",
+    "list_results",
+    "load_result",
     # QM geometry optimizer (optional — Linux/WSL)
     "OptimizationResult",
     "optimize_geometry",
