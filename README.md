@@ -1,5 +1,10 @@
 # QuantUI-local
 
+[![CI](https://github.com/The-Schultz-Lab/QuantUI-local/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Schultz-Lab/QuantUI-local/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://the-schultz-lab.github.io/QuantUI-local/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%20|%203.10%20|%203.11-blue)](https://www.python.org)
+
 An interactive Jupyter interface for running quantum chemistry calculations
 locally — no cluster account, no SLURM, no queueing. Students design
 molecules, launch PySCF calculations in their own Python session, and

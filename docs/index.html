@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantUI-local — Quantum Chemistry in Jupyter</title>
+  <meta name="description" content="Interactive Jupyter interface for running PySCF quantum chemistry calculations locally. No cluster account, no SLURM, no queueing.">
+  <meta property="og:title" content="QuantUI-local">
+  <meta property="og:description" content="Quantum chemistry in Jupyter — molecules, PySCF, and 3D visualization on your laptop.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#0f172a">
+  <style>
+    /* ── Reset & Base ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: Inter, 'Segoe UI', -apple-system, BlinkMacSystemFont,
+                   'Helvetica Neue', Arial, sans-serif;
+      background: #ffffff;
+      color: #334155;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    img, svg { display: block; max-width: 100%; }
+
+    /* ── Containers ─────────────────────────────────────────────────────── */
+    .container        { max-width: 1160px; margin: 0 auto; padding: 0 1.5rem; }
+    .container--narrow { max-width: 780px;  margin: 0 auto; padding: 0 1.5rem; }
+
+    /* ── Navigation ─────────────────────────────────────────────────────── */
+    .nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .nav__inner {
+      display: flex; align-items: center; gap: 1.75rem;
+      padding: 0.9rem 1.5rem; max-width: 1160px; margin: 0 auto;
+    }
+    .nav__logo {
+      font-weight: 700; font-size: 1.0625rem; color: #f8fafc;
+      letter-spacing: -0.02em; margin-right: auto; text-decoration: none;
+    }
+    .nav__badge {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em;
+      color: #94a3b8; text-transform: uppercase;
+    }
+    .nav__link {
+      font-size: 0.875rem; font-weight: 500; color: #94a3b8;
+      text-decoration: none; transition: color 0.15s;
+    }
+    .nav__link:hover { color: #e2e8f0; }
+    @media (max-width: 640px) { .nav__badge, .nav__link { display: none; } }
+
+    /* ── Buttons ────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.7rem 1.4rem; border-radius: 8px;
+      font-size: 0.9375rem; font-weight: 600;
+      text-decoration: none; border: 2px solid transparent;
+      transition: all 0.18s ease; cursor: pointer; white-space: nowrap;
+    }
+    .btn--primary {
+      background: #2563eb; color: #ffffff;
+      box-shadow: 0 1px 4px rgba(37,99,235,0.35);
+    }
+    .btn--primary:hover {
+      background: #1d4ed8;
+      box-shadow: 0 4px 18px rgba(37,99,235,0.5);
+      transform: translateY(-1px);
+    }
+    .btn--outline {
+      background: transparent; color: #f8fafc;
+      border-color: rgba(248,250,252,0.28);
+    }
+    .btn--outline:hover {
+      background: rgba(248,250,252,0.07);
+      border-color: rgba(248,250,252,0.55);
+    }
+    .btn--ghost {
+      background: transparent; color: #cbd5e1;
+      border-color: rgba(203,213,225,0.22);
+      padding: 0.45rem 0.95rem; font-size: 0.875rem;
+    }
+    .btn--ghost:hover { background: rgba(255,255,255,0.07); color: #f8fafc; }
+
+    /* ── Pills / Badges ─────────────────────────────────────────────────── */
+    .pill {
+      display: inline-flex; align-items: center;
+      padding: 0.25rem 0.8rem; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em;
+      background: rgba(37,99,235,0.15);
+      border: 1px solid rgba(37,99,235,0.35);
+      color: #93c5fd;
+    }
+    .pill--teal {
+      background: rgba(8,145,178,0.14);
+      border-color: rgba(8,145,178,0.35);
+      color: #67e8f9;
+    }
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 0.22rem 0.65rem; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .badge--full    { background: #d1fae5; color: #065f46; }
+    .badge--partial { background: #fef3c7; color: #92400e; }
+
+    /* ── Hero ───────────────────────────────────────────────────────────── */
+    .hero {
+      background:
+        radial-gradient(ellipse 75% 55% at 72% 42%, rgba(8,145,178,0.13) 0%, transparent 58%),
+        radial-gradient(ellipse 55% 75% at 18% 62%, rgba(37,99,235,0.15) 0%, transparent 52%),
+        linear-gradient(158deg, #0f172a 0%, #111827 55%, #0c1928 100%);
+      padding: 5.5rem 0 5rem;
+      overflow: hidden;
+    }
+    .hero__inner {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 3.5rem;
+      align-items: center;
+    }
+    .hero__eyebrow { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .hero__title {
+      font-size: clamp(2.25rem, 5vw, 3.125rem);
+      font-weight: 800; line-height: 1.1; letter-spacing: -0.04em;
+      color: #f8fafc; margin-bottom: 1.25rem;
+    }
+    .hero__subtitle {
+      font-size: 1.125rem; color: #94a3b8; line-height: 1.65;
+      max-width: 520px; margin-bottom: 2rem;
+    }
+    .hero__actions { display: flex; gap: 0.9rem; flex-wrap: wrap; margin-bottom: 2rem; }
+    .hero__meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .hero__stat { font-size: 0.8125rem; color: #64748b; font-weight: 500; }
+    .hero__sep  { color: #334155; }
+    .hero__visual { display: flex; justify-content: center; align-items: center; }
+    @media (max-width: 768px) {
+      .hero__inner { grid-template-columns: 1fr; }
+      .hero__visual { display: none; }
+    }
+
+    /* Animated atom SVG */
+    .atom-svg { width: 260px; height: 260px; }
+    .ring { transform-origin: 140px 140px; }
+    .ring--1 { animation: spin1 9s  linear infinite; }
+    .ring--2 { animation: spin2 13s linear infinite reverse; transform: rotate(60deg); }
+    .ring--3 { animation: spin3 17s linear infinite; transform: rotate(120deg); }
+    @keyframes spin1 { to { transform: rotate(360deg); } }
+    @keyframes spin2 { to { transform: rotate(-300deg); } }
+    @keyframes spin3 { to { transform: rotate(480deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .ring { animation-play-state: paused; }
+    }
+
+    /* ── Sections ───────────────────────────────────────────────────────── */
+    .section { padding: 5rem 0; background: #ffffff; }
+    .section--tinted {
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .section__title {
+      font-size: clamp(1.5rem, 3vw, 1.875rem);
+      font-weight: 700; color: #0f172a;
+      text-align: center; margin-bottom: 0.6rem;
+      letter-spacing: -0.025em;
+    }
+    .section__subtitle {
+      font-size: 1.0625rem; color: #64748b;
+      text-align: center; max-width: 540px;
+      margin: 0 auto 3rem; line-height: 1.65;
+    }
+    .section__note {
+      font-size: 0.875rem; color: #94a3b8;
+      text-align: center; margin-top: 1rem;
+    }
+
+    /* ── Feature Cards ──────────────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+    @media (max-width: 900px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .features-grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #ffffff;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      padding: 1.75rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.07);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 8px rgba(0,0,0,.07), 0 14px 36px rgba(37,99,235,.15);
+    }
+    .feature-card__icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; margin-bottom: 1.1rem;
+      background: linear-gradient(135deg, rgba(37,99,235,0.10), rgba(8,145,178,0.10));
+      border: 1px solid rgba(37,99,235,0.12);
+    }
+    .feature-card__title {
+      font-size: 1.0625rem; font-weight: 700;
+      color: #0f172a; margin-bottom: 0.5rem;
+      letter-spacing: -0.015em;
+    }
+    .feature-card__body { font-size: 0.9375rem; color: #475569; line-height: 1.65; }
+
+    /* ── Data Tables ────────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; border-radius: 14px; }
+    .data-table {
+      width: 100%; border-collapse: collapse;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 4px 14px rgba(0,0,0,.07);
+      border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden;
+    }
+    .data-table thead { background: #f1f5f9; }
+    .data-table th {
+      padding: 0.875rem 1.25rem; text-align: left;
+      font-size: 0.75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em; color: #64748b;
+    }
+    .data-table td {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid #f1f5f9;
+      font-size: 0.9375rem; color: #334155; vertical-align: top;
+    }
+    .data-table tbody tr:hover { background: #f8fafc; }
+    .data-table code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.8125rem; background: #f1f5f9;
+      border: 1px solid #e2e8f0; border-radius: 4px;
+      padding: 0.15rem 0.45rem; color: #0f172a;
+    }
+    .td-num {
+      font-weight: 700; color: #94a3b8;
+      font-size: 0.8125rem; white-space: nowrap;
+    }
+    .td-muted { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
+
+    /* ── Code Block ─────────────────────────────────────────────────────── */
+    .code-block {
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,.55);
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .code-block__bar {
+      background: #1c2333; padding: 0.65rem 1rem;
+      display: flex; align-items: center; gap: 0.45rem;
+    }
+    .code-block__dot { width: 12px; height: 12px; border-radius: 50%; }
+    .code-block__dot--red    { background: #ff5f57; }
+    .code-block__dot--yellow { background: #febc2e; }
+    .code-block__dot--green  { background: #28c840; }
+    .code-block__label {
+      margin-left: auto; font-size: 0.6875rem;
+      color: #6b7280; font-family: monospace; letter-spacing: 0.05em;
+    }
+    .code-block pre {
+      background: #0d1117; padding: 1.6rem 1.5rem;
+      margin: 0; overflow-x: auto;
+    }
+    .code-block code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
+      font-size: 0.875rem; line-height: 1.75; color: #e6edf3;
+      background: none; border: none; padding: 0;
+    }
+    .c { color: #8b949e; }   /* comment */
+    .k { color: #ff7b72; }   /* keyword */
+    .s { color: #a5d6ff; }   /* string */
+    .p { color: #79c0ff; }   /* prompt / special */
+
+    /* ── Callout ────────────────────────────────────────────────────────── */
+    .callout {
+      margin-top: 1.5rem; padding: 1.1rem 1.25rem;
+      border-radius: 10px; border-left: 4px solid;
+      font-size: 0.9375rem; line-height: 1.65;
+    }
+    .callout--info { background: #eff6ff; border-color: #2563eb; color: #1e3a8a; }
+    .callout a { color: #1d4ed8; font-weight: 600; }
+
+    /* ── Basis Pills ────────────────────────────────────────────────────── */
+    .basis-pills {
+      display: flex; gap: 0.6rem; flex-wrap: wrap;
+      margin-top: 1.75rem; justify-content: center; align-items: center;
+    }
+    .basis-pill {
+      padding: 0.4rem 1rem; border-radius: 999px;
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      color: #1d4ed8; font-size: 0.875rem; font-weight: 700;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+    .basis-arrow { color: #93c5fd; font-size: 1rem; font-weight: 400; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    .footer {
+      background: #0f172a;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 2.75rem 0;
+    }
+    .footer__inner {
+      display: flex; align-items: center;
+      justify-content: space-between; flex-wrap: wrap; gap: 1.25rem;
+    }
+    .footer__name { font-weight: 700; color: #f8fafc; font-size: 1.0625rem; letter-spacing: -0.02em; }
+    .footer__copy { display: block; font-size: 0.8rem; color: #64748b; margin-top: 0.3rem; }
+    .footer__links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .footer__links a {
+      color: #94a3b8; text-decoration: none;
+      font-size: 0.875rem; transition: color 0.15s;
+    }
+    .footer__links a:hover { color: #e2e8f0; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ──────────────────────────────────────────────────────── -->
+<nav class="nav" role="navigation">
+  <div class="nav__inner">
+    <a class="nav__logo" href="#">QuantUI-local</a>
+    <span class="nav__badge">v0.1 &middot; MIT</span>
+    <a class="nav__link" href="#features">Features</a>
+    <a class="nav__link" href="#install">Install</a>
+    <a class="nav__link" href="#tutorials">Tutorials</a>
+    <a class="btn btn--ghost" href="https://github.com/The-Schultz-Lab/QuantUI-local">GitHub &rarr;</a>
+  </div>
+</nav>
+
+<!-- ── Hero ────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero__inner">
+
+      <div class="hero__text">
+        <div class="hero__eyebrow">
+          <span class="pill">Schultz Lab &middot; NCCU</span>
+          <span class="pill pill--teal">No cluster required</span>
+        </div>
+        <h1 class="hero__title">Quantum chemistry,<br>right in Jupyter</h1>
+        <p class="hero__subtitle">
+          Design molecules, run RHF/UHF calculations with PySCF, and
+          explore interactive 3D structures &mdash; all on your laptop,
+          in under a minute.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="https://github.com/The-Schultz-Lab/QuantUI-local">
+            View on GitHub
+          </a>
+          <a class="btn btn--outline" href="#install">Get started</a>
+        </div>
+        <div class="hero__meta">
+          <span class="hero__stat">Python 3.9&ndash;3.11</span>
+          <span class="hero__sep">&middot;</span>
+          <span class="hero__stat">439 tests</span>
+          <span class="hero__sep">&middot;</span>
+          <span class="hero__stat">MIT License</span>
+          <span class="hero__sep">&middot;</span>
+          <span class="hero__stat">Linux &middot; macOS &middot; WSL</span>
+        </div>
+      </div>
+
+      <!-- Animated atom diagram -->
+      <div class="hero__visual" aria-hidden="true">
+        <svg class="atom-svg" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="7" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="halo" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="22" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- ambient halo -->
+          <circle cx="140" cy="140" r="48" fill="rgba(37,99,235,0.20)" filter="url(#halo)"/>
+
+          <!-- orbital rings -->
+          <ellipse class="ring ring--1" cx="140" cy="140" rx="115" ry="33"
+                   stroke="#0891b2" stroke-width="1.4" fill="none" opacity="0.70"/>
+          <ellipse class="ring ring--2" cx="140" cy="140" rx="115" ry="33"
+                   stroke="#0891b2" stroke-width="1.4" fill="none" opacity="0.55"/>
+          <ellipse class="ring ring--3" cx="140" cy="140" rx="115" ry="33"
+                   stroke="#3b82f6" stroke-width="1.4" fill="none" opacity="0.42"/>
+
+          <!-- electron dots -->
+          <circle class="ring ring--1" cx="255" cy="140" r="5.5" fill="#67e8f9"/>
+          <circle class="ring ring--2" cx="255" cy="140" r="4.5" fill="#93c5fd"/>
+          <circle class="ring ring--3" cx="255" cy="140" r="4"   fill="#60a5fa"/>
+
+          <!-- nucleus -->
+          <circle cx="140" cy="140" r="20" fill="rgba(37,99,235,0.25)" filter="url(#glow)"/>
+          <circle cx="140" cy="140" r="14" fill="#2563eb" filter="url(#glow)"/>
+          <circle cx="140" cy="140" r="8"  fill="#60a5fa"/>
+          <circle cx="137" cy="137" r="3"  fill="rgba(255,255,255,0.45)"/>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ─────────────────────────────────────────────────────────── -->
+<section class="section" id="features">
+  <div class="container">
+    <h2 class="section__title">Everything students need</h2>
+    <p class="section__subtitle">
+      A complete quantum chemistry workflow, from molecule design to
+      result analysis, running entirely in your browser.
+    </p>
+    <div class="features-grid">
+
+      <div class="card">
+        <div class="feature-card__icon">⚗️</div>
+        <div class="feature-card__title">Molecule Input</div>
+        <p class="feature-card__body">
+          Paste XYZ coordinates, choose from a curated preset library,
+          or search PubChem by name. ASE structure files (.xyz, .cif, .mol)
+          are also supported.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="feature-card__icon">🔬</div>
+        <div class="feature-card__title">3D Visualization</div>
+        <p class="feature-card__body">
+          Interactive py3Dmol viewer embedded directly in the notebook.
+          Rotate, zoom, and inspect any structure with stick, sphere, or
+          line display modes.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="feature-card__icon">⚡</div>
+        <div class="feature-card__title">In-Session Calculations</div>
+        <p class="feature-card__body">
+          RHF and UHF run live in your Python kernel via PySCF.
+          No queue, no waiting &mdash; results appear in under a minute
+          on a standard laptop.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="feature-card__icon">📊</div>
+        <div class="feature-card__title">Results &amp; Comparison</div>
+        <p class="feature-card__body">
+          Total energy, HOMO&ndash;LUMO gap, convergence status, and a
+          side-by-side table for comparing multiple calculations or
+          basis sets at once.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="feature-card__icon">📄</div>
+        <div class="feature-card__title">Script Export</div>
+        <p class="feature-card__body">
+          Download a standalone <code style="font-size:0.8rem;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:.1rem .35rem;">.py</code>
+          file from any calculation &mdash; ready to run or study outside
+          the notebook. Great for learning how PySCF works.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="feature-card__icon">🎓</div>
+        <div class="feature-card__title">Voil&agrave; App Mode</div>
+        <p class="feature-card__body">
+          Serve the notebook as a clean widget-only app with
+          <code style="font-size:0.8rem;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:.1rem .35rem;">voila</code>.
+          No code visible &mdash; ideal for classroom demos and
+          student-facing deployments.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Platform Support ──────────────────────────────────────────────────── -->
+<section class="section section--tinted" id="platforms">
+  <div class="container--narrow">
+    <h2 class="section__title">Platform support</h2>
+    <p class="section__subtitle">
+      PySCF runs natively on Linux and macOS. Windows users have two clear paths.
+    </p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Linux / macOS</strong></td>
+            <td><span class="badge badge--full">Full</span></td>
+            <td>PySCF installs natively via conda or pip</td>
+          </tr>
+          <tr>
+            <td><strong>WSL (Windows)</strong></td>
+            <td><span class="badge badge--full">Full</span></td>
+            <td>Ubuntu WSL environment &mdash; follows the Linux path exactly</td>
+          </tr>
+          <tr>
+            <td><strong>Windows native</strong></td>
+            <td><span class="badge badge--partial">Partial</span></td>
+            <td>UI, PubChem search, and 3D visualization work; PySCF calculations require the Apptainer container</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout--info">
+      <strong>Windows users:</strong> The easiest path is
+      <a href="https://learn.microsoft.com/en-us/windows/wsl/install" target="_blank" rel="noopener">WSL&nbsp;2</a>
+      with Ubuntu. Install conda inside WSL and follow the standard
+      installation below. Alternatively, use the
+      <a href="https://github.com/The-Schultz-Lab/QuantUI-local/blob/main/apptainer/README.md" target="_blank" rel="noopener">Apptainer container</a>
+      which bundles the complete environment in a single file.
+    </div>
+  </div>
+</section>
+
+<!-- ── Installation ──────────────────────────────────────────────────────── -->
+<section class="section" id="install">
+  <div class="container--narrow">
+    <h2 class="section__title">Quick installation</h2>
+    <p class="section__subtitle">Recommended: conda on Linux, macOS, or WSL</p>
+
+    <div class="code-block">
+      <div class="code-block__bar">
+        <span class="code-block__dot code-block__dot--red"></span>
+        <span class="code-block__dot code-block__dot--yellow"></span>
+        <span class="code-block__dot code-block__dot--green"></span>
+        <span class="code-block__label">bash</span>
+      </div>
+      <pre><code><span class="c"># Create a dedicated conda environment</span>
+conda create -n quantui-local python=3.11
+conda activate quantui-local
+
+<span class="c"># Install with PySCF, ASE, and Voilà app server</span>
+pip install -e <span class="s">".[pyscf,ase,app]"</span>
+
+<span class="c"># Launch in JupyterLab (full IDE — shows code)</span>
+jupyter lab notebooks/molecule_computations.ipynb
+
+<span class="c"># Or in Voilà app mode (widget-only — for classroom demos)</span>
+voila notebooks/molecule_computations.ipynb</code></pre>
+    </div>
+
+    <p class="section__note">
+      Also available via <code style="font-size:0.8rem;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:.1rem .35rem;">pip install quantui-local[pyscf,ase,app]</code>
+      or the Apptainer container for Windows.
+    </p>
+  </div>
+</section>
+
+<!-- ── Tutorials ─────────────────────────────────────────────────────────── -->
+<section class="section section--tinted" id="tutorials">
+  <div class="container--narrow">
+    <h2 class="section__title">Step-by-step tutorials</h2>
+    <p class="section__subtitle">
+      Five guided notebooks — no prior PySCF experience needed.
+      Each runs to completion in under two minutes on a laptop.
+    </p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Notebook</th>
+            <th>Topic</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-num">01</td>
+            <td><code>01_first_calculation.ipynb</code></td>
+            <td>Your first RHF calculation on water</td>
+          </tr>
+          <tr>
+            <td class="td-num">02</td>
+            <td><code>02_basis_set_study.ipynb</code></td>
+            <td>Comparing STO-3G, 6-31G, and cc-pVDZ basis sets</td>
+          </tr>
+          <tr>
+            <td class="td-num">03</td>
+            <td><code>03_multiplicity_radicals.ipynb</code></td>
+            <td>Open-shell molecules and UHF for radicals</td>
+          </tr>
+          <tr>
+            <td class="td-num">04</td>
+            <td><code>04_charged_species.ipynb</code></td>
+            <td>Ions and charged species</td>
+          </tr>
+          <tr>
+            <td class="td-num">05</td>
+            <td><code>05_comparing_results.ipynb</code></td>
+            <td>Side-by-side result analysis and comparison</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── Methods ───────────────────────────────────────────────────────────── -->
+<section class="section" id="methods">
+  <div class="container--narrow">
+    <h2 class="section__title">Supported calculations</h2>
+    <p class="section__subtitle">
+      Start with STO-3G to learn the workflow, then step up to larger
+      basis sets as calculations allow.
+    </p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>When to use</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>RHF</strong> &mdash; Restricted Hartree&ndash;Fock</td>
+            <td>
+              Closed-shell molecules &mdash; all electrons paired<br>
+              <span class="td-muted">Water, methane, benzene, most organic molecules</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>UHF</strong> &mdash; Unrestricted Hartree&ndash;Fock</td>
+            <td>
+              Open-shell molecules &mdash; radicals or unpaired electrons<br>
+              <span class="td-muted">O&sub2; (triplet), NO, organic radicals, charged species</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="basis-pills">
+      <span class="basis-pill">STO-3G</span>
+      <span class="basis-arrow">&rarr;</span>
+      <span class="basis-pill">6-31G</span>
+      <span class="basis-arrow">&rarr;</span>
+      <span class="basis-pill">6-31G*</span>
+      <span class="basis-arrow">&rarr;</span>
+      <span class="basis-pill">cc-pVDZ</span>
+      <span class="basis-arrow">&rarr;</span>
+      <span class="basis-pill">cc-pVTZ</span>
+    </div>
+    <p class="section__note" style="margin-top:1rem;">
+      Fast for learning &rarr; common research choice &rarr; high accuracy
+    </p>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────── -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer__inner">
+      <div>
+        <div class="footer__name">QuantUI-local</div>
+        <span class="footer__copy">
+          MIT License &middot; Copyright 2026 The Schultz Lab, North Carolina Central University
+        </span>
+      </div>
+      <nav class="footer__links" aria-label="Footer links">
+        <a href="https://github.com/The-Schultz-Lab" target="_blank" rel="noopener">Schultz Lab</a>
+        <a href="https://github.com/The-Schultz-Lab/QuantUI-local" target="_blank" rel="noopener">Repository</a>
+        <a href="https://github.com/The-Schultz-Lab/QuantUI-local/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+        <a href="https://github.com/The-Schultz-Lab/QuantUI" target="_blank" rel="noopener">Cluster version</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
