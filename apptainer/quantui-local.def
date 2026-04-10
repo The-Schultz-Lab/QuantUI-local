@@ -90,6 +90,13 @@ FROM: continuumio/miniconda3:latest
   rm -rf /opt/quantui/.github
   rm -f  /opt/quantui/.pre-commit-config.yaml
 
+  echo "Configuring Jupyter Server..."
+  mkdir -p /etc/jupyter
+  cat > /etc/jupyter/jupyter_server_config.py << 'EOF'
+# Disable XSRF cookie checks — prevents 403 errors on kernel shutdown in Voilà.
+c.ServerApp.disable_check_xsrf = True
+EOF
+
   conda clean --all -y
   pip cache purge
 
