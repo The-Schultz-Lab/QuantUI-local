@@ -13,7 +13,68 @@ from typing import Any, Dict
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Supported quantum chemistry methods
-SUPPORTED_METHODS = ["RHF", "UHF"]
+SUPPORTED_METHODS = ["RHF", "UHF", "B3LYP", "PBE", "PBE0", "M06-2X"]
+
+# Educational metadata for each method — shown to students in the UI
+METHOD_INFO = {
+    "RHF": {
+        "type": "hf",
+        "label": "RHF — Restricted Hartree-Fock",
+        "description": (
+            "Classical wavefunction method for closed-shell molecules. "
+            "All electrons are paired; no electron correlation beyond mean-field. "
+            "Fast and exact within HF theory."
+        ),
+        "use_for": "Closed-shell molecules with all electrons paired (singlet state).",
+    },
+    "UHF": {
+        "type": "hf",
+        "label": "UHF — Unrestricted Hartree-Fock",
+        "description": (
+            "HF for open-shell systems. Alpha and beta electrons occupy "
+            "different spatial orbitals. Can suffer from spin contamination."
+        ),
+        "use_for": "Radicals, triplet states, any molecule with unpaired electrons.",
+    },
+    "B3LYP": {
+        "type": "dft",
+        "label": "B3LYP — DFT Hybrid Functional",
+        "description": (
+            "The most widely used DFT functional. Mixes HF exchange (20%) with "
+            "Becke exchange and Lee-Yang-Parr correlation. Good all-around accuracy "
+            "at moderate cost."
+        ),
+        "use_for": "General organic chemistry, ground state geometries and energetics.",
+    },
+    "PBE": {
+        "type": "dft",
+        "label": "PBE — DFT GGA Functional",
+        "description": (
+            "Generalized gradient approximation functional. No HF exchange, so "
+            "faster than hybrids. Works well for larger systems and metals."
+        ),
+        "use_for": "Large molecules, solid-state systems, when speed matters most.",
+    },
+    "PBE0": {
+        "type": "dft",
+        "label": "PBE0 — DFT Hybrid Functional",
+        "description": (
+            "Hybrid version of PBE with 25% HF exchange. More accurate than "
+            "pure PBE for most molecular properties; similar cost to B3LYP."
+        ),
+        "use_for": "General purpose; better charge-transfer and band gaps than B3LYP.",
+    },
+    "M06-2X": {
+        "type": "dft",
+        "label": "M06-2X — Meta-Hybrid DFT",
+        "description": (
+            "Minnesota meta-hybrid functional with 54% HF exchange. Excellent "
+            "for thermochemistry and reaction barrier heights in organic systems. "
+            "Not recommended for transition metals."
+        ),
+        "use_for": "Organic reaction energies, conformational analysis, barrier heights.",
+    },
+}
 
 # Supported basis sets
 SUPPORTED_BASIS_SETS = [
@@ -24,6 +85,8 @@ SUPPORTED_BASIS_SETS = [
     "6-31G**",
     "cc-pVDZ",
     "cc-pVTZ",
+    "def2-SVP",
+    "def2-TZVP",
 ]
 
 # Default calculation settings
@@ -416,7 +479,7 @@ Basis: {basis}
 
 import sys
 from pathlib import Path
-from pyscf import gto, scf
+from pyscf import gto, scf, dft
 import numpy as np
 
 def main():
@@ -428,6 +491,7 @@ def main():
     mol.basis = '{basis}'
     mol.charge = {charge}
     mol.spin = {spin}
+    mol.verbose = 4  # Detailed output
     mol.build()
 
     print("=" * 60)
@@ -443,14 +507,16 @@ def main():
     print("=" * 60)
 
     try:
-        if '{method}' == 'RHF':
+        method = '{method}'
+        if method == 'RHF':
             mf = scf.RHF(mol)
-        elif '{method}' == 'UHF':
+        elif method == 'UHF':
             mf = scf.UHF(mol)
         else:
-            raise ValueError(f"Unsupported method: {method}")
+            # DFT: auto-select RKS/UKS based on spin
+            mf = dft.RKS(mol) if mol.spin == 0 else dft.UKS(mol)
+            mf.xc = method
 
-        mf.verbose = 4  # Detailed output
         energy = mf.kernel()
 
         if mf.converged:
@@ -460,18 +526,20 @@ def main():
             print("=" * 60)
             print(f"SCF converged: Yes")
             print(f"Total energy: {{energy:.8f}} Ha")
-            print(
-                f"HOMO-LUMO gap: "
-                f"{{(mf.mo_energy[mol.nelectron//2] - mf.mo_energy[mol.nelectron//2-1]) * 27.211:.4f}} eV"
-            )
+            mo_e = mf.mo_energy if not isinstance(mf.mo_energy, list) else mf.mo_energy[0]
+            mo_o = mf.mo_occ   if not isinstance(mf.mo_occ,    list) else mf.mo_occ[0]
+            n_occ = int((mo_o > 0).sum())
+            if 0 < n_occ < len(mo_e):
+                gap = (mo_e[n_occ] - mo_e[n_occ - 1]) * 27.211386
+                print(f"HOMO-LUMO gap: {{gap:.4f}} eV")
             print()
 
             # Save results next to the script so the path is predictable
             results_path = str(Path(__file__).parent / 'results.npz')
             np.savez(results_path,
                      energy=energy,
-                     mo_energy=mf.mo_energy,
-                     mo_coeff=mf.mo_coeff,
+                     mo_energy=np.array(mf.mo_energy),
+                     mo_coeff=np.array(mf.mo_coeff),
                      converged=mf.converged)
             print(f"Results saved to {{results_path}}")
             print("=" * 60)

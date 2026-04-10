@@ -44,6 +44,16 @@ Use the provided build script — see the [Build section](#building-from-source)
 ### Install Apptainer on Ubuntu / WSL
 
 ```bash
+sudo add-apt-repository -y ppa:apptainer/ppa
+sudo apt-get update
+sudo apt-get install -y apptainer
+```
+
+If `add-apt-repository` is not available:
+
+```bash
+sudo apt-get install -y software-properties-common
+sudo add-apt-repository -y ppa:apptainer/ppa
 sudo apt-get update
 sudo apt-get install -y apptainer
 ```
@@ -65,17 +75,17 @@ cd /path/to/QuantUI-local
 # Standard build
 bash apptainer/build.sh
 
-# Build + run container tests immediately after
-bash apptainer/build.sh --test
-
-# Remove old .sif first (clean rebuild)
+# Remove old .sif first, then rebuild (recommended after code changes)
 bash apptainer/build.sh --clean
+
+# Build + run container tests immediately after
+bash apptainer/build.sh --clean --test
 
 # On HPC systems without root (uses --fakeroot)
 bash apptainer/build.sh --fakeroot
 ```
 
-Build time: **20–40 minutes** depending on internet speed and CPU.
+Build time: **~6 minutes** on a modern laptop with a good internet connection.
 Final image size: **~4–5 GB**.
 
 The script must be run from the **repo root** (not from `apptainer/`) because
@@ -86,7 +96,21 @@ the `.def` file copies the entire repo root into the container with
 
 ## Running the container
 
-### Voilà app mode — recommended for students
+### Windows — double-click launchers (easiest)
+
+Two `.bat` files in the repo root handle WSL and browser launch automatically:
+
+| File | Purpose |
+| --- | --- |
+| `launch-app.bat` | Student-facing app — uses the baked-in notebook |
+| `launch-dev.bat` | Development mode — uses local `notebooks/` (no rebuild needed for notebook edits) |
+
+Double-click either file. The browser opens automatically at
+[http://localhost:8866](http://localhost:8866).
+
+### Linux / WSL — command line
+
+#### Voilà app mode — recommended for students
 
 Launches the notebook as a clean widget-only interface. Students see no code.
 
@@ -96,7 +120,7 @@ apptainer run quantui-local.sif app
 
 Then open a browser at [http://localhost:8866](http://localhost:8866).
 
-### JupyterLab mode — for exploration or development
+#### JupyterLab mode — for exploration or development
 
 ```bash
 apptainer run quantui-local.sif
@@ -104,7 +128,22 @@ apptainer run quantui-local.sif
 
 Then open the URL printed in the terminal (contains a login token).
 
-### Bind a local directory
+#### Development mode — hot-reload notebook edits
+
+Uses the local `notebooks/` folder instead of the baked-in copy. Notebook
+cell changes take effect on browser refresh — no container rebuild needed.
+Note: changes to `quantui/` Python files still require a rebuild.
+
+```bash
+cd /path/to/QuantUI-local
+apptainer exec quantui-local.sif voila notebooks/molecule_computations.ipynb \
+    --no-browser --port=8866 \
+    --ServerApp.disable_check_xsrf=True
+```
+
+Then open [http://localhost:8866](http://localhost:8866).
+
+#### Bind a local directory
 
 By default Apptainer binds your current working directory so you can
 access local files (e.g. your own XYZ files or saved results) inside the
@@ -116,7 +155,7 @@ cd ~/my-calculations
 apptainer run /path/to/quantui-local.sif app
 ```
 
-### Custom port
+#### Custom port
 
 ```bash
 # Voilà on port 9000
@@ -144,7 +183,77 @@ print('OK:', mol.get_formula())
 "
 ```
 
-Expected output: `OK: H2O` and all import messages.
+Expected output: `OK: H2O` and package import messages.
+
+### Run the full test suite
+
+```bash
+apptainer exec --cleanenv --writable-tmpfs quantui-local.sif bash -c '
+    pip install pytest -q 2>/dev/null
+    python -m pytest tests/test_notebook_workflows.py -v --tb=short --override-ini="addopts="
+'
+```
+
+This installs pytest into a temporary overlay (nothing is written to the `.sif`)
+and runs the full notebook workflow tests including HF, DFT, pre-optimization,
+and thread-safety checks. Expected: **20 passed** in ~25 seconds.
+
+### Quick calculation check
+
+```bash
+apptainer exec --cleanenv quantui-local.sif python -c "
+from quantui.molecule import Molecule
+from quantui import run_in_session
+
+atoms = ['O', 'H', 'H']
+coords = [[0,0,0],[0.757,0.587,0],[-0.757,0.587,0]]
+mol = Molecule(atoms, coords)
+
+# Test RHF
+result = run_in_session(mol, method='RHF', basis='STO-3G', verbose=1)
+print(f'RHF/STO-3G:   {result.energy_hartree:.6f} Ha  converged: {result.converged}')
+
+# Test DFT
+result = run_in_session(mol, method='B3LYP', basis='STO-3G', verbose=1)
+print(f'B3LYP/STO-3G: {result.energy_hartree:.6f} Ha  converged: {result.converged}')
+"
+```
+
+Expected output:
+
+```text
+RHF/STO-3G:   -74.963063 Ha  converged: True
+B3LYP/STO-3G: -75.312587 Ha  converged: True
+```
+
+---
+
+## Supported methods and basis sets
+
+### Methods
+
+| Method | Type | Best for |
+| --- | --- | --- |
+| `RHF` | Hartree-Fock | Closed-shell molecules (default) |
+| `UHF` | Hartree-Fock | Radicals, triplets, open-shell |
+| `B3LYP` | DFT hybrid | General organic chemistry |
+| `PBE` | DFT GGA | Large molecules, speed-critical |
+| `PBE0` | DFT hybrid | Charge transfer, band gaps |
+| `M06-2X` | DFT meta-hybrid | Reaction barriers, thermochemistry |
+
+### Basis sets
+
+| Basis set | Quality | Notes |
+| --- | --- | --- |
+| `STO-3G` | Minimal | Fast; for learning only |
+| `3-21G` | Small | Slightly better than STO-3G |
+| `6-31G` | Medium | Good default for HF |
+| `6-31G*` | Medium+ | Adds polarization functions |
+| `6-31G**` | Medium+ | Polarization on H too |
+| `cc-pVDZ` | High | Correlation-consistent double-zeta |
+| `cc-pVTZ` | High | Triple-zeta; near-CBS for small molecules |
+| `def2-SVP` | Medium | Good default for DFT |
+| `def2-TZVP` | High | Near-complete-basis for DFT |
 
 ---
 
@@ -163,7 +272,13 @@ scp quantui-local.sif user@server.dept.edu:/shared/tools/
 cp quantui-local.sif /media/usb/
 ```
 
-Students then run:
+Students on Windows download the `.sif` and the `launch-app.bat` file. Then:
+
+1. Place both files in the same folder
+2. Double-click `launch-app.bat`
+3. Browser opens automatically
+
+Students on Linux/Mac run:
 
 ```bash
 apptainer run quantui-local.sif app
@@ -224,12 +339,29 @@ PySCF is the largest package (~500 MB). If the download keeps timing out:
 
 ### Container starts but PySCF crashes
 
-PySCF requires OpenMP. Make sure the host kernel provides it (virtually all
-modern Linux kernels do). If running in a restricted environment:
+PySCF requires OpenMP. If running in a restricted environment:
 
 ```bash
 export OMP_NUM_THREADS=1
 apptainer run quantui-local.sif app
+```
+
+### XSRF 403 warning on shutdown
+
+If you see `403 POST /voila/api/shutdown — '_xsrf' argument missing`, this is a
+known Voilà/jupyter-server compatibility issue. It is non-fatal. To suppress it,
+add `--ServerApp.disable_check_xsrf=True` to the Voilà launch command (already
+applied in `launch-dev.bat` and planned for a future container update).
+
+### "Unable to locate package apptainer"
+
+The `apptainer` package is not in the default Ubuntu apt repositories. Add the
+PPA first:
+
+```bash
+sudo add-apt-repository -y ppa:apptainer/ppa
+sudo apt-get update
+sudo apt-get install -y apptainer
 ```
 
 ---

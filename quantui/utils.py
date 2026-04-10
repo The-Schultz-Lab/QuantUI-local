@@ -240,7 +240,12 @@ def get_session_resources() -> Tuple[int, Optional[int]]:
         Tuple of (available_cores, available_memory_gb).
         available_memory_gb is None when psutil is not installed.
     """
-    available_cores = os.cpu_count() or 1
+    try:
+        # sched_getaffinity respects cgroup/container CPU limits (Linux only)
+        available_cores = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
+    except AttributeError:
+        # Windows / macOS fallback
+        available_cores = os.cpu_count() or 1
     try:
         import psutil
 

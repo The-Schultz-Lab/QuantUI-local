@@ -1,18 +1,15 @@
 """
-In-session quantum chemistry calculation using ASE-PySCF.
+In-session quantum chemistry calculation using PySCF directly.
 
-Replaces the hand-rolled threading + screen-scraping runner in the
-notebook with a clean, testable function that returns structured data.
-PySCF's verbose output is routed through an optional stream parameter,
-so the notebook can still display live SCF iterations in a widget without
-needing to intercept mol.stdout manually.
+Runs SCF calculations in the current Jupyter kernel and returns structured
+data. PySCF's verbose output is routed through mol.stdout so the notebook
+can display live SCF iterations in a widget.
 
 Platform notes
 --------------
 PySCF is **Linux / macOS / WSL only** — not available on native Windows.
 This module imports PySCF lazily inside :func:`run_in_session` so it can
 be imported safely on any platform without raising at import time.
-ASE >= 3.22 is required; ``ase.calculators.pyscf.PySCF`` is bundled.
 
 Typical notebook usage
 ----------------------
@@ -23,13 +20,11 @@ Typical notebook usage
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import sys
 from dataclasses import dataclass
 from typing import IO, Optional
 
-from .ase_bridge import ASE_AVAILABLE, molecule_to_atoms
 from .molecule import Molecule
 
 logger = logging.getLogger(__name__)
@@ -114,12 +109,11 @@ def run_in_session(
     progress_stream: Optional[IO[str]] = None,
 ) -> SessionResult:
     """
-    Run a quantum chemistry calculation in the current kernel using ASE-PySCF.
+    Run a quantum chemistry calculation in the current kernel using PySCF.
 
-    Uses ``ase.calculators.pyscf.PySCF`` (bundled with ASE ≥ 3.22) to set
-    up and run the SCF calculation.  Returns a :class:`SessionResult` with
-    structured data — energy, HOMO-LUMO gap, convergence status — rather
-    than requiring callers to parse PySCF stdout.
+    Returns a :class:`SessionResult` with structured data — energy,
+    HOMO-LUMO gap, convergence status — rather than requiring callers to
+    parse PySCF stdout.
 
     PySCF's verbose log is routed to *progress_stream* (or ``sys.stdout``
     if not provided) so live SCF iteration output can still be displayed in a
@@ -144,28 +138,14 @@ def run_in_session(
         information, and metadata.
 
     Raises:
-        ImportError: If ASE ≥ 3.22 or PySCF is not installed.
+        ImportError: If PySCF is not installed.
+        ValueError: If an unsupported method is requested.
         RuntimeError: If PySCF raises an unexpected exception during the
             calculation (original exception is chained).
     """
-    # --- Dependency checks ---
-    if not ASE_AVAILABLE:
-        raise ImportError(
-            "ASE is not installed — cannot use ASE-PySCF calculator.\n"
-            "  pip install 'ase>=3.22.0'\n"
-            "  # or: conda install -c conda-forge ase"
-        )
-
+    # --- Dependency check ---
     try:
-        from ase.calculators.pyscf import PySCF  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError(
-            "ase.calculators.pyscf is not available.\n"
-            "Ensure ASE >= 3.22.0 is installed: pip install 'ase>=3.22.0'"
-        ) from exc
-
-    try:
-        import pyscf as _pyscf  # noqa: F401 — presence check
+        from pyscf import dft, gto, scf
     except ImportError as exc:
         raise ImportError(
             "PySCF is not installed — cannot run in-session calculations.\n"
@@ -173,32 +153,42 @@ def run_in_session(
             "Note: PySCF is Linux / macOS / WSL only."
         ) from exc
 
-    # --- Set up ASE Atoms + calculator ---
-    atoms = molecule_to_atoms(molecule)
-    atoms.calc = PySCF(
-        method=method,
-        basis=basis,
-        charge=molecule.charge,
-        spin=molecule.multiplicity - 1,
-        verbose=verbose,
-    )
-
     stream: IO[str] = progress_stream if progress_stream is not None else sys.stdout
 
-    # --- Run calculation (output redirected to stream) ---
+    # --- Build PySCF Mole object ---
+    mol = gto.Mole()
+    mol.atom = molecule.to_pyscf_format()
+    mol.basis = basis
+    mol.charge = molecule.charge
+    mol.spin = molecule.multiplicity - 1
+    mol.verbose = verbose
+    mol.stdout = stream
+    mol.build()
+
+    # --- Select SCF method ---
+    method_upper = method.upper()
+    if method_upper == "RHF":
+        mf = scf.RHF(mol)
+    elif method_upper == "UHF":
+        mf = scf.UHF(mol)
+    else:
+        # DFT: auto-select RKS (closed-shell) or UKS (open-shell) based on spin
+        if mol.spin == 0:
+            mf = dft.RKS(mol)
+        else:
+            mf = dft.UKS(mol)
+        mf.xc = method  # PySCF recognises functional names directly (B3LYP, PBE, etc.)
+
+    # --- Run calculation ---
     try:
-        with contextlib.redirect_stdout(stream):
-            energy_ev = atoms.get_potential_energy()
+        energy_hartree = float(mf.kernel())
     except Exception as exc:
         raise RuntimeError(
             f"PySCF calculation failed for {molecule.get_formula()} "
             f"({method}/{basis}): {exc}"
         ) from exc
 
-    energy_hartree = energy_ev / HARTREE_TO_EV
-
     # --- Extract results from the mean-field object ---
-    mf = atoms.calc.mf  # type: ignore[attr-defined]
     converged = bool(getattr(mf, "converged", False))
     n_iterations = int(getattr(mf, "cycles", -1))
 

@@ -69,9 +69,26 @@ FROM: continuumio/miniconda3:latest
   python -c "import ase; print('ASE OK')"
 
   echo "Cleaning up unnecessary files..."
+  # Version control and caches
   rm -rf /opt/quantui/.git
+  rm -rf /opt/quantui/.mypy_cache
+  rm -rf /opt/quantui/.pytest_cache
+  rm -rf /opt/quantui/.ruff_cache
+  rm -rf /opt/quantui/.coverage
+  rm -rf /opt/quantui/coverage.xml
+  rm -rf /opt/quantui/htmlcov
   find /opt/quantui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   find /opt/quantui -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+  # Internal dev/AI files not intended for students
+  rm -f  /opt/quantui/CLAUDE.md
+  rm -rf /opt/quantui/planning
+  rm -f  /opt/quantui/feature-requests.md
+  rm -f  /opt/quantui/bug-reports.md
+  rm -f  /opt/quantui/launch-app.bat
+  rm -f  /opt/quantui/launch-dev.bat
+  # Windows-only and CI artefacts
+  rm -rf /opt/quantui/.github
+  rm -f  /opt/quantui/.pre-commit-config.yaml
 
   conda clean --all -y
   pip cache purge
