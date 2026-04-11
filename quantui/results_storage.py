@@ -86,7 +86,7 @@ def save_result(
     _HARTREE_TO_EV = 27.211386245988  # local fallback
 
     base = results_dir if results_dir is not None else _default_results_dir()
-    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
     dirname = "_".join(
         [
             ts,

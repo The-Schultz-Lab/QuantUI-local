@@ -21,6 +21,21 @@ from quantui.molecule import Molecule
 from quantui.preopt import preoptimize
 
 # ---------------------------------------------------------------------------
+# PySCF availability — used to skip tests that require it on Windows/no-PySCF
+# ---------------------------------------------------------------------------
+
+try:
+    import pyscf  # noqa: F401
+
+    _HAS_PYSCF = True
+except ImportError:
+    _HAS_PYSCF = False
+
+_requires_pyscf = pytest.mark.skipif(
+    not _HAS_PYSCF, reason="PySCF not installed (Linux/macOS/WSL only)"
+)
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -81,6 +96,7 @@ class TestPreoptimize:
 # ---------------------------------------------------------------------------
 
 
+@_requires_pyscf
 class TestRunInSessionHF:
     def test_rhf_water_sto3g(self):
         result = run_in_session(_water(), method="RHF", basis="STO-3G", verbose=0)
@@ -119,6 +135,7 @@ class TestRunInSessionHF:
 # ---------------------------------------------------------------------------
 
 
+@_requires_pyscf
 class TestRunInSessionDFT:
     def test_b3lyp_water_sto3g(self):
         result = run_in_session(_water(), method="B3LYP", basis="STO-3G", verbose=0)
@@ -158,6 +175,7 @@ class TestRunInSessionDFT:
 # ---------------------------------------------------------------------------
 
 
+@_requires_pyscf
 class TestPreoptToCalculation:
     def test_pipeline_rhf(self):
         """Simulates _do_run with preopt enabled."""
@@ -179,6 +197,7 @@ class TestPreoptToCalculation:
 # ---------------------------------------------------------------------------
 
 
+@_requires_pyscf
 class TestThreadSafety:
     def test_run_in_session_from_thread(self):
         """run_in_session must work correctly when called from a non-main thread."""

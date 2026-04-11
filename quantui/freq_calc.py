@@ -124,7 +124,9 @@ def run_freq_calc(
 
     Raises:
         ImportError: If PySCF is not installed.
-        RuntimeError: If the SCF or Hessian calculation fails.
+        RuntimeError: If the SCF calculation fails.  If the Hessian
+            computation fails, frequencies are omitted and a warning is
+            written to progress_stream — no exception is raised.
     """
     try:
         from pyscf import dft, gto, scf
@@ -206,7 +208,7 @@ def run_freq_calc(
         frequencies_cm1 = []
         for f in raw_freqs:
             if hasattr(f, "imag") and abs(f.imag) > abs(f.real):
-                frequencies_cm1.append(float(-abs(f.real)))
+                frequencies_cm1.append(float(-abs(f.imag)))
             else:
                 frequencies_cm1.append(float(f.real if hasattr(f, "real") else f))
 

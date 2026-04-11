@@ -155,6 +155,15 @@ def run_in_session(
 
     stream: IO[str] = progress_stream if progress_stream is not None else sys.stdout
 
+    # --- Validate method ---
+    from . import config as _config
+
+    if method.upper() not in [m.upper() for m in _config.SUPPORTED_METHODS]:
+        raise ValueError(
+            f"Unsupported method '{method}'. "
+            f"Supported: {', '.join(_config.SUPPORTED_METHODS)}"
+        )
+
     # --- Build PySCF Mole object ---
     mol = gto.Mole()
     mol.atom = molecule.to_pyscf_format()

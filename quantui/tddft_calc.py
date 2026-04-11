@@ -128,7 +128,9 @@ def run_tddft_calc(
 
     Raises:
         ImportError: If PySCF is not installed.
-        RuntimeError: If the ground-state SCF or TD calculation fails.
+        RuntimeError: If the ground-state SCF calculation fails.  If the
+            TD calculation fails, excitation lists are empty and a warning
+            is written to progress_stream — no exception is raised.
     """
     try:
         from pyscf import dft, gto, scf

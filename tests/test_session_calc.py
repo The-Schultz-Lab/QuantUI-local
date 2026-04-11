@@ -1,19 +1,17 @@
 """
-Tests for quantui.session_calc — ASE-PySCF in-session calculator.
+Tests for quantui.session_calc — PySCF in-session calculator.
 
 Test strategy
 -------------
-* Import-guard tests run on any platform (including Windows) — they verify
-  that helpful ImportError messages are raised when ASE or PySCF is absent.
-* Calculation tests require both ASE and PySCF, so they are marked with
-  ``pyscf_only`` and skipped everywhere PySCF is unavailable (Windows, CI
-  without the pyscf extra).
+* Calculation tests require PySCF, so they are marked with ``pyscf_only``
+  and skipped on platforms where PySCF is unavailable (Windows, CI without
+  the pyscf extra).
 * SessionResult unit tests (dataclass behaviour, summary formatting) run
   unconditionally — they construct the dataclass directly without PySCF.
 
 WSL / Linux testing
 --------------------
-Run the full suite on your WSL terminal with both ase and pyscf installed:
+Run the full suite on your WSL terminal with pyscf installed:
     pytest tests/test_session_calc.py -v
 
 Run only the fast, platform-independent tests anywhere:
@@ -24,11 +22,10 @@ import io
 
 import pytest
 
-from quantui.ase_bridge import ASE_AVAILABLE
 from quantui.molecule import Molecule
 from quantui.session_calc import HARTREE_TO_EV, SessionResult
 
-# Check for PySCF availability independently of ASE
+# Check for PySCF availability
 _PYSCF_AVAILABLE = False
 try:
     import pyscf as _pyscf  # noqa: F401
@@ -37,18 +34,10 @@ try:
 except ImportError:
     pass
 
-_ASE_PYSCF_AVAILABLE = False
-try:
-    from ase.calculators.pyscf import PySCF as _check  # noqa: F401
-
-    _ASE_PYSCF_AVAILABLE = True
-except ImportError:
-    pass
-
-# Skip marker for tests that need the full ASE-PySCF stack
+# Skip marker for tests that need PySCF (Linux/macOS/WSL only)
 pyscf_only = pytest.mark.skipif(
-    not (ASE_AVAILABLE and _PYSCF_AVAILABLE and _ASE_PYSCF_AVAILABLE),
-    reason="ase>=3.22 and pyscf not both installed (Linux/WSL only)",
+    not _PYSCF_AVAILABLE,
+    reason="PySCF not installed (Linux/macOS/WSL only)",
 )
 
 
@@ -150,48 +139,7 @@ class TestSessionResultDataclass:
 
 
 # ============================================================================
-# Import-guard tests — run on all platforms
-# ============================================================================
-
-
-class TestRunInSessionImportGuards:
-    """run_in_session() raises ImportError with helpful messages when deps absent."""
-
-    def test_raises_when_ase_unavailable(self, monkeypatch):
-        import quantui.ase_bridge as bridge
-
-        monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
-
-        import importlib
-
-        import quantui.session_calc as sc
-
-        importlib.reload(sc)
-        from quantui.session_calc import run_in_session
-
-        with pytest.raises(ImportError, match="pip install"):
-            run_in_session(_h2())
-
-    def test_import_error_message_is_actionable(self, monkeypatch):
-        import quantui.ase_bridge as bridge
-
-        monkeypatch.setattr(bridge, "ASE_AVAILABLE", False)
-
-        import importlib
-
-        import quantui.session_calc as sc
-
-        importlib.reload(sc)
-        from quantui.session_calc import run_in_session
-
-        with pytest.raises(ImportError) as exc_info:
-            run_in_session(_h2())
-        msg = str(exc_info.value)
-        assert "pip install" in msg or "conda install" in msg
-
-
-# ============================================================================
-# Calculation tests — Linux/WSL with ase + pyscf
+# Calculation tests — Linux/WSL with pyscf
 # ============================================================================
 
 

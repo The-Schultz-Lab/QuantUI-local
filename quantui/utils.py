@@ -243,8 +243,8 @@ def get_session_resources() -> Tuple[int, Optional[int]]:
     try:
         # sched_getaffinity respects cgroup/container CPU limits (Linux only)
         available_cores = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
-    except AttributeError:
-        # Windows / macOS fallback
+    except (AttributeError, OSError, NotImplementedError):
+        # Windows / macOS fallback, or restricted container without sched_getaffinity
         available_cores = os.cpu_count() or 1
     try:
         import psutil

@@ -11,8 +11,11 @@ if not exist "%~dp0quantui-local.sif" (
     exit /b 1
 )
 
+REM Convert the Windows repo path to a WSL path for portability
+for /f "delims=" %%i in ('wsl wslpath -a "%~dp0"') do set WSLPATH=%%i
+
 REM Launch Voila in a new WSL window (stays open so you can see logs)
-start "QuantUI-local" wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/schul/Documents/local-code-dir/repos-DEVS/QuantUI-local && apptainer run quantui-local.sif app"
+start "QuantUI-local" wsl -d Ubuntu -- bash -c "cd '%WSLPATH%' && apptainer run quantui-local.sif app"
 
 REM Wait for Voila to start, then open the browser
 echo Waiting for Voila to start...
