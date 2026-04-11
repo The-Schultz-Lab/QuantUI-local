@@ -214,6 +214,19 @@ def get_perf_history() -> list[dict]:
     return _read_all(_perf_path())
 
 
+def reset_perf_log() -> None:
+    """Delete all records from ``perf_log.jsonl``.
+
+    Removes the file entirely.  A fresh file is created automatically on the
+    next :func:`log_calculation` call.  Time estimates will return ``None``
+    until enough new records accumulate.
+    """
+    path = _perf_path()
+    with _LOCK:
+        if path.exists():
+            path.unlink()
+
+
 # ---------------------------------------------------------------------------
 # Event log (7-day TTL)
 # ---------------------------------------------------------------------------
