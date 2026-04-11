@@ -143,6 +143,13 @@ apptainer exec quantui-local.sif voila notebooks/molecule_computations.ipynb \
 
 Then open [http://localhost:8866](http://localhost:8866).
 
+#### Results directory
+
+Calculation results are saved automatically to `~/.quantui/results/` inside the
+container (i.e. your home directory on the host, which Apptainer bind-mounts by
+default). Results persist across kernel restarts and container runs. The
+in-app **Past Results** browser and **Open folder** button point to this location.
+
 #### Bind a local directory
 
 By default Apptainer binds your current working directory so you can
@@ -348,10 +355,9 @@ apptainer run quantui-local.sif app
 
 ### XSRF 403 warning on shutdown
 
-If you see `403 POST /voila/api/shutdown — '_xsrf' argument missing`, this is a
-known Voilà/jupyter-server compatibility issue. It is non-fatal. To suppress it,
-add `--ServerApp.disable_check_xsrf=True` to the Voilà launch command (already
-applied in `launch-dev.bat` and planned for a future container update).
+Fixed in the current container build — `c.ServerApp.disable_check_xsrf = True`
+is written to `/etc/jupyter/jupyter_server_config.py` during `%post`. If you
+are running an older `.sif`, rebuild with `bash apptainer/build.sh --clean`.
 
 ### "Unable to locate package apptainer"
 

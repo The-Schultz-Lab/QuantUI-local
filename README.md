@@ -24,10 +24,13 @@ Built for classroom teaching at the
   kernel (no batch submission)
 - **Results** — total energy, HOMO-LUMO gap, convergence status, and a
   side-by-side comparison table for multiple calculations
+- **Results persistence** — every calculation is saved automatically to a
+  timestamped directory; a built-in browser lets students reload past results
+  after a kernel restart
 - **Script export** — download a standalone `.py` file to run or study outside
   the notebook
-- **Voilà app mode** — serve the notebook as a clean widget-only UI (no code
-  visible) for classroom demos
+- **Voilà app mode** — serve the notebook as a polished widget-only UI (no code
+  visible) for classroom demos, with dark mode toggle and dedicated output log
 
 ---
 
