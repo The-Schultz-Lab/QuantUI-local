@@ -90,6 +90,18 @@ try:
 except ImportError:
     pass
 
+# Frequency analysis (optional — requires pyscf, Linux/WSL)
+try:
+    from .freq_calc import FreqResult, run_freq_calc
+except ImportError:
+    pass
+
+# TD-DFT excited states (optional — requires pyscf, Linux/WSL)
+try:
+    from .tddft_calc import TDDFTResult, run_tddft_calc
+except ImportError:
+    pass
+
 # Results persistence — pure Python, always available
 from .results_storage import list_results, load_result, save_result
 
@@ -194,6 +206,12 @@ __all__ = [
     # In-session calculator (optional — Linux/WSL)
     "SessionResult",
     "run_in_session",
+    # Frequency analysis (optional — Linux/WSL)
+    "FreqResult",
+    "run_freq_calc",
+    # TD-DFT excited states (optional — Linux/WSL)
+    "TDDFTResult",
+    "run_tddft_calc",
     # Results persistence
     "save_result",
     "list_results",

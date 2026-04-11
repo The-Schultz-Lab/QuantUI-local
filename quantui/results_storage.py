@@ -31,9 +31,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from .session_calc import SessionResult
+    pass  # result types accepted via duck typing; no hard import needed
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 def _default_results_dir() -> Path:
@@ -47,53 +47,75 @@ def _safe_name(s: str) -> str:
 
 
 def save_result(
-    result: SessionResult,
+    result: object,
     pyscf_log: str = "",
     results_dir: Optional[Path] = None,
+    calc_type: str = "single_point",
+    spectra: Optional[dict] = None,
 ) -> Path:
     """Write *result* to a new timestamped subdirectory of *results_dir*.
+
+    Accepts any result type that exposes ``.formula``, ``.method``,
+    ``.basis``, ``.energy_hartree``, and ``.converged`` attributes
+    (``SessionResult``, ``OptimizationResult``, ``FreqResult``,
+    ``TDDFTResult``).  Missing optional fields (``homo_lumo_gap_ev``,
+    ``n_iterations``) are stored as ``null``.
 
     Parameters
     ----------
     result:
-        Completed :class:`~quantui.session_calc.SessionResult`.
+        Any completed calculation result object.
     pyscf_log:
         Raw PySCF stdout captured during the run.  Written to
         ``pyscf.log`` inside the result directory when non-empty.
     results_dir:
         Override the default results directory.
+    calc_type:
+        Calculation type string stored in ``result.json`` for display
+        in the History browser.  One of ``"single_point"``,
+        ``"geometry_opt"``, ``"frequency"``, ``"tddft"``.
+    spectra:
+        Dict of spectra data (IR frequencies, UV-Vis excitations, …)
+        stored under the ``"spectra"`` key in ``result.json``.
 
     Returns
     -------
     Path
         The directory that was created.
     """
+    _HARTREE_TO_EV = 27.211386245988  # local fallback
+
     base = results_dir if results_dir is not None else _default_results_dir()
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     dirname = "_".join(
         [
             ts,
-            _safe_name(result.formula),
-            _safe_name(result.method),
-            _safe_name(result.basis),
+            _safe_name(getattr(result, "formula", "unknown")),
+            _safe_name(getattr(result, "method", "unknown")),
+            _safe_name(getattr(result, "basis", "unknown")),
         ]
     )
     dest = base / dirname
     dest.mkdir(parents=True, exist_ok=True)
 
+    _e_ha = getattr(result, "energy_hartree", float("nan"))
+    # energy_ev may be a property (SessionResult) or absent (OptimizationResult
+    # and new types also define it as a property, so getattr works for all).
+    _e_ev = getattr(result, "energy_ev", _e_ha * _HARTREE_TO_EV)
+
     data: dict = {
         "_schema_version": _SCHEMA_VERSION,
         "timestamp": ts,
-        "formula": result.formula,
-        "method": result.method,
-        "basis": result.basis,
-        "energy_hartree": result.energy_hartree,
-        "energy_ev": result.energy_ev,
-        "homo_lumo_gap_ev": result.homo_lumo_gap_ev,
-        "converged": result.converged,
-        "n_iterations": result.n_iterations,
-        # Reserved for future IR / UV-Vis spectra file paths.
-        "spectra": {},
+        "calc_type": calc_type,
+        "formula": getattr(result, "formula", "?"),
+        "method": getattr(result, "method", "?"),
+        "basis": getattr(result, "basis", "?"),
+        "energy_hartree": _e_ha,
+        "energy_ev": _e_ev,
+        "homo_lumo_gap_ev": getattr(result, "homo_lumo_gap_ev", None),
+        "converged": getattr(result, "converged", None),
+        "n_iterations": getattr(result, "n_iterations", -1),
+        "spectra": spectra if spectra is not None else {},
     }
     (dest / "result.json").write_text(json.dumps(data, indent=2))
 
