@@ -71,6 +71,8 @@ FROM: continuumio/miniconda3:latest
   python -c "import pyscf; print('PySCF OK')"
   python -c "import py3Dmol; print('py3Dmol OK')"
   python -c "import ase; print('ASE OK')"
+  python -c "from quantui import optimize_geometry; print('optimize_geometry OK')"
+  python -c "from quantui import run_freq_calc, run_tddft_calc; print('freq/tddft OK')"
 
   echo "Cleaning up unnecessary files..."
   # Version control and caches
