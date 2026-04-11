@@ -11,11 +11,12 @@ __version__ = "0.1.0"
 
 from .calculator import PySCFCalculation, create_calculation
 
-# Calculation comparison (session results only — no job metadata)
+# Calculation comparison
 from .comparison import (
     CalcSummary,
     comparison_table_html,
     plot_comparison,
+    summary_from_saved_result,
     summary_from_session_result,
 )
 from .config import (
@@ -177,6 +178,7 @@ __all__ = [
     # Comparison
     "CalcSummary",
     "summary_from_session_result",
+    "summary_from_saved_result",
     "comparison_table_html",
     "plot_comparison",
     # ASE bridge (optional)

@@ -127,6 +127,37 @@ def summary_from_session_result(result, *, label: str = "") -> CalcSummary:
     )
 
 
+def summary_from_saved_result(data: dict, *, label: str = "") -> CalcSummary:
+    """
+    Create a :class:`CalcSummary` from a saved ``result.json`` dict.
+
+    Parameters
+    ----------
+    data:
+        Dict loaded from ``result.json`` via
+        :func:`~quantui.results_storage.load_result`.
+    label:
+        Optional display label.  Defaults to
+        ``"<formula> <method>/<basis> (<timestamp>)"``.
+    """
+    formula = data.get("formula", "?")
+    method = data.get("method", "?")
+    basis = data.get("basis", "?")
+    ts = data.get("timestamp", "")
+    auto_label = f"{formula} {method}/{basis}" + (f" ({ts})" if ts else "")
+    return CalcSummary(
+        label=label or auto_label,
+        formula=formula,
+        method=method,
+        basis=basis,
+        energy_hartree=data.get("energy_hartree"),
+        homo_lumo_gap_ev=data.get("homo_lumo_gap_ev"),
+        converged=data.get("converged"),
+        n_iterations=data.get("n_iterations"),
+        status="COMPLETED",
+    )
+
+
 # ============================================================================
 # HTML comparison table
 # ============================================================================
