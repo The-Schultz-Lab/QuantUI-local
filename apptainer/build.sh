@@ -82,18 +82,25 @@ ls -lh "$SIF"
 # ── Optional tests ────────────────────────────────────────────────────────────
 if [[ "$RUN_TESTS" == true ]]; then
   echo ""
-  echo "Running container tests..."
+  echo "Running container %test section..."
   "$APPTAINER_CMD" test "$SIF"
 
   echo ""
   echo "Running smoke test (import check + water molecule)..."
-  "$APPTAINER_CMD" exec "$SIF" python -c "
+  "$APPTAINER_CMD" exec --cleanenv "$SIF" python -c "
 import quantui, pyscf, ase, py3Dmol
 from quantui import Molecule, parse_xyz_input
 atoms, coords = parse_xyz_input('O 0 0 0\nH 0.757 0.587 0\nH -0.757 0.587 0')
 mol = Molecule(atoms, coords)
 print('Smoke test passed:', mol.get_formula())
 "
+
+  echo ""
+  echo "Running full notebook workflow tests..."
+  "$APPTAINER_CMD" exec --cleanenv --writable-tmpfs "$SIF" bash -c '
+    pip install pytest -q 2>/dev/null
+    python -m pytest tests/test_notebook_workflows.py -v --tb=short --override-ini="addopts="
+  '
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

@@ -23,6 +23,170 @@ import ipywidgets as widgets
 # ---------------------------------------------------------------------------
 
 HELP_TOPICS: Dict[str, Dict[str, str]] = {
+    "method": {
+        "title": "RHF vs UHF — which method should I use?",
+        "body": (
+            "<p>Both methods approximate the electronic wavefunction using "
+            "Hartree–Fock theory, but they treat electron spin differently.</p>"
+            "<table style='border-collapse:collapse; margin:6px 0;'>"
+            "<tr style='border-bottom:1px solid #ccc;'>"
+            "  <th style='padding:3px 12px; text-align:left;'>Method</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>Full name</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>When to use</th></tr>"
+            "<tr><td style='padding:3px 12px;'><b>RHF</b></td>"
+            "  <td style='padding:3px 12px;'>Restricted Hartree–Fock</td>"
+            "  <td style='padding:3px 12px;'>All electrons are paired → multiplicity = 1</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>UHF</b></td>"
+            "  <td style='padding:3px 12px;'>Unrestricted Hartree–Fock</td>"
+            "  <td style='padding:3px 12px;'>Any unpaired electrons → multiplicity ≥ 2</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>B3LYP</b></td>"
+            "  <td style='padding:3px 12px;'>DFT hybrid functional</td>"
+            "  <td style='padding:3px 12px;'>General organic chemistry, good accuracy</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>PBE</b></td>"
+            "  <td style='padding:3px 12px;'>DFT GGA functional</td>"
+            "  <td style='padding:3px 12px;'>Large molecules, speed-critical</td></tr>"
+            "</table>"
+            "<p><b>Quick guide:</b></p>"
+            "<ul>"
+            "<li>Neutral H₂O, CH₄, NH₃ → <b>RHF</b> (singlet)</li>"
+            "<li>O₂ (triplet) → <b>UHF</b></li>"
+            "<li>OH radical → <b>UHF</b> (doublet)</li>"
+            "<li>General organic molecules → <b>B3LYP/6-31G*</b> for research quality</li>"
+            "</ul>"
+            "<p>If you pick RHF for an open-shell molecule, the calculation will "
+            "likely fail or give wrong energies. QuantUI will auto-switch to UHF "
+            "when you set multiplicity &gt; 1.</p>"
+        ),
+    },
+    "basis_set": {
+        "title": "Choosing a basis set",
+        "body": (
+            "<p>A <b>basis set</b> is the mathematical toolkit used to describe "
+            "electron orbitals. Larger basis sets are more accurate but slower.</p>"
+            "<table style='border-collapse:collapse; margin:6px 0;'>"
+            "<tr style='border-bottom:1px solid #ccc;'>"
+            "  <th style='padding:3px 12px; text-align:left;'>Basis set</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>Speed</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>Accuracy</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>Best for</th></tr>"
+            "<tr><td style='padding:3px 12px;'>STO-3G</td>"
+            "  <td style='padding:3px 12px;'>⚡ Very fast</td>"
+            "  <td style='padding:3px 12px;'>Low</td>"
+            "  <td style='padding:3px 12px;'>Learning, quick tests</td></tr>"
+            "<tr><td style='padding:3px 12px;'>3-21G</td>"
+            "  <td style='padding:3px 12px;'>⚡ Fast</td>"
+            "  <td style='padding:3px 12px;'>Low–Medium</td>"
+            "  <td style='padding:3px 12px;'>Quick estimates</td></tr>"
+            "<tr><td style='padding:3px 12px;'>6-31G</td>"
+            "  <td style='padding:3px 12px;'>Moderate</td>"
+            "  <td style='padding:3px 12px;'>Medium</td>"
+            "  <td style='padding:3px 12px;'>General purpose</td></tr>"
+            "<tr><td style='padding:3px 12px;'>6-31G*</td>"
+            "  <td style='padding:3px 12px;'>Moderate</td>"
+            "  <td style='padding:3px 12px;'>Good</td>"
+            "  <td style='padding:3px 12px;'>Research-quality (recommended)</td></tr>"
+            "<tr><td style='padding:3px 12px;'>cc-pVDZ</td>"
+            "  <td style='padding:3px 12px;'>Slower</td>"
+            "  <td style='padding:3px 12px;'>High</td>"
+            "  <td style='padding:3px 12px;'>Correlation-consistent studies</td></tr>"
+            "<tr><td style='padding:3px 12px;'>cc-pVTZ</td>"
+            "  <td style='padding:3px 12px;'>🐢 Slow</td>"
+            "  <td style='padding:3px 12px;'>Very high</td>"
+            "  <td style='padding:3px 12px;'>Benchmark / publication</td></tr>"
+            "</table>"
+            "<p><b>Recommendation:</b> Start with <b>STO-3G</b> for learning. "
+            "Use <b>6-31G*</b> for serious work. Only use cc-pVTZ if you need "
+            "high-accuracy results and have time to wait.</p>"
+        ),
+    },
+    "homo_lumo": {
+        "title": "What is the HOMO-LUMO gap?",
+        "body": (
+            "<p>The <b>HOMO-LUMO gap</b> is the energy difference between the "
+            "Highest Occupied Molecular Orbital (HOMO) and the Lowest Unoccupied "
+            "Molecular Orbital (LUMO).</p>"
+            "<ul>"
+            "<li><b>Large gap</b> → chemically stable, electrically insulating, "
+            "absorbs UV light (colorless)</li>"
+            "<li><b>Small gap</b> → more reactive, semiconductor-like, may absorb "
+            "visible light (colored)</li>"
+            "</ul>"
+            "<p><b>Typical values:</b></p>"
+            "<table style='border-collapse:collapse; margin:6px 0;'>"
+            "<tr style='border-bottom:1px solid #ccc;'>"
+            "  <th style='padding:3px 12px; text-align:left;'>Molecule</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>Gap (eV)</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>Character</th></tr>"
+            "<tr><td style='padding:3px 12px;'>H₂O</td>"
+            "  <td style='padding:3px 12px;'>~12 eV</td>"
+            "  <td style='padding:3px 12px;'>Insulator</td></tr>"
+            "<tr><td style='padding:3px 12px;'>Benzene</td>"
+            "  <td style='padding:3px 12px;'>~5 eV</td>"
+            "  <td style='padding:3px 12px;'>Aromatic, UV absorber</td></tr>"
+            "<tr><td style='padding:3px 12px;'>Beta-carotene</td>"
+            "  <td style='padding:3px 12px;'>~2 eV</td>"
+            "  <td style='padding:3px 12px;'>Orange pigment, visible absorber</td></tr>"
+            "</table>"
+            "<p><b>Note:</b> Hartree–Fock systematically overestimates the HOMO-LUMO "
+            "gap. DFT methods (B3LYP, PBE) give more realistic values for comparison "
+            "with experiment.</p>"
+        ),
+    },
+    "reading_results": {
+        "title": "Reading your results",
+        "body": (
+            "<p>After a calculation completes, QuantUI reports several key quantities:</p>"
+            "<table style='border-collapse:collapse; margin:6px 0;'>"
+            "<tr style='border-bottom:1px solid #ccc;'>"
+            "  <th style='padding:3px 12px; text-align:left;'>Quantity</th>"
+            "  <th style='padding:3px 12px; text-align:left;'>What it means</th></tr>"
+            "<tr><td style='padding:3px 12px;'><b>Total energy</b></td>"
+            "  <td style='padding:3px 12px;'>Electronic energy of the molecule. "
+            "Absolute value has no chemical meaning — use <i>differences</i> between "
+            "two calculations (e.g. reactant vs. product) to get reaction energies.</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>Ha (Hartree)</b></td>"
+            "  <td style='padding:3px 12px;'>Atomic unit of energy. "
+            "1 Ha = 27.211 eV = 627.5 kcal/mol.</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>eV (electron-volt)</b></td>"
+            "  <td style='padding:3px 12px;'>Common unit for orbital energies. "
+            "1 eV ≈ 23.06 kcal/mol.</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>HOMO-LUMO gap</b></td>"
+            "  <td style='padding:3px 12px;'>See the HOMO-LUMO Gap help topic.</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>SCF converged</b></td>"
+            "  <td style='padding:3px 12px;'><b>Yes</b> = the self-consistent field "
+            "loop found a stable solution. <b>No</b> = the solution may be unreliable "
+            "— try a different starting geometry or method.</td></tr>"
+            "<tr><td style='padding:3px 12px;'><b>SCF iterations</b></td>"
+            "  <td style='padding:3px 12px;'>Number of cycles to reach convergence. "
+            "Typical: 10–30 for simple molecules. More iterations = harder system.</td></tr>"
+            "</table>"
+            "<p><b>Tip:</b> The <i>Compare</i> tool (Advanced section) lets you "
+            "run multiple calculations and view energy differences in one table.</p>"
+        ),
+    },
+    "citing_pyscf": {
+        "title": "How to cite PySCF",
+        "body": (
+            "<p>If you use QuantUI results in a report or publication, cite PySCF:</p>"
+            "<blockquote style='border-left:3px solid #ccc;padding:6px 12px;"
+            "margin:8px 0;font-size:13px;color:#444'>"
+            "Q. Sun, X. Zhang, S. Banerjee, P. Bao, M. Barbry, N. S. Blunt, "
+            "N. A. Bogdanov, G. H. Booth, J. Chen, Z.-H. Cui, J. J. Eriksen, "
+            "Y. Gao, S. Guo, J. Hermann, M. R. Hermes, K. Koh, P. Koval, "
+            "S. Lehtola, Z. Li, J. Liu, N. Mardirossian, J. D. McClain, M. Motta, "
+            "B. Mussard, H. Q. Pham, A. Pulkin, W. Purwanto, P. J. Robinson, "
+            "E. Ronca, E. R. Sayfutyarova, M. Scheurer, H. F. Schurkus, "
+            "J. E. T. Smith, C. Sun, S.-N. Sun, S. Upadhyay, L. K. Wagner, "
+            "X. Wang, A. White, J. D. Whitfield, M. J. Williamson, S. Wouters, "
+            "J. Yang, J. M. Yu, T. Zhu, T. C. Berkelbach, S. Sharma, A. Y. Sokolov, "
+            "and G. K.-L. Chan, "
+            "<i>J. Chem. Phys.</i> <b>153</b>, 024109 (2020)."
+            "</blockquote>"
+            "<p>Also cite QuantUI-local (your instructor will provide the reference).</p>"
+            "<p><b>BibTeX key:</b> <code>Sun2020</code> — search for "
+            "'PySCF 2020' in Google Scholar or your reference manager.</p>"
+        ),
+    },
     "charge": {
         "title": "What is molecular charge?",
         "body": (
@@ -67,78 +231,6 @@ HELP_TOPICS: Dict[str, Dict[str, str]] = {
             "QuantUI will warn you if the combination is impossible.</p>"
         ),
     },
-    "method": {
-        "title": "RHF vs UHF — which method should I use?",
-        "body": (
-            "<p>Both methods approximate the electronic wavefunction using "
-            "Hartree–Fock theory, but they treat electron spin differently.</p>"
-            "<table style='border-collapse:collapse; margin:6px 0;'>"
-            "<tr style='border-bottom:1px solid #ccc;'>"
-            "  <th style='padding:3px 12px; text-align:left;'>Method</th>"
-            "  <th style='padding:3px 12px; text-align:left;'>Full name</th>"
-            "  <th style='padding:3px 12px; text-align:left;'>When to use</th></tr>"
-            "<tr><td style='padding:3px 12px;'><b>RHF</b></td>"
-            "  <td style='padding:3px 12px;'>Restricted Hartree–Fock</td>"
-            "  <td style='padding:3px 12px;'>All electrons are paired → multiplicity = 1</td></tr>"
-            "<tr><td style='padding:3px 12px;'><b>UHF</b></td>"
-            "  <td style='padding:3px 12px;'>Unrestricted Hartree–Fock</td>"
-            "  <td style='padding:3px 12px;'>Any unpaired electrons → multiplicity ≥ 2</td></tr>"
-            "</table>"
-            "<p><b>Quick guide:</b></p>"
-            "<ul>"
-            "<li>Neutral H₂O, CH₄, NH₃ → <b>RHF</b> (singlet)</li>"
-            "<li>O₂ (triplet) → <b>UHF</b></li>"
-            "<li>OH radical → <b>UHF</b> (doublet)</li>"
-            "</ul>"
-            "<p>If you pick RHF for an open-shell molecule, the calculation will "
-            "likely fail or give wrong energies.</p>"
-        ),
-    },
-    "basis_set": {
-        "title": "Choosing a basis set",
-        "body": (
-            "<p>A <b>basis set</b> is the mathematical toolkit used to describe "
-            "electron orbitals. Larger basis sets are more accurate but slower.</p>"
-            "<table style='border-collapse:collapse; margin:6px 0;'>"
-            "<tr style='border-bottom:1px solid #ccc;'>"
-            "  <th style='padding:3px 12px; text-align:left;'>Basis set</th>"
-            "  <th style='padding:3px 12px; text-align:left;'>Speed</th>"
-            "  <th style='padding:3px 12px; text-align:left;'>Accuracy</th>"
-            "  <th style='padding:3px 12px; text-align:left;'>Best for</th></tr>"
-            "<tr><td style='padding:3px 12px;'>STO-3G</td>"
-            "  <td style='padding:3px 12px;'>⚡ Very fast</td>"
-            "  <td style='padding:3px 12px;'>Low</td>"
-            "  <td style='padding:3px 12px;'>Learning, quick tests</td></tr>"
-            "<tr><td style='padding:3px 12px;'>3-21G</td>"
-            "  <td style='padding:3px 12px;'>⚡ Fast</td>"
-            "  <td style='padding:3px 12px;'>Low–Medium</td>"
-            "  <td style='padding:3px 12px;'>Quick estimates</td></tr>"
-            "<tr><td style='padding:3px 12px;'>6-31G</td>"
-            "  <td style='padding:3px 12px;'>Moderate</td>"
-            "  <td style='padding:3px 12px;'>Medium</td>"
-            "  <td style='padding:3px 12px;'>General purpose</td></tr>"
-            "<tr><td style='padding:3px 12px;'>6-31G*</td>"
-            "  <td style='padding:3px 12px;'>Moderate</td>"
-            "  <td style='padding:3px 12px;'>Good</td>"
-            "  <td style='padding:3px 12px;'>Research-quality (recommended)</td></tr>"
-            "<tr><td style='padding:3px 12px;'>6-31G**</td>"
-            "  <td style='padding:3px 12px;'>Slower</td>"
-            "  <td style='padding:3px 12px;'>Good</td>"
-            "  <td style='padding:3px 12px;'>Hydrogen bonding</td></tr>"
-            "<tr><td style='padding:3px 12px;'>cc-pVDZ</td>"
-            "  <td style='padding:3px 12px;'>Slower</td>"
-            "  <td style='padding:3px 12px;'>High</td>"
-            "  <td style='padding:3px 12px;'>Correlation-consistent studies</td></tr>"
-            "<tr><td style='padding:3px 12px;'>cc-pVTZ</td>"
-            "  <td style='padding:3px 12px;'>🐢 Slow</td>"
-            "  <td style='padding:3px 12px;'>Very high</td>"
-            "  <td style='padding:3px 12px;'>Benchmark / publication</td></tr>"
-            "</table>"
-            "<p><b>Recommendation:</b> Start with <b>STO-3G</b> for learning. "
-            "Use <b>6-31G*</b> for serious work. Only use cc-pVTZ if you need "
-            "high-accuracy results and have time to wait.</p>"
-        ),
-    },
 }
 
 # All valid topic keys (for testing / discovery)
@@ -163,8 +255,9 @@ def help_panel(topic: str) -> widgets.HTML:
     collapsed and can be expanded by clicking.
 
     Args:
-        topic: One of ``'charge'``, ``'multiplicity'``, ``'method'``,
-               or ``'basis_set'``.
+        topic: One of the keys in :data:`HELP_TOPICS` — ``'method'``,
+               ``'basis_set'``, ``'homo_lumo'``, ``'reading_results'``,
+               ``'citing_pyscf'``, ``'charge'``, or ``'multiplicity'``.
 
     Returns:
         ``ipywidgets.HTML`` widget ready for ``display()``.

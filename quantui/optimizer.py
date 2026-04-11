@@ -1,8 +1,8 @@
 """
-QM geometry optimization using ASE-PySCF.
+QM geometry optimization using ASE-BFGS + PySCF gradients.
 
 Performs a full quantum mechanical geometry optimization by coupling the
-ASE BFGS optimizer with the PySCF mean-field calculator.  Atoms are
+ASE BFGS optimizer with a thin PySCF wrapper calculator.  Atoms are
 moved iteratively until the maximum force on any atom falls below the
 convergence threshold (``fmax``).
 
@@ -14,6 +14,12 @@ Platform notes
 --------------
 Requires PySCF — **Linux / macOS / WSL only**.  ASE >= 3.22 required.
 This module imports PySCF lazily so it can be imported safely on Windows.
+
+Implementation note
+-------------------
+ASE does not ship an ``ase.calculators.pyscf`` module.  Instead this
+module defines ``_QuantUIPySCFCalc``, a minimal ASE Calculator that
+calls PySCF's SCF kernel and analytical nuclear-gradient driver directly.
 
 Educational value
 -----------------
@@ -49,9 +55,116 @@ from .session_calc import HARTREE_TO_EV
 
 logger = logging.getLogger(__name__)
 
+# Unit conversion: 1 Bohr = 0.529177249 Angstrom (NIST 2018 CODATA)
+_BOHR_TO_ANG: float = 0.529177249
+
 # Defaults also exposed in config.py for the notebook UI
 DEFAULT_FMAX: float = 0.05  # eV/Å — tight enough for educational use
 DEFAULT_OPT_STEPS: int = 200  # generous upper limit for small molecules
+
+
+# ============================================================================
+# Minimal ASE Calculator wrapping PySCF
+# ============================================================================
+
+# Defined conditionally so the module can be imported on Windows (no ASE).
+try:
+    from ase.calculators.calculator import (  # type: ignore[import]
+        Calculator,
+        all_changes,
+    )
+
+    class _QuantUIPySCFCalc(Calculator):
+        """
+        Thin ASE Calculator that drives PySCF SCF + analytical gradients.
+
+        ASE does not provide an ``ase.calculators.pyscf`` module, so this
+        class replaces it.  It builds a PySCF ``Mole`` from the current
+        ASE ``Atoms`` object at each step, runs the SCF, computes the
+        nuclear gradient, and converts both to ASE units (eV and eV/Å).
+
+        All PySCF output is routed to a ``StringIO`` sink so the notebook
+        output stays clean; BFGS step progress is handled by ASE.
+        """
+
+        implemented_properties: List[str] = ["energy", "forces"]
+
+        def __init__(
+            self,
+            method: str = "RHF",
+            basis: str = "STO-3G",
+            charge: int = 0,
+            spin: int = 0,
+            **kwargs,
+        ) -> None:
+            super().__init__(**kwargs)
+            self.method = method
+            self.basis = basis
+            self.charge = charge
+            self.spin = spin
+
+        def calculate(
+            self,
+            atoms=None,
+            properties=("energy", "forces"),
+            system_changes=all_changes,
+        ) -> None:
+            super().calculate(atoms, properties, system_changes)
+
+            import numpy as np
+            from pyscf import dft, gto, scf
+
+            _sink = io.StringIO()  # absorb all PySCF output
+
+            # Build PySCF molecule from the current ASE geometry
+            mol = gto.Mole()
+            mol.atom = [
+                (sym, pos)
+                for sym, pos in zip(
+                    self.atoms.get_chemical_symbols(),
+                    self.atoms.get_positions().tolist(),
+                )
+            ]
+            mol.basis = self.basis
+            mol.charge = self.charge
+            mol.spin = self.spin
+            mol.unit = "Angstrom"
+            mol.verbose = 0
+            mol.stdout = _sink
+            mol.build()
+
+            # Select SCF method
+            method_upper = self.method.upper()
+            if method_upper in ("RHF", "HF"):
+                mf = scf.RHF(mol)
+            elif method_upper == "UHF":
+                mf = scf.UHF(mol)
+            else:
+                # DFT functional
+                mf = dft.RKS(mol) if mol.spin == 0 else dft.UKS(mol)
+                mf.xc = self.method
+
+            mf.verbose = 0
+            mf.stdout = _sink
+            mf.kernel()
+
+            # Analytical nuclear gradient (Hartree/Bohr)
+            grad_driver = mf.nuc_grad_method()
+            grad_driver.verbose = 0
+            grad_driver.stdout = _sink
+            g_ha_bohr = grad_driver.kernel()  # shape (n_atoms, 3)
+
+            # Convert to ASE units and store results
+            # Force = -gradient;  1 Ha/Bohr = HARTREE_TO_EV / _BOHR_TO_ANG eV/Å
+            self.results["energy"] = float(mf.e_tot) * HARTREE_TO_EV
+            self.results["forces"] = (
+                -np.asarray(g_ha_bohr) * HARTREE_TO_EV / _BOHR_TO_ANG
+            )
+
+except ImportError:
+    # ASE not installed — _QuantUIPySCFCalc is unavailable.
+    # optimize_geometry() will raise a clear ImportError before ever using it.
+    _QuantUIPySCFCalc = None  # type: ignore[assignment,misc]
 
 
 # ============================================================================
@@ -202,7 +315,7 @@ def optimize_geometry(
         summary statistics.
 
     Raises:
-        ImportError: If ASE ≥ 3.22 or PySCF is not installed.
+        ImportError: If ASE or PySCF is not installed.
         RuntimeError: If the optimization raises an unexpected exception
             (original exception is chained).
 
@@ -211,21 +324,13 @@ def optimize_geometry(
         the progress stream clean.  BFGS writes a concise per-step table
         (step number and maximum force) to *progress_stream*.
     """
-    # --- Dependency checks (mirrors session_calc) ---
-    if not ASE_AVAILABLE:
+    # --- Dependency checks ---
+    if not ASE_AVAILABLE or _QuantUIPySCFCalc is None:
         raise ImportError(
             "ASE is not installed — cannot run geometry optimization.\n"
             "  pip install 'ase>=3.22.0'\n"
             "  # or: conda install -c conda-forge ase"
         )
-
-    try:
-        from ase.calculators.pyscf import PySCF  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError(
-            "ase.calculators.pyscf is not available.\n"
-            "Ensure ASE >= 3.22.0 is installed: pip install 'ase>=3.22.0'"
-        ) from exc
 
     try:
         import pyscf as _pyscf  # noqa: F401 — presence check
@@ -246,16 +351,15 @@ def optimize_geometry(
 
     # --- Set up ASE Atoms + PySCF calculator ---
     atoms = molecule_to_atoms(molecule)
-    atoms.calc = PySCF(
+    atoms.calc = _QuantUIPySCFCalc(
         method=method,
         basis=basis,
         charge=molecule.charge,
         spin=molecule.multiplicity - 1,
-        verbose=0,  # suppress per-step SCF output; BFGS table goes to progress_stream
     )
 
     _stream: IO[str] = progress_stream if progress_stream is not None else sys.stdout
-    _null = io.StringIO()  # captures any stray PySCF stdout at verbose=0
+    _null = io.StringIO()
 
     # --- Run optimization with trajectory file ---
     converged = False
@@ -269,7 +373,6 @@ def optimize_geometry(
                 logfile=_stream,  # BFGS step table → progress_stream
             )
 
-            # Suppress any residual PySCF stdout even at verbose=0
             with contextlib.redirect_stdout(_null):
                 converged = bool(dyn.run(fmax=fmax, steps=steps))
 

@@ -125,35 +125,33 @@ class PySCFCalculation:
         """
         notes = []
 
-        if self.method == "RHF":
-            notes.append(
-                "**Restricted Hartree-Fock (RHF)**: Used for closed-shell molecules "
-                "where all electrons are paired. Assumes spatial orbitals are "
-                "doubly occupied."
-            )
-        elif self.method == "UHF":
-            notes.append(
-                "**Unrestricted Hartree-Fock (UHF)**: Used for open-shell molecules "
-                "with unpaired electrons. Alpha and beta electrons occupy different "
-                "spatial orbitals."
-            )
+        info = config.METHOD_INFO.get(self.method)
+        if info:
+            notes.append(f"**{info['label']}**: {info['description']}")
+            notes.append(f"*Best used for:* {info['use_for']}")
 
         if self.basis == "STO-3G":
             notes.append(
-                "**STO-3G basis**: Minimal basis set using 3 Gaussian functions to "
-                "approximate Slater-type orbitals. Fast but low accuracy."
+                "**STO-3G basis**: Minimal basis set — 3 Gaussians per orbital. "
+                "Very fast but low accuracy. Good for learning, not research."
             )
         elif "6-31G" in self.basis:
             notes.append(
-                "**6-31G family**: Split-valence basis sets providing good balance "
-                "between accuracy and computational cost. The * indicates polarization "
-                "functions for better description of molecular bonding."
+                "**6-31G family**: Split-valence basis sets with a good balance of "
+                "speed and accuracy. The * adds polarization functions for better "
+                "description of molecular bonding and lone pairs."
             )
         elif "cc-pV" in self.basis:
             notes.append(
-                "**Correlation-consistent basis sets**: High-quality basis sets "
-                "designed for systematic convergence to exact results. More expensive "
-                "but more accurate than minimal or split-valence sets."
+                "**Correlation-consistent basis sets (cc-pVXZ)**: High-quality basis "
+                "sets designed for systematic convergence. More expensive but more "
+                "accurate; best paired with correlated methods."
+            )
+        elif "def2" in self.basis:
+            notes.append(
+                "**def2 basis sets**: Karlsruhe basis sets optimised for DFT. "
+                "def2-SVP is a good default for DFT calculations; def2-TZVP gives "
+                "near-complete-basis accuracy for most properties."
             )
 
         if self.molecule.multiplicity > 1:

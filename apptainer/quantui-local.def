@@ -30,6 +30,10 @@ FROM: continuumio/miniconda3:latest
   # Disable user site-packages for reproducibility
   export PYTHONNOUSERSITE=1
 
+  # Save calculation results to the user's home directory so they persist
+  # across kernel restarts. The home dir is bind-mounted by Apptainer.
+  export QUANTUI_RESULTS_DIR="${HOME}/.quantui/results"
+
 %files
   # Source path is relative to where you run `apptainer build` (repo root).
   # Run the build command from the repo root, not from apptainer/.
@@ -67,11 +71,37 @@ FROM: continuumio/miniconda3:latest
   python -c "import pyscf; print('PySCF OK')"
   python -c "import py3Dmol; print('py3Dmol OK')"
   python -c "import ase; print('ASE OK')"
+  python -c "from quantui import optimize_geometry; print('optimize_geometry OK')"
+  python -c "from quantui import run_freq_calc, run_tddft_calc; print('freq/tddft OK')"
 
   echo "Cleaning up unnecessary files..."
+  # Version control and caches
   rm -rf /opt/quantui/.git
+  rm -rf /opt/quantui/.mypy_cache
+  rm -rf /opt/quantui/.pytest_cache
+  rm -rf /opt/quantui/.ruff_cache
+  rm -rf /opt/quantui/.coverage
+  rm -rf /opt/quantui/coverage.xml
+  rm -rf /opt/quantui/htmlcov
   find /opt/quantui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   find /opt/quantui -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+  # Internal dev/AI files not intended for students
+  rm -f  /opt/quantui/CLAUDE.md
+  rm -rf /opt/quantui/planning
+  rm -f  /opt/quantui/feature-requests.md
+  rm -f  /opt/quantui/bug-reports.md
+  rm -f  /opt/quantui/launch-app.bat
+  rm -f  /opt/quantui/launch-dev.bat
+  # Windows-only and CI artefacts
+  rm -rf /opt/quantui/.github
+  rm -f  /opt/quantui/.pre-commit-config.yaml
+
+  echo "Configuring Jupyter Server..."
+  mkdir -p /etc/jupyter
+  cat > /etc/jupyter/jupyter_server_config.py << 'EOF'
+# Disable XSRF cookie checks — prevents 403 errors on kernel shutdown in Voilà.
+c.ServerApp.disable_check_xsrf = True
+EOF
 
   conda clean --all -y
   pip cache purge

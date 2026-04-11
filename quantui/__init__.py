@@ -11,11 +11,12 @@ __version__ = "0.1.0"
 
 from .calculator import PySCFCalculation, create_calculation
 
-# Calculation comparison (session results only — no job metadata)
+# Calculation comparison
 from .comparison import (
     CalcSummary,
     comparison_table_html,
     plot_comparison,
+    summary_from_saved_result,
     summary_from_session_result,
 )
 from .config import (
@@ -26,6 +27,7 @@ from .config import (
     DEFAULT_MULTIPLICITY,
     DEFAULT_OPT_STEPS,
     DESCRIPTION_WIDTH,
+    METHOD_INFO,
     MOLECULE_LIBRARY,
     PYSCF_SCRIPT_TEMPLATE,
     QUICK_START_TEMPLATES,
@@ -88,6 +90,21 @@ try:
 except ImportError:
     pass
 
+# Frequency analysis (optional — requires pyscf, Linux/WSL)
+try:
+    from .freq_calc import FreqResult, run_freq_calc
+except ImportError:
+    pass
+
+# TD-DFT excited states (optional — requires pyscf, Linux/WSL)
+try:
+    from .tddft_calc import TDDFTResult, run_tddft_calc
+except ImportError:
+    pass
+
+# Results persistence — pure Python, always available
+from .results_storage import list_results, load_result, save_result
+
 # QM geometry optimizer (optional — requires ase>=3.22 + pyscf, Linux/WSL)
 try:
     from .optimizer import OptimizationResult, optimize_geometry
@@ -133,6 +150,7 @@ __all__ = [
     # Config constants
     "MOLECULE_LIBRARY",
     "SUPPORTED_METHODS",
+    "METHOD_INFO",
     "SUPPORTED_BASIS_SETS",
     "DEFAULT_METHOD",
     "DEFAULT_BASIS",
@@ -172,6 +190,7 @@ __all__ = [
     # Comparison
     "CalcSummary",
     "summary_from_session_result",
+    "summary_from_saved_result",
     "comparison_table_html",
     "plot_comparison",
     # ASE bridge (optional)
@@ -187,6 +206,16 @@ __all__ = [
     # In-session calculator (optional — Linux/WSL)
     "SessionResult",
     "run_in_session",
+    # Frequency analysis (optional — Linux/WSL)
+    "FreqResult",
+    "run_freq_calc",
+    # TD-DFT excited states (optional — Linux/WSL)
+    "TDDFTResult",
+    "run_tddft_calc",
+    # Results persistence
+    "save_result",
+    "list_results",
+    "load_result",
     # QM geometry optimizer (optional — Linux/WSL)
     "OptimizationResult",
     "optimize_geometry",
