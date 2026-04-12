@@ -116,6 +116,9 @@ try:
 
             _sink = io.StringIO()  # absorb all PySCF output
 
+            if self.atoms is None:
+                raise RuntimeError("No Atoms object attached to calculator.")
+
             # Build PySCF molecule from the current ASE geometry
             mol = gto.Mole()
             mol.atom = [

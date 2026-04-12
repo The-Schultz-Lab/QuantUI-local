@@ -146,6 +146,11 @@ except ImportError:
     VISUALIZATION_AVAILABLE = False
     PY3DMOL_AVAILABLE = False
 
+# App class — imported last so all package symbols are defined first.
+# app.py imports from submodules directly, but placing this last is an
+# extra safeguard against accidental circular-import issues in the future.
+from .app import QuantUIApp
+
 __all__ = [
     # Config constants
     "MOLECULE_LIBRARY",
@@ -187,6 +192,8 @@ __all__ = [
     "plot_orbital_diagram",
     "orbital_summary_html",
     "parse_cube_file",
+    # App class
+    "QuantUIApp",
     # Comparison
     "CalcSummary",
     "summary_from_session_result",
