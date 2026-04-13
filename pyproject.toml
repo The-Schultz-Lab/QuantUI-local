@@ -40,12 +40,12 @@ packages = ["quantui"]
 # PySCF requires Linux/macOS/WSL — not available on Windows natively.
 # Use the Apptainer container (apptainer/quantui-local.def) for Windows.
 pyscf = [
-    "pyscf>=2.3.0",
+    "pyscf>=2.12.1",
 ]
 
 # ASE: structure I/O, extended molecule library, geometry optimisation
 ase = [
-    "ase>=3.22.0",
+    "ase>=3.26.0",
 ]
 
 # Voilà app server — hides notebook code; students see only the widget UI.
