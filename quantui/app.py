@@ -66,6 +66,8 @@ except ImportError:
 try:
     from quantui.pubchem import (
         RDKIT_AVAILABLE as _PUBCHEM_RDKIT_AVAILABLE,
+    )
+    from quantui.pubchem import (
         student_friendly_fetch as _student_friendly_fetch,
     )
 
