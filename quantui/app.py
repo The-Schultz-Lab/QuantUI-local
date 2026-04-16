@@ -13,6 +13,7 @@ module in tests or tutorials does not pollute the IPython display.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import threading
@@ -1028,6 +1029,19 @@ class QuantUIApp:
         except Exception as exc:
             self.xyz_msg.value = f"Parse error: {exc}"
 
+    def _apply_pubchem_search_result(
+        self,
+        query: str,
+        mol: Optional[Molecule] = None,
+        error: Optional[Exception] = None,
+    ) -> None:
+        if error is None and mol is not None:
+            self._set_molecule(mol, f"PubChem: {query}")
+            self.pubchem_msg.value = f"Loaded {mol.get_formula()} from PubChem."
+        else:
+            self.pubchem_msg.value = f"Not found: {error}"
+        self.pubchem_btn.disabled = False
+
     def _on_search_pubchem(self, btn) -> None:
         query = self.pubchem_txt.value.strip()
         if not query:
@@ -1039,6 +1053,8 @@ class QuantUIApp:
         self.pubchem_msg.value = f'Searching for "{query}"...'
         self.pubchem_btn.disabled = True
 
+        loop = asyncio.get_running_loop()
+
         def _do():
             try:
                 xyz_str, _msg = _student_friendly_fetch(query)
@@ -1046,12 +1062,19 @@ class QuantUIApp:
                     raise ValueError(_msg)
                 atoms, coords = parse_xyz_input(xyz_str)
                 mol = Molecule(atoms=atoms, coordinates=coords)
-                self._set_molecule(mol, f"PubChem: {query}")
-                self.pubchem_msg.value = f"Loaded {mol.get_formula()} from PubChem."
+                loop.call_soon_threadsafe(
+                    self._apply_pubchem_search_result,
+                    query,
+                    mol,
+                    None,
+                )
             except Exception as exc:
-                self.pubchem_msg.value = f"Not found: {exc}"
-            finally:
-                self.pubchem_btn.disabled = False
+                loop.call_soon_threadsafe(
+                    self._apply_pubchem_search_result,
+                    query,
+                    None,
+                    exc,
+                )
 
         threading.Thread(target=_do, daemon=True).start()
 
