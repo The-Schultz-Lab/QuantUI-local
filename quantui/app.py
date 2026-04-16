@@ -63,9 +63,12 @@ except ImportError:
     _display_molecule = None  # type: ignore[assignment]
 
 try:
-    from quantui.pubchem import student_friendly_fetch as _student_friendly_fetch
+    from quantui.pubchem import (
+        RDKIT_AVAILABLE as _PUBCHEM_RDKIT_AVAILABLE,
+        student_friendly_fetch as _student_friendly_fetch,
+    )
 
-    PUBCHEM_AVAILABLE = True
+    PUBCHEM_AVAILABLE = _PUBCHEM_RDKIT_AVAILABLE
 except ImportError:
     PUBCHEM_AVAILABLE = False
     _student_friendly_fetch = None  # type: ignore[assignment]
