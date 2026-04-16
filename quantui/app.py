@@ -206,8 +206,13 @@ class QuantUIApp:
         self._wire_callbacks()
         self._assemble_tabs()
 
-        # Log startup
-        _calc_log.log_event("startup", f"QuantUI-local {quantui.__version__} started")
+        # Log startup, but never let optional logging I/O break app startup.
+        try:
+            _calc_log.log_event(
+                "startup", f"QuantUI-local {quantui.__version__} started"
+            )
+        except OSError:
+            pass
 
     def display(self) -> None:
         """Inject global CSS and render the application widget."""
