@@ -82,7 +82,7 @@ except (ImportError, AttributeError):
     _PREOPT_AVAILABLE = False
 
 # ── Module-level constants ────────────────────────────────────────────────────
-_THEME_HUE: dict = {"Dark": 180, "Dark Blue": 200, "Dark Maroon": 160}
+_THEME_HUE: dict = {"Dark": 180}
 
 _APP_CSS: str = """<style>
 /* System font stack ---------------------------------------------------- */
@@ -255,7 +255,7 @@ class QuantUIApp:
             )
         )
         self.theme_btn = widgets.ToggleButtons(
-            options=["Light", "Dark", "Dark Blue", "Dark Maroon"],
+            options=["Light", "Dark"],
             value="Dark",
             description="Theme:",
             style={"description_width": "48px", "button_width": "90px"},
@@ -1089,6 +1089,8 @@ class QuantUIApp:
     # ── Run ───────────────────────────────────────────────────────────────
 
     def _on_run_clicked(self, btn) -> None:
+        self.run_output.clear_output()
+        self.result_output.clear_output()
         threading.Thread(target=self._do_run, daemon=True).start()
 
     def _on_clear_log(self, btn) -> None:
@@ -1290,7 +1292,7 @@ class QuantUIApp:
         if mol.multiplicity > 1 and self.method_dd.value == "RHF":
             self.method_dd.value = "UHF"
 
-        self.viz_output.clear_output(wait=True)
+        self.viz_output.clear_output()
         if _display_molecule is not None:
             with self.viz_output:
                 _display_molecule(mol)
@@ -1317,8 +1319,6 @@ class QuantUIApp:
             return
         self.run_btn.disabled = True
         self.run_status.value = "Starting..."
-        self.run_output.clear_output()
-        self.result_output.clear_output()
 
         self.step_progress.complete(1)
         self.step_progress.start(2)
@@ -1465,13 +1465,25 @@ class QuantUIApp:
 
         except ImportError as _import_err:
             _err_detail = str(_import_err)
-            log.write(
+            _msg = (
                 f"Import error: {_err_detail}\n\n"
                 "A required calculation dependency could not be loaded.\n"
                 "On Windows: use the Apptainer container.\n"
                 "  apptainer run quantui-local.sif\n"
             )
-            self.run_status.value = "Import error — see output."
+            log.write(_msg)
+            _err_html = (
+                '<div style="background:#fef2f2;border:1px solid #fca5a5;'
+                'border-radius:8px;padding:16px;margin:8px 0">'
+                '<b style="color:#b91c1c">&#9888; Dependency Not Available</b><br>'
+                f'<span style="color:#7f1d1d">{_err_detail}</span><br><br>'
+                '<small style="color:#991b1b">On Windows, use the Apptainer container: '
+                "<code>apptainer run quantui-local.sif</code>. "
+                "Full details are in the <b>Output</b> tab.</small>"
+                "</div>"
+            )
+            self.result_output.append_display_data(HTML(_err_html))
+            self.run_status.value = "Dependency unavailable."
             self.step_progress.fail(2, _err_detail[:60])
             _calc_log.log_event("calc_error", _err_detail[:200])
 
@@ -1479,8 +1491,47 @@ class QuantUIApp:
             import traceback as _tb
 
             _elapsed = time.perf_counter() - _run_wall_t
-            log.write(f"Error: {exc}\n\n{_tb.format_exc()}")
-            self.run_status.value = "Error — see Calculation Output below."
+            _tb_str = _tb.format_exc()
+            # Full details → Output tab (for debugging/instructors)
+            log.write(f"\n--- Calculation Error ---\n{exc}\n\n{_tb_str}")
+            # Write to persistent error log
+            try:
+                import datetime as _dt
+                import os as _os
+
+                _log_dir = Path(
+                    _os.environ.get(
+                        "QUANTUI_LOG_DIR",
+                        Path.home() / ".quantui" / "logs",
+                    )
+                )
+                _log_dir.mkdir(parents=True, exist_ok=True)
+                _ts = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                _formula = mol.get_formula() if mol is not None else "unknown"
+                _method = self.method_dd.value
+                _basis = self.basis_dd.value
+                with open(_log_dir / "error_log.txt", "a") as _ef:
+                    _ef.write(
+                        f"\n{'='*60}\n"
+                        f"{_ts}  {_formula}  {_method}/{_basis}\n"
+                        f"{_tb_str}"
+                    )
+            except Exception:
+                pass
+            # Clean summary → result panel (student-facing)
+            _err_html = (
+                '<div style="background:#fef2f2;border:1px solid #fca5a5;'
+                'border-radius:8px;padding:16px;margin:8px 0">'
+                '<b style="color:#b91c1c">&#9888; Calculation Failed</b><br>'
+                f'<code style="color:#7f1d1d">{exc}</code><br><br>'
+                '<small style="color:#991b1b">'
+                "Tips: try a smaller basis set (STO-3G), use a geometry-optimized "
+                "structure first, or check for unusually long/short bonds in your "
+                "XYZ input. Full error details are in the <b>Output</b> tab.</small>"
+                "</div>"
+            )
+            self.result_output.append_display_data(HTML(_err_html))
+            self.run_status.value = "Calculation failed."
             self.step_progress.fail(2, str(exc)[:60])
             _calc_log.log_event(
                 "calc_error", str(exc)[:200], elapsed_s=round(_elapsed, 2)

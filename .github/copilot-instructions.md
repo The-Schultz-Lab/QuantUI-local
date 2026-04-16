@@ -2,7 +2,7 @@
 
 > Stable project context for GitHub Copilot, Claude, and other AI coding assistants.
 > Describes what the project IS and how it is built — not where development currently
-> stands (see `planning/SESSION-HANDOFF.md` for that). Update this file when
+> stands (see `planning/TODO/STATUS.md` for that). Update this file when
 > architecture or conventions change, not every session.
 
 ---
@@ -50,9 +50,13 @@ QuantUI-local/
 │   └── tutorials/                   ← 01–05 step-by-step tutorial notebooks
 ├── tests/                    ← pytest suite (~440 tests)
 ├── planning/                 ← Planning docs (not committed to git)
-│   ├── SESSION-HANDOFF.md    ← Start here each session — current state
-│   ├── feature-requests.md   ← FR backlog
-│   └── FR-*.md               ← Individual feature request specs
+│   ├── TODO/
+│   │   ├── STATUS.md         ← Start here each session — current state
+│   │   ├── TODO.md           ← Milestone task list with acceptance criteria
+│   │   ├── DECISIONS.md      ← Resolved design decisions
+│   │   └── GOTCHAS.md        ← Known pitfalls and deliberate deferrals
+│   ├── archive/              ← Old SESSION-HANDOFF and FR specs
+│   └── feature-requests.md   ← FR backlog
 ├── apptainer/
 │   ├── quantui-local.def     ← Apptainer container definition
 │   └── build.sh              ← Build script
@@ -118,7 +122,7 @@ notebooks/molecule_computations.ipynb
 | `quantui/freq_calc.py` | `run_freq_calc()` — vibrational analysis via `pyscf.hessian` |
 | `quantui/tddft_calc.py` | `run_tddft_calc()` — excited states via `pyscf.tddft` |
 | `notebooks/molecule_computations.ipynb` | Thin launcher — 3 cells only (do not add logic here) |
-| `planning/SESSION-HANDOFF.md` | **Read this first every session** — current state, git log, open tasks |
+| `planning/TODO/STATUS.md` | **Read this first every session** — current state, git log, open tasks |
 | `planning/feature-requests.md` | FR backlog |
 
 ---
@@ -391,4 +395,4 @@ Never make independent architectural changes in this repo — propose them in `Q
 ## Active Development Branch
 
 Branch: `app-restructure` — FR-012 App Module Refactor in progress.
-See `planning/SESSION-HANDOFF.md` for current phase and uncommitted changes.
+See `planning/TODO/STATUS.md` for current phase and uncommitted changes.
