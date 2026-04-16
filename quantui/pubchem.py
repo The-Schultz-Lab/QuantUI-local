@@ -13,7 +13,7 @@ import requests
 
 try:
     from rdkit import Chem
-    from rdkit.Chem import AllChem
+    from rdkit.Chem import AllChem, Descriptors
 
     RDKIT_AVAILABLE = True
 except ImportError:
@@ -180,7 +180,7 @@ def sdf_to_xyz(sdf_content: str) -> Tuple[str, Dict[str, Any]]:
         # Gather metadata
         metadata = {
             "formula": formula,
-            "molecular_weight": Chem.Descriptors.MolWt(mol),
+            "molecular_weight": Descriptors.MolWt(mol),
             "charge": Chem.GetFormalCharge(mol),
             "num_atoms": mol.GetNumAtoms(),
             "num_heavy_atoms": mol.GetNumHeavyAtoms(),
@@ -408,7 +408,7 @@ def smiles_to_xyz(smiles: str, optimize_3d: bool = True) -> Tuple[str, Dict[str,
         # Gather metadata
         metadata = {
             "formula": formula,
-            "molecular_weight": Chem.Descriptors.MolWt(mol),
+            "molecular_weight": Descriptors.MolWt(mol),
             "charge": Chem.GetFormalCharge(mol),
             "num_atoms": mol.GetNumAtoms(),
             "num_heavy_atoms": mol.GetNumHeavyAtoms(),
