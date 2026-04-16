@@ -288,7 +288,9 @@ class TestDoRunDispatch:
         mock_result.formula = "H2O"
         mock_result.method = "RHF"
         mock_result.basis = "STO-3G"
-        with patch("quantui.run_in_session", return_value=mock_result, create=True) as mock_run:
+        with patch(
+            "quantui.run_in_session", return_value=mock_result, create=True
+        ) as mock_run:
             with patch("quantui.save_result"):
                 app._do_run()
         mock_run.assert_called_once()
@@ -305,7 +307,9 @@ class TestDoRunDispatch:
         mock_result.method = "RHF"
         mock_result.basis = "STO-3G"
         mock_result.final_molecule = _water()
-        with patch("quantui.optimize_geometry", return_value=mock_result, create=True) as mock_opt:
+        with patch(
+            "quantui.optimize_geometry", return_value=mock_result, create=True
+        ) as mock_opt:
             with patch("quantui.save_result"):
                 app._do_run()
         mock_opt.assert_called_once()
