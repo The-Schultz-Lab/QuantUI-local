@@ -34,8 +34,10 @@ import quantui.calc_log as _calc_log
 from quantui.config import (
     DEFAULT_BASIS,
     DEFAULT_CHARGE,
+    DEFAULT_FMAX,
     DEFAULT_METHOD,
     DEFAULT_MULTIPLICITY,
+    DEFAULT_OPT_STEPS,
     MOLECULE_LIBRARY,
     SUPPORTED_BASIS_SETS,
     SUPPORTED_METHODS,
@@ -400,7 +402,7 @@ class QuantUIApp:
             layout=widgets.Layout(width="310px"),
         )
         self.fmax_fi = widgets.BoundedFloatText(
-            value=0.05,
+            value=DEFAULT_FMAX,
             min=0.001,
             max=1.0,
             step=0.005,
@@ -409,7 +411,7 @@ class QuantUIApp:
             layout=widgets.Layout(width="270px"),
         )
         self.max_steps_si = widgets.BoundedIntText(
-            value=200,
+            value=DEFAULT_OPT_STEPS,
             min=10,
             max=1000,
             description="Max steps:",
