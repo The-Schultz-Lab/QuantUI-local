@@ -53,7 +53,8 @@ FROM: continuumio/miniconda3:latest
     scipy \
     matplotlib \
     plotly \
-    h5py
+    h5py \
+    rdkit
 
   echo "Installing pip packages..."
   pip install --no-cache-dir \
@@ -69,6 +70,7 @@ FROM: continuumio/miniconda3:latest
   echo "Verifying installation..."
   python -c "import quantui; print('QuantUI OK')"
   python -c "import pyscf; print('PySCF OK')"
+  python -c "import rdkit; print('RDKit OK')"
   python -c "import py3Dmol; print('py3Dmol OK')"
   python -c "import ase; print('ASE OK')"
   python -c "from quantui import optimize_geometry; print('optimize_geometry OK')"
