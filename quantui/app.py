@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import ipywidgets as widgets
+from IPython import get_ipython
 from IPython.display import HTML, Javascript, display
 
 import quantui
@@ -1344,6 +1345,36 @@ class QuantUIApp:
         # Collapse molecule input to compact view
         self.mol_input_container.children = [self.mol_input_collapsed, self.viz_output]
 
+    def _queue_main_thread_callback(self, callback, *args, **kwargs) -> None:
+        """Run a callback on the notebook/kernel thread when possible."""
+        if threading.current_thread() is threading.main_thread():
+            callback(*args, **kwargs)
+            return
+
+        ip = get_ipython()
+        io_loop = getattr(getattr(ip, "kernel", None), "io_loop", None)
+        if io_loop is not None:
+            io_loop.add_callback(callback, *args, **kwargs)
+            return
+
+        # Best-effort fallback for non-notebook contexts where no kernel loop
+        # is available. This preserves existing behaviour, but the normal
+        # notebook path above keeps rendering off the worker thread.
+        callback(*args, **kwargs)
+
+    def _set_molecule_state_only(self, mol) -> None:
+        """Apply only thread-safe molecule state updates."""
+        self._molecule = mol
+
+    def _set_molecule_threadsafe(self, mol, status_message: str) -> None:
+        """Update molecule state safely and render on the main thread only."""
+        if threading.current_thread() is threading.main_thread():
+            self._set_molecule(mol, status_message)
+            return
+
+        self._set_molecule_state_only(mol)
+        self._queue_main_thread_callback(self._set_molecule, mol, status_message)
+
     def _do_run(self) -> None:
         """Main calculation dispatch — runs in a background thread."""
         mol = self._molecule
@@ -1369,7 +1400,7 @@ class QuantUIApp:
             if self.preopt_cb.value and _PREOPT_AVAILABLE:
                 self.run_status.value = "Pre-optimizing..."
                 calc_mol, _rmsd = preoptimize(mol)
-                self._set_molecule(
+                self._set_molecule_threadsafe(
                     calc_mol,
                     f"Geometry pre-optimized (LJ, RMSD={_rmsd:.3f} Å)",
                 )
