@@ -320,6 +320,7 @@ class TestPubChemIntegration:
         except PubChemAPIError:
             pytest.skip("PubChem not accessible")
 
+    @rdkit_only
     def test_real_fetch_caffeine(self):
         """Test real fetch of caffeine molecule."""
         try:
