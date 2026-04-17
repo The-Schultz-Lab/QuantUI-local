@@ -357,6 +357,7 @@ class QuantUIApp:
                 )
             )
         self.result_output = widgets.Output()
+        self.result_viz_output = widgets.Output()
         self.comparison_output = widgets.Output()
         self.notes_output = widgets.Output()
         self.perf_estimate_html = widgets.HTML()
@@ -671,10 +672,42 @@ class QuantUIApp:
     # ── Results panel (Cell 7) ────────────────────────────────────────────
 
     def _build_results_section(self) -> None:
+        # Trajectory accordion (Geo Opt only — hidden until a Geo Opt completes)
+        self.traj_output = widgets.Output()
+        self.traj_accordion = widgets.Accordion(
+            children=[self.traj_output],
+            layout=widgets.Layout(display="none", margin="8px 0"),
+        )
+        self.traj_accordion.set_title(0, "Trajectory Viewer")
+        self.traj_accordion.selected_index = None  # collapsed by default
+
+        # Vibrational animation accordion (Frequency only — hidden until Freq completes)
+        self.vib_mode_dd = widgets.Dropdown(
+            description="Mode:",
+            options=[],
+            style={"description_width": "50px"},
+            layout=widgets.Layout(width="360px"),
+        )
+        self.vib_output = widgets.Output()
+        self.vib_accordion = widgets.Accordion(
+            children=[
+                widgets.VBox(
+                    [self.vib_mode_dd, self.vib_output],
+                    layout=widgets.Layout(padding="8px"),
+                )
+            ],
+            layout=widgets.Layout(display="none", margin="8px 0"),
+        )
+        self.vib_accordion.set_title(0, "Vibrational Mode Viewer")
+        self.vib_accordion.selected_index = None  # collapsed by default
+
         self.results_panel = widgets.VBox(
             [
                 widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
                 self.result_output,
+                self.result_viz_output,
+                self.traj_accordion,
+                self.vib_accordion,
             ]
         )
 
@@ -997,6 +1030,8 @@ class QuantUIApp:
         self._log_clear_btn.on_click(self._on_log_clear)
         # Help
         self.help_topic_dd.observe(self._on_help_topic_changed, names="value")
+        # Vibrational mode selector
+        self.vib_mode_dd.observe(self._on_vib_mode_changed, names="value")
 
     # ══ CALLBACK METHODS ═════════════════════════════════════════════════════
 
@@ -1127,6 +1162,9 @@ class QuantUIApp:
     def _on_run_clicked(self, btn) -> None:
         self.run_output.clear_output()
         self.result_output.clear_output()
+        self.result_viz_output.clear_output()
+        self.traj_accordion.layout.display = "none"
+        self.vib_accordion.layout.display = "none"
         threading.Thread(target=self._do_run, daemon=True).start()
 
     def _on_clear_log(self, btn) -> None:
@@ -1377,6 +1415,257 @@ class QuantUIApp:
         self._set_molecule_state_only(mol)
         self._queue_main_thread_callback(self._set_molecule, mol, status_message)
 
+    def _show_result_3d(self, molecule) -> None:
+        """Render molecule 3D structure in the result visualization panel.
+
+        Safe to call from a background thread — uses ``with output:`` context.
+        """
+        if _display_molecule is None or molecule is None:
+            return
+        self.result_viz_output.clear_output()
+        with self.result_viz_output:
+            _display_molecule(molecule)
+
+    def _show_opt_trajectory(self, opt_result) -> None:
+        """Render geo-opt trajectory animation and energy chart in the trajectory panel.
+
+        Uses plotlyMol's ``create_trajectory_animation``. Safe to call from a
+        background thread — uses ``with output:`` context.  No-op if plotlyMol
+        is not installed.
+        """
+        traj = opt_result.trajectory
+        energies = opt_result.energies_hartree
+        if len(traj) < 2:
+            return
+
+        try:
+            import plotly.graph_objects as go
+            from IPython.display import display as _ipy_display
+            from plotlymol3d import create_trajectory_animation
+        except ImportError:
+            return
+
+        # Build full XYZ blocks (count + title + coords).
+        xyzblocks = [
+            f"{len(m.atoms)}\n{m.get_formula()}\n{m.to_xyz_string()}" for m in traj
+        ]
+
+        anim_fig = create_trajectory_animation(
+            xyzblocks=xyzblocks,
+            energies_hartree=energies if energies else None,
+            charge=traj[0].charge,
+            mode="ball+stick",
+            resolution=12,
+            title=f"Geo Opt: {opt_result.formula}",
+        )
+        anim_fig.update_layout(height=420)
+
+        # Energy convergence chart (relative energies in kcal/mol).
+        _HARTREE_TO_KCAL = 627.5094740631
+        e0 = energies[0] if energies else 0.0
+        rel_e = [(e - e0) * _HARTREE_TO_KCAL for e in energies] if energies else []
+        energy_fig = go.Figure(
+            go.Scatter(
+                x=list(range(len(rel_e))),
+                y=rel_e,
+                mode="lines+markers",
+                name="ΔE",
+                line=dict(color="#2563eb", width=2),
+                marker=dict(size=6),
+            )
+        )
+        energy_fig.update_layout(
+            title="Energy Convergence",
+            xaxis_title="Optimization Step",
+            yaxis_title="ΔE (kcal/mol)",
+            height=280,
+            margin=dict(l=60, r=20, t=40, b=40),
+        )
+
+        self.traj_output.clear_output()
+        with self.traj_output:
+            _ipy_display(anim_fig)
+            _ipy_display(energy_fig)
+
+        # Reveal the accordion (collapsed).
+        self.traj_accordion.selected_index = None
+        self.traj_accordion.layout.display = ""
+
+    def _build_vib_data_from_freq_result(self, freq_result, molecule):
+        """Construct a ``plotlymol3d.VibrationalData`` from a FreqResult.
+
+        Args:
+            freq_result: ``FreqResult`` with ``displacements`` populated.
+            molecule: The ``Molecule`` used for the frequency calculation.
+
+        Returns:
+            ``VibrationalData`` or ``None`` if prerequisites are missing.
+        """
+        try:
+            import numpy as np
+            from plotlymol3d import VibrationalData, VibrationalMode
+        except ImportError:
+            return None
+
+        displacements = getattr(freq_result, "displacements", None)
+        if displacements is None:
+            return None
+
+        freqs = freq_result.frequencies_cm1
+        intensities = freq_result.ir_intensities
+        n_modes = len(freqs)
+
+        coords = np.array(molecule.coordinates, dtype=float)
+
+        # Map element symbols to atomic numbers using a common-elements table.
+        # ASE is not required — this covers all elements students will encounter.
+        _Z = {
+            "H": 1,
+            "He": 2,
+            "Li": 3,
+            "Be": 4,
+            "B": 5,
+            "C": 6,
+            "N": 7,
+            "O": 8,
+            "F": 9,
+            "Ne": 10,
+            "Na": 11,
+            "Mg": 12,
+            "Al": 13,
+            "Si": 14,
+            "P": 15,
+            "S": 16,
+            "Cl": 17,
+            "Ar": 18,
+            "K": 19,
+            "Ca": 20,
+            "Br": 35,
+            "I": 53,
+        }
+        atomic_numbers: List[int] = [_Z.get(sym, 0) for sym in molecule.atoms]
+
+        modes = []
+        for i in range(n_modes):
+            freq = freqs[i]
+            ir_inten = intensities[i] if i < len(intensities) else None
+            displ = np.array(displacements[i], dtype=float)
+            modes.append(
+                VibrationalMode(
+                    mode_number=i + 1,
+                    frequency=float(freq),
+                    ir_intensity=ir_inten,
+                    displacement_vectors=displ,
+                    is_imaginary=freq < 0,
+                )
+            )
+
+        return VibrationalData(
+            coordinates=coords,
+            atomic_numbers=atomic_numbers,
+            modes=modes,
+            source_file="quantui_freq_calc",
+            program="pyscf",
+        )
+
+    def _show_vib_animation(self, freq_result, molecule) -> None:
+        """Populate the vibrational animation accordion after a Frequency result.
+
+        Builds a ``VibrationalData`` from the result, populates the mode selector
+        dropdown, and renders the animation for the first non-trivial mode.
+        No-op if plotlyMol is unavailable or displacements are missing.
+        """
+        vib_data = self._build_vib_data_from_freq_result(freq_result, molecule)
+        if vib_data is None:
+            return
+
+        freqs = freq_result.frequencies_cm1
+        if not freqs:
+            return
+
+        # Build dropdown options: one entry per mode with frequency label.
+        # Skip near-zero translation/rotation modes (|ν| < 10 cm⁻¹).
+        options = []
+        for m in vib_data.modes:
+            freq_val = m.frequency
+            if abs(freq_val) < 10:
+                continue
+            label = (
+                f"Mode {m.mode_number}: {freq_val:.1f} cm⁻¹"
+                if freq_val >= 0
+                else f"Mode {m.mode_number}: {freq_val:.1f} cm⁻¹ (imaginary, TS?)"
+            )
+            options.append((label, m.mode_number))
+
+        if not options:
+            return
+
+        self.vib_mode_dd.options = options
+        self.vib_mode_dd.value = options[0][1]
+
+        # Store vib_data for callback use.
+        self._last_vib_data = vib_data
+        self._last_vib_molecule = molecule
+
+        # Render the first selected mode.
+        self._render_vib_mode(vib_data, molecule, options[0][1])
+
+        # Reveal the accordion (collapsed by default).
+        self.vib_accordion.selected_index = None
+        self.vib_accordion.layout.display = ""
+
+    def _render_vib_mode(self, vib_data, molecule, mode_number: int) -> None:
+        """Render vibrational animation for the given mode into ``vib_output``.
+
+        Safe to call from background thread via ``with output:`` context.
+        """
+        try:
+            from IPython.display import display as _ipy_display
+            from plotlymol3d import create_vibration_animation, xyzblock_to_rdkitmol
+        except ImportError:
+            return
+
+        # Build an RDKit mol for bond connectivity (required by animation function).
+        xyzblock = (
+            f"{len(molecule.atoms)}\n{molecule.get_formula()}\n"
+            f"{molecule.to_xyz_string()}"
+        )
+        try:
+            rdmol = xyzblock_to_rdkitmol(xyzblock, charge=molecule.charge)
+        except Exception:
+            return
+
+        try:
+            anim_fig = create_vibration_animation(
+                vib_data=vib_data,
+                mode_number=mode_number,
+                mol=rdmol,
+                amplitude=0.4,
+                n_frames=20,
+                mode="ball+stick",
+                resolution=12,
+            )
+            anim_fig.update_layout(height=420)
+        except Exception:
+            return
+
+        self.vib_output.clear_output()
+        with self.vib_output:
+            _ipy_display(anim_fig)
+
+    def _on_vib_mode_changed(self, change) -> None:
+        """Re-render vib animation when the mode dropdown changes."""
+        mode_number = change["new"]
+        vib_data = getattr(self, "_last_vib_data", None)
+        molecule = getattr(self, "_last_vib_molecule", None)
+        if vib_data is None or molecule is None:
+            return
+        threading.Thread(
+            target=self._render_vib_mode,
+            args=(vib_data, molecule, mode_number),
+            daemon=True,
+        ).start()
+
     def _do_run(self) -> None:
         """Main calculation dispatch — runs in a background thread."""
         mol = self._molecule
@@ -1484,6 +1773,16 @@ class QuantUIApp:
 
             self.result_output.append_display_data(HTML(result_html))
             self.run_status.value = f"Done in {_elapsed:.1f} s."
+
+            # Show 3D structure in the result panel
+            _viz_mol = result.molecule if ct == "Geometry Opt" else calc_mol
+            self._show_result_3d(_viz_mol)
+
+            # Show calc-type-specific extra panels
+            if ct == "Geometry Opt":
+                self._show_opt_trajectory(result)
+            elif ct == "Frequency":
+                self._show_vib_animation(result, calc_mol)
 
             self.step_progress.complete(2)
             self.step_progress.complete(3)

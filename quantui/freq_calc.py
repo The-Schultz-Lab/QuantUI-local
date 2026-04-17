@@ -75,6 +75,13 @@ class FreqResult:
     frequencies_cm1: List[float] = field(default_factory=list)
     ir_intensities: List[float] = field(default_factory=list)
     zpve_hartree: float = 0.0
+    displacements: Optional[List] = None
+    """Normalized displacement vectors from PySCF harmonic analysis.
+
+    Shape: ``(n_modes, n_atoms, 3)`` stored as a nested Python list.
+    ``None`` if the Hessian calculation failed or PySCF version does not
+    provide ``norm_mode``.
+    """
 
     @property
     def energy_ev(self) -> float:
@@ -194,6 +201,7 @@ def run_freq_calc(
     frequencies_cm1: List[float] = []
     ir_intensities: List[float] = []
     zpve_hartree: float = 0.0
+    displacements: Optional[List] = None
 
     try:
         hess_obj = mf.Hessian()
@@ -214,6 +222,25 @@ def run_freq_calc(
 
         # ZPVE = ½ · Σ ν_i (positive modes only), converted cm⁻¹ → Hartree
         zpve_hartree = sum(0.5 * f * _CM1_TO_HARTREE for f in frequencies_cm1 if f > 0)
+
+        # Normalized displacement vectors: shape (n_modes, n_atoms, 3).
+        # Stored as a nested Python list for JSON-friendliness and to avoid
+        # a hard numpy dependency in the dataclass.
+        try:
+            import numpy as _np
+
+            norm_mode = freq_info.get("norm_mode")
+            if norm_mode is not None:
+                # norm_mode has shape (n_modes, n_atoms*3) or (n_modes, n_atoms, 3);
+                # reshape to (n_modes, n_atoms, 3) if needed.
+                nm = _np.array(norm_mode, dtype=float)
+                n_modes_out = nm.shape[0]
+                n_atoms = len(molecule.atoms)
+                if nm.ndim == 2:
+                    nm = nm.reshape(n_modes_out, n_atoms, 3)
+                displacements = nm.tolist()
+        except Exception:
+            displacements = None
 
         # IR intensities — best-effort; silently omitted if unavailable
         try:
@@ -241,4 +268,5 @@ def run_freq_calc(
         frequencies_cm1=frequencies_cm1,
         ir_intensities=ir_intensities,
         zpve_hartree=zpve_hartree,
+        displacements=displacements,
     )
