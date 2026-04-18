@@ -2,7 +2,7 @@
 
 > Stable project context for GitHub Copilot, Claude, and other AI coding assistants.
 > Describes what the project IS and how it is built — not where development currently
-> stands (see `planning/TODO/STATUS.md` for that). Update this file when
+> stands (see your project STATUS.md for current session state). Update this file when
 > architecture or conventions change, not every session.
 
 ---
@@ -122,8 +122,8 @@ notebooks/molecule_computations.ipynb
 | `quantui/freq_calc.py` | `run_freq_calc()` — vibrational analysis via `pyscf.hessian` |
 | `quantui/tddft_calc.py` | `run_tddft_calc()` — excited states via `pyscf.tddft` |
 | `notebooks/molecule_computations.ipynb` | Thin launcher — 3 cells only (do not add logic here) |
-| `planning/TODO/STATUS.md` | **Read this first every session** — current state, git log, open tasks |
-| `planning/feature-requests.md` | FR backlog |
+| your project `STATUS.md` | **Read this first every session** — current state, git log, open tasks |
+| your project `feature-requests.md` | FR backlog |
 
 ---
 
@@ -207,6 +207,12 @@ __init__()
 | `self.method_dd` | `widgets.Dropdown` | Selected QC method |
 | `self.basis_dd` | `widgets.Dropdown` | Selected basis set |
 | `self.calc_type_dd` | `widgets.Dropdown` | Single Point / Geo Opt / Frequency / UV-Vis |
+| `self.result_viz_output` | `widgets.Output` | 3D molecule rendered after every calc (M2.1) |
+| `self.traj_accordion` | `widgets.Accordion` | Geo Opt trajectory viewer; hidden unless Geo Opt ran (M2.2) |
+| `self.vib_accordion` | `widgets.Accordion` | Vibrational mode viewer; hidden unless Frequency ran (M2.3) |
+| `self.vib_mode_dd` | `widgets.Dropdown` | Mode selector inside `vib_accordion` |
+| `self._last_vib_data` | `Optional[VibrationalData]` | plotlyMol data object for current freq result |
+| `self._last_vib_molecule` | `Optional[Molecule]` | Molecule paired with `_last_vib_data` |
 
 ### Molecule collapse/expand pattern
 
@@ -395,4 +401,4 @@ Never make independent architectural changes in this repo — propose them in `Q
 ## Active Development Branch
 
 Branch: `app-restructure` — FR-012 App Module Refactor in progress.
-See `planning/TODO/STATUS.md` for current phase and uncommitted changes.
+See your project STATUS.md for current phase and uncommitted changes.

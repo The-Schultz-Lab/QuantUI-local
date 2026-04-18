@@ -10,6 +10,8 @@ Created: 2026-02-17
 """
 
 import logging
+import os
+import tempfile
 from typing import Literal, cast
 
 logger = logging.getLogger(__name__)
@@ -203,22 +205,30 @@ def visualize_molecule_plotlymol(
         f"(mode={mode}, resolution={resolution})"
     )
 
-    # Create visualization using PlotlyMol
-    fig = draw_3D_rep(
-        xyzblock=xyz_string,
-        charge=charge,
-        mode=mode,
-        resolution=resolution,
-        bgcolor=bgcolor,
+    # draw_3D_rep takes a file path, not an in-memory string
+    full_xyz = f"{len(molecule.atoms)}\n\n{xyz_string}\n"
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".xyz", delete=False, encoding="utf-8"
     )
+    try:
+        tmp.write(full_xyz)
+        tmp.close()
+        fig = draw_3D_rep(
+            xyzfile=tmp.name,
+            charge=charge,
+            mode=mode,
+            resolution=resolution,
+        )
+    finally:
+        os.unlink(tmp.name)
 
-    # Set figure size and title
     fig.update_layout(
         width=width,
         height=height,
         title=f"{molecule.get_formula()} - {mode.replace('+', ' & ').title()}",
+        paper_bgcolor=bgcolor,
+        scene=dict(bgcolor=bgcolor),
     )
-
     return fig
 
 

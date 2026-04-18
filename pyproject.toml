@@ -31,6 +31,7 @@ dependencies = [
     "py3Dmol>=2.0.0",
     "matplotlib>=3.7.0",
     "plotly>=5.0.0",
+    "plotlymol>=0.2.1",
 ]
 
 [tool.setuptools]
@@ -125,6 +126,7 @@ module = [
     "psutil",
     "ase.*",
     "rdkit.*",
+    "plotlymol3d.*",
 ]
 ignore_missing_imports = true
 
