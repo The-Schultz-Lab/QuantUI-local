@@ -373,6 +373,7 @@ class QuantUIApp:
         self.result_output = widgets.Output()
         self.result_viz_output = widgets.Output()
         self.comparison_output = widgets.Output()
+        self._last_result_dir: Optional[Path] = None
 
         # 3D viewer backend selector — shown only when both backends are installed
         self._viz_backend: _VizBackend = _DEFAULT_VIZ_BACKEND
@@ -735,6 +736,21 @@ class QuantUIApp:
         self.vib_accordion.set_title(0, "Vibrational Mode Viewer")
         self.vib_accordion.selected_index = None  # collapsed by default
 
+        # Result directory path label (hidden until a calculation saves)
+        self._result_dir_label = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none", margin="4px 0 0 0"),
+        )
+
+        # Full output log accordion (hidden until a calculation saves)
+        self._result_log_output = widgets.Output()
+        self._result_log_accordion = widgets.Accordion(
+            children=[self._result_log_output],
+            layout=widgets.Layout(display="none", margin="8px 0 0 0"),
+        )
+        self._result_log_accordion.set_title(0, "Full output log (pyscf.log)")
+        self._result_log_accordion.selected_index = None  # collapsed by default
+
         self.results_panel = widgets.VBox(
             [
                 widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
@@ -742,6 +758,8 @@ class QuantUIApp:
                 self.result_viz_output,
                 self.traj_accordion,
                 self.vib_accordion,
+                self._result_dir_label,
+                self._result_log_accordion,
             ]
         )
 
@@ -1208,6 +1226,11 @@ class QuantUIApp:
         self.result_viz_output.clear_output()
         self.traj_accordion.layout.display = "none"
         self.vib_accordion.layout.display = "none"
+        self._result_dir_label.value = ""
+        self._result_dir_label.layout.display = "none"
+        self._result_log_accordion.layout.display = "none"
+        self._result_log_accordion.selected_index = None
+        self._result_log_output.clear_output()
         threading.Thread(target=self._do_run, daemon=True).start()
 
     def _on_clear_log(self, btn) -> None:
@@ -1471,6 +1494,35 @@ class QuantUIApp:
         self.result_viz_output.clear_output()
         with self.result_viz_output:
             _display_molecule(molecule, backend=self._viz_backend)
+
+    def _show_result_log(self, saved_dir: Path, log_text: str) -> None:
+        """Populate the result-directory label and output-log accordion.
+
+        Safe to call from a background thread.
+        """
+        # Path label
+        self._result_dir_label.value = (
+            f'<span style="font-size:12px;color:#555;font-family:monospace">'
+            f"Saved to: {saved_dir}</span>"
+        )
+        self._result_dir_label.layout.display = ""
+
+        # Log accordion — prefer on-disk file (written by save_result) over in-memory string
+        _log_path = saved_dir / "pyscf.log"
+        try:
+            log_content = _log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            log_content = log_text
+
+        with self._result_log_output:
+            display(
+                HTML(
+                    f'<pre style="font-size:11px;max-height:300px;overflow-y:auto;'
+                    f'white-space:pre-wrap;word-break:break-all;margin:0;padding:6px">'
+                    f"{log_content}</pre>"
+                )
+            )
+        self._result_log_accordion.layout.display = ""
 
     def _show_opt_trajectory(self, opt_result) -> None:
         """Render geo-opt trajectory animation and energy chart in the trajectory panel.
@@ -1837,18 +1889,20 @@ class QuantUIApp:
             try:
                 from quantui import save_result
 
-                save_result(
+                _saved_dir = save_result(
                     result,
                     pyscf_log=log.getvalue(),
                     calc_type=save_type,
                     spectra=save_spectra,
                 )
+                self._last_result_dir = _saved_dir
                 self._refresh_results_browser()
                 self._populate_compare_list()
                 self._update_log_panel(
                     log.getvalue(),
                     f"{result.formula}  {self.method_dd.value}/{self.basis_dd.value}",
                 )
+                self._show_result_log(_saved_dir, log.getvalue())
             except Exception:
                 pass
 

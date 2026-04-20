@@ -340,3 +340,76 @@ class TestAvailabilityFlags:
 
         app = QuantUIApp()
         assert app._preopt_available == _PREOPT_AVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# M3.3 — result log accordion and directory label
+# ---------------------------------------------------------------------------
+
+
+class TestResultLogAccordion:
+    """_result_log_accordion and _result_dir_label exist and start hidden."""
+
+    def test_log_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_result_log_accordion")
+        assert isinstance(app._result_log_accordion, widgets.Accordion)
+
+    def test_log_accordion_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._result_log_accordion.layout.display == "none"
+
+    def test_log_accordion_initially_collapsed(self):
+        app = QuantUIApp()
+        assert app._result_log_accordion.selected_index is None
+
+    def test_result_dir_label_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_result_dir_label")
+        assert isinstance(app._result_dir_label, widgets.HTML)
+
+    def test_result_dir_label_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._result_dir_label.layout.display == "none"
+
+    def test_last_result_dir_initially_none(self):
+        app = QuantUIApp()
+        assert app._last_result_dir is None
+
+    def test_on_run_clicked_clears_log(self):
+        """_on_run_clicked must hide log accordion and clear dir label."""
+        app = QuantUIApp()
+        # Simulate a previous result being present
+        app._result_log_accordion.layout.display = ""
+        app._result_dir_label.layout.display = ""
+        app._result_dir_label.value = "Saved to: /some/path"
+
+        with patch.object(app, "_do_run"):
+            app._on_run_clicked(None)
+
+        assert app._result_log_accordion.layout.display == "none"
+        assert app._result_dir_label.layout.display == "none"
+        assert app._result_dir_label.value == ""
+
+    def test_show_result_log_populates_widgets(self, tmp_path):
+        """_show_result_log() sets dir label and reveals accordion."""
+        log_text = "SCF converged in 10 cycles."
+        log_file = tmp_path / "pyscf.log"
+        log_file.write_text(log_text, encoding="utf-8")
+
+        app = QuantUIApp()
+        app._show_result_log(tmp_path, log_text)
+
+        assert str(tmp_path) in app._result_dir_label.value
+        assert app._result_dir_label.layout.display == ""
+        assert app._result_log_accordion.layout.display == ""
+
+    def test_show_result_log_falls_back_to_string(self, tmp_path):
+        """_show_result_log() uses in-memory log_text if pyscf.log absent."""
+        log_text = "fallback log content"
+        app = QuantUIApp()
+        empty_dir = tmp_path / "no_log_here"
+        empty_dir.mkdir()
+        app._show_result_log(empty_dir, log_text)
+
+        assert app._result_log_accordion.layout.display == ""
