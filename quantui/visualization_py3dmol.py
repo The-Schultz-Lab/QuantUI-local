@@ -276,10 +276,10 @@ def visualize_molecule(
     """
     # Determine backend
     if backend == "auto":
-        if PY3DMOL_AVAILABLE:
-            backend = "py3dmol"
-        elif PLOTLYMOL_AVAILABLE:
+        if PLOTLYMOL_AVAILABLE:
             backend = "plotlymol"
+        elif PY3DMOL_AVAILABLE:
+            backend = "py3dmol"
         else:
             raise ImportError(
                 "No visualization backend available. Install one of:\n"

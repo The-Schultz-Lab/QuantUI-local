@@ -39,10 +39,28 @@ logger = logging.getLogger(__name__)
 # 1 cm^-1 = h·c·100 / E_h  (NIST 2018 CODATA)
 _CM1_TO_HARTREE: float = 4.556335252912e-6
 
+# Exact: 1 Hartree = HARTREE_TO_EV * e * N_A joules/mol
+_HARTREE_TO_JMOL: float = 2625499.6  # J/mol per Hartree (NIST 2018 CODATA)
+
 
 # ============================================================================
 # Result dataclass
 # ============================================================================
+
+
+@dataclass
+class ThermoData:
+    """Thermochemical data from the harmonic approximation at 298.15 K / 1 atm.
+
+    All energies are in Hartrees; entropy is in J/(mol·K).
+    H and G include the SCF electronic energy.
+    """
+
+    zpve_hartree: float
+    H_hartree: float
+    S_jmol: float
+    G_hartree: float
+    temperature_k: float = 298.15
 
 
 @dataclass
@@ -75,6 +93,7 @@ class FreqResult:
     frequencies_cm1: List[float] = field(default_factory=list)
     ir_intensities: List[float] = field(default_factory=list)
     zpve_hartree: float = 0.0
+    thermo: Optional[ThermoData] = None
     displacements: Optional[List] = None
     """Normalized displacement vectors from PySCF harmonic analysis.
 
@@ -202,6 +221,7 @@ def run_freq_calc(
     ir_intensities: List[float] = []
     zpve_hartree: float = 0.0
     displacements: Optional[List] = None
+    thermo_data: Optional[ThermoData] = None
 
     try:
         hess_obj = mf.Hessian()
@@ -249,6 +269,27 @@ def run_freq_calc(
         except Exception:
             ir_intensities = []
 
+        # Thermochemistry at 298.15 K / 1 atm — best-effort
+        try:
+            import numpy as _np
+
+            _freq_au = freq_info.get("freq_au")
+            if _freq_au is None:
+                _freq_au = _np.array(frequencies_cm1) * _CM1_TO_HARTREE
+            _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15, 101325)
+            _H = float(_tout["H"])
+            _S = float(_tout["S"])  # J/(mol·K)
+            _zpve = float(_tout.get("ZPE", zpve_hartree))
+            _G = _H - 298.15 * _S / _HARTREE_TO_JMOL
+            thermo_data = ThermoData(
+                zpve_hartree=_zpve,
+                H_hartree=_H,
+                S_jmol=_S,
+                G_hartree=_G,
+            )
+        except Exception:
+            pass
+
     except Exception as exc:
         logger.warning("Hessian/frequency computation failed: %s", exc)
         if progress_stream is not None:
@@ -268,5 +309,6 @@ def run_freq_calc(
         frequencies_cm1=frequencies_cm1,
         ir_intensities=ir_intensities,
         zpve_hartree=zpve_hartree,
+        thermo=thermo_data,
         displacements=displacements,
     )

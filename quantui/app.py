@@ -19,7 +19,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 import ipywidgets as widgets
 from IPython import get_ipython
@@ -56,12 +56,26 @@ except ImportError:
     ASE_AVAILABLE = False
 
 try:
-    from quantui.visualization_py3dmol import display_molecule as _display_molecule
+    from quantui.visualization_py3dmol import (
+        PLOTLYMOL_AVAILABLE as _PLOTLYMOL_VIZ,
+    )
+    from quantui.visualization_py3dmol import (
+        PY3DMOL_AVAILABLE as _PY3DMOL_VIZ,
+    )
+    from quantui.visualization_py3dmol import (
+        display_molecule as _display_molecule,
+    )
 
     VISUALIZATION_AVAILABLE = True
 except ImportError:
     VISUALIZATION_AVAILABLE = False
     _display_molecule = None  # type: ignore[assignment]
+    _PLOTLYMOL_VIZ = False
+    _PY3DMOL_VIZ = False
+
+_VizBackend = Literal["auto", "py3dmol", "plotlymol"]
+_BOTH_VIZ_AVAILABLE: bool = _PLOTLYMOL_VIZ and _PY3DMOL_VIZ
+_DEFAULT_VIZ_BACKEND: _VizBackend = "plotlymol" if _PLOTLYMOL_VIZ else "py3dmol"
 
 try:
     from quantui.pubchem import (
@@ -359,6 +373,19 @@ class QuantUIApp:
         self.result_output = widgets.Output()
         self.result_viz_output = widgets.Output()
         self.comparison_output = widgets.Output()
+
+        # 3D viewer backend selector — shown only when both backends are installed
+        self._viz_backend: _VizBackend = _DEFAULT_VIZ_BACKEND
+        if _BOTH_VIZ_AVAILABLE:
+            self.viz_backend_toggle = widgets.ToggleButtons(
+                options=[("PlotlyMol", "plotlymol"), ("py3Dmol", "py3dmol")],
+                value=_DEFAULT_VIZ_BACKEND,
+                tooltips=["Plotly-based interactive viewer", "WebGL viewer (py3Dmol)"],
+                style={"button_width": "90px"},
+                layout=widgets.Layout(margin="2px 0 0 0"),
+            )
+        else:
+            self.viz_backend_toggle = None  # type: ignore[assignment]
         self.notes_output = widgets.Output()
         self.perf_estimate_html = widgets.HTML()
 
@@ -597,8 +624,15 @@ class QuantUIApp:
             [self.mol_summary_compact, self.change_mol_btn],
             layout=widgets.Layout(align_items="center", gap="12px", padding="6px 0"),
         )
+        _mol_container_children = [
+            self.mol_input_expanded,
+            self.mol_info_html,
+            self.viz_output,
+        ]
+        if self.viz_backend_toggle is not None:
+            _mol_container_children.append(self.viz_backend_toggle)
         self.mol_input_container = widgets.VBox(
-            [self.mol_input_expanded, self.mol_info_html, self.viz_output],
+            _mol_container_children,
             layout=widgets.Layout(margin="0 0 4px 0"),
         )
 
@@ -989,6 +1023,9 @@ class QuantUIApp:
     # ══ CALLBACK WIRING ══════════════════════════════════════════════════════
 
     def _wire_callbacks(self) -> None:
+        # 3D viewer backend toggle (only wired when both backends are available)
+        if self.viz_backend_toggle is not None:
+            self.viz_backend_toggle.observe(self._on_viz_backend_changed, names="value")
         # Theme
         self.theme_btn.observe(self._on_theme_changed, names="value")
         # Molecule input
@@ -1043,6 +1080,13 @@ class QuantUIApp:
         if css:
             with self._theme_style:
                 display(HTML(css))
+
+    def _on_viz_backend_changed(self, change) -> None:
+        self._viz_backend = change["new"]  # type: ignore[assignment]
+        if self._molecule is not None and _display_molecule is not None:
+            self.viz_output.clear_output()
+            with self.viz_output:
+                _display_molecule(self._molecule, backend=self._viz_backend)
 
     # ── Molecule input ────────────────────────────────────────────────────
 
@@ -1120,11 +1164,10 @@ class QuantUIApp:
         threading.Thread(target=_do, daemon=True).start()
 
     def _on_expand_mol_input(self, btn) -> None:
-        self.mol_input_container.children = [
-            self.mol_input_expanded,
-            self.mol_info_html,
-            self.viz_output,
-        ]
+        _children = [self.mol_input_expanded, self.mol_info_html, self.viz_output]
+        if self.viz_backend_toggle is not None:
+            _children.append(self.viz_backend_toggle)
+        self.mol_input_container.children = _children
 
     # ── Calc type ─────────────────────────────────────────────────────────
 
@@ -1369,7 +1412,7 @@ class QuantUIApp:
         self.viz_output.clear_output()
         if _display_molecule is not None:
             with self.viz_output:
-                _display_molecule(mol)
+                _display_molecule(mol, backend=self._viz_backend)
 
         self._update_notes()
 
@@ -1383,7 +1426,10 @@ class QuantUIApp:
         self._update_estimate()
 
         # Collapse molecule input to compact view
-        self.mol_input_container.children = [self.mol_input_collapsed, self.viz_output]
+        _collapsed_children = [self.mol_input_collapsed, self.viz_output]
+        if self.viz_backend_toggle is not None:
+            _collapsed_children.append(self.viz_backend_toggle)
+        self.mol_input_container.children = _collapsed_children
 
     def _queue_main_thread_callback(self, callback, *args, **kwargs) -> None:
         """Run a callback on the notebook/kernel thread when possible."""
@@ -1424,7 +1470,7 @@ class QuantUIApp:
             return
         self.result_viz_output.clear_output()
         with self.result_viz_output:
-            _display_molecule(molecule)
+            _display_molecule(molecule, backend=self._viz_backend)
 
     def _show_opt_trajectory(self, opt_result) -> None:
         """Render geo-opt trajectory animation and energy chart in the trajectory panel.
@@ -2250,12 +2296,29 @@ class QuantUIApp:
             f'<td style="color:#000">{r.zpve_hartree:.6f} Ha '
             f"({r.zpve_hartree * 27.211386245988:.4f} eV)</td></tr>"
         )
+        _thermo_rows = ""
+        _thermo = getattr(r, "thermo", None)
+        if _thermo is not None:
+            _kj = 2625.5  # kJ/mol per Hartree
+            _thermo_rows = (
+                f'<tr><td colspan="2" style="padding:6px 0 2px 0;color:#666;'
+                f'font-size:12px;font-style:italic">'
+                f"&#8212; Thermochemistry at {_thermo.temperature_k:.0f} K / 1 atm &#8212;"
+                f"</td></tr>"
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">H (298 K)</td>'
+                f'<td style="color:#000">{_thermo.H_hartree:.6f} Ha</td></tr>'
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">S (298 K)</td>'
+                f'<td style="color:#000">{_thermo.S_jmol:.2f} J/(mol·K)</td></tr>'
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">G (298 K)</td>'
+                f'<td style="color:#000">{_thermo.G_hartree:.6f} Ha'
+                f" ({_thermo.G_hartree * _kj:.2f} kJ/mol)</td></tr>"
+            )
         return (
             f'<div style="background:#f0fff0;border-left:4px solid #4CAF50;'
             f'padding:10px 14px;border-radius:4px;margin:6px 0">'
             f"<b>Frequency Analysis &mdash; {r.formula} ({r.method}/{r.basis})</b>"
             f'<table style="margin-top:8px;font-size:14px;border-collapse:collapse">'
-            f"{_rows}</table></div>"
+            f"{_rows}{_thermo_rows}</table></div>"
         )
 
     def _format_tddft_result(self, r) -> str:
