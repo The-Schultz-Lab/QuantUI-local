@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
-from typing import IO, Optional
+from typing import IO, List, Optional
 
 from .molecule import Molecule
 
@@ -64,6 +64,9 @@ class SessionResult:
     method: str
     basis: str
     formula: str
+    atom_symbols: Optional[List[str]] = None
+    mulliken_charges: Optional[List[float]] = None
+    dipole_moment_debye: Optional[float] = None
 
     @property
     def energy_ev(self) -> float:
@@ -225,6 +228,22 @@ def run_in_session(
     except Exception:
         pass  # gap stays None — non-fatal
 
+    mulliken_charges: Optional[List[float]] = None
+    dipole_moment_debye: Optional[float] = None
+    if method_upper != "UHF":
+        try:
+            _, chg = mf.mulliken_pop(verbose=0)
+            mulliken_charges = [float(c) for c in chg]
+        except Exception:
+            pass
+        try:
+            import numpy as _np2
+
+            dip = mf.dip_moment(verbose=0)
+            dipole_moment_debye = float(_np2.linalg.norm(dip))
+        except Exception:
+            pass
+
     formula = molecule.get_formula()
     logger.info(
         "Session calculation: %s %s/%s  E=%.8f Ha  converged=%s  iters=%d",
@@ -244,4 +263,7 @@ def run_in_session(
         method=method,
         basis=basis,
         formula=formula,
+        atom_symbols=list(molecule.atoms),
+        mulliken_charges=mulliken_charges,
+        dipole_moment_debye=dipole_moment_debye,
     )

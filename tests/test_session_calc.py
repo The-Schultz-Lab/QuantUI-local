@@ -137,6 +137,70 @@ class TestSessionResultDataclass:
         result = _make_result(homo_lumo_gap_ev=None)
         assert result.homo_lumo_gap_ev is None
 
+    def test_mulliken_charges_default_none(self):
+        result = _make_result()
+        assert result.mulliken_charges is None
+
+    def test_dipole_moment_default_none(self):
+        result = _make_result()
+        assert result.dipole_moment_debye is None
+
+    def test_atom_symbols_default_none(self):
+        result = _make_result()
+        assert result.atom_symbols is None
+
+    def test_mulliken_charges_stored(self):
+        result = _make_result(
+            mulliken_charges=[-0.66, 0.33, 0.33],
+            atom_symbols=["O", "H", "H"],
+        )
+        assert result.mulliken_charges == pytest.approx([-0.66, 0.33, 0.33])
+        assert result.atom_symbols == ["O", "H", "H"]
+
+    def test_dipole_moment_stored(self):
+        result = _make_result(dipole_moment_debye=1.85)
+        assert result.dipole_moment_debye == pytest.approx(1.85)
+
+
+class TestMullikenDipolePySCF:
+    """PySCF-backed tests for Mulliken charges and dipole moment extraction."""
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_rhf_populates_mulliken_charges(self):
+        from quantui.session_calc import run_in_session
+
+        result = run_in_session(_water(), method="RHF", basis="STO-3G", verbose=0)
+        assert result.mulliken_charges is not None
+        assert len(result.mulliken_charges) == 3
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_rhf_populates_dipole_moment(self):
+        from quantui.session_calc import run_in_session
+
+        result = run_in_session(_water(), method="RHF", basis="STO-3G", verbose=0)
+        assert result.dipole_moment_debye is not None
+        assert result.dipole_moment_debye > 0
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_rhf_atom_symbols_match_molecule(self):
+        from quantui.session_calc import run_in_session
+
+        result = run_in_session(_water(), method="RHF", basis="STO-3G", verbose=0)
+        assert result.atom_symbols == ["O", "H", "H"]
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_uhf_leaves_charges_and_dipole_none(self):
+        from quantui.session_calc import run_in_session
+
+        mol = Molecule(["H"], [[0.0, 0.0, 0.0]], charge=0, multiplicity=2)
+        result = run_in_session(mol, method="UHF", basis="STO-3G", verbose=0)
+        assert result.mulliken_charges is None
+        assert result.dipole_moment_debye is None
+
 
 # ============================================================================
 # Calculation tests — Linux/WSL with pyscf

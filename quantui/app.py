@@ -2168,12 +2168,29 @@ class QuantUIApp:
                 ("SCF iterations", str(r.n_iterations), "#000"),
             ]
         )
+        _extra = ""
+        _dip = getattr(r, "dipole_moment_debye", None)
+        if _dip is not None:
+            _extra += (
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">Dipole moment</td>'
+                f'<td style="color:#000">{_dip:.4f} D</td></tr>'
+            )
+        _chg = getattr(r, "mulliken_charges", None)
+        _syms = getattr(r, "atom_symbols", None)
+        if _chg is not None and _syms is not None:
+            _charge_str = "  ".join(f"{sym}:{c:+.3f}" for sym, c in zip(_syms, _chg))
+            _extra += (
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444;vertical-align:top">'
+                f"Mulliken charges</td>"
+                f'<td style="color:#000;font-family:monospace;font-size:12px;'
+                f'word-break:break-all">{_charge_str}</td></tr>'
+            )
         return (
             f'<div style="background:#f0fff0;border-left:4px solid #4CAF50;'
             f'padding:10px 14px;border-radius:4px;margin:6px 0">'
             f"<b>{r.formula} &mdash; {r.method}/{r.basis}</b>"
             f'<table style="margin-top:8px;font-size:14px;border-collapse:collapse">'
-            f"{_rows}</table></div>"
+            f"{_rows}{_extra}</table></div>"
         )
 
     def _format_opt_result(self, r) -> str:
