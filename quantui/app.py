@@ -104,6 +104,8 @@ try:
 except (ImportError, AttributeError):
     _PREOPT_AVAILABLE = False
 
+_RDKIT_AVAILABLE: bool = bool(PUBCHEM_AVAILABLE)
+
 # ── Module-level constants ────────────────────────────────────────────────────
 _THEME_HUE: dict = {"Dark": 180}
 
@@ -524,6 +526,32 @@ class QuantUIApp:
             layout=widgets.Layout(width="160px"),
         )
         self.export_status = widgets.Label()
+        _rdkit_tip = (
+            ""
+            if _RDKIT_AVAILABLE
+            else "Requires RDKit (conda install -c conda-forge rdkit)"
+        )
+        self.export_xyz_btn = widgets.Button(
+            description="Export XYZ",
+            icon="download",
+            disabled=True,
+            layout=widgets.Layout(width="130px"),
+        )
+        self.export_mol_btn = widgets.Button(
+            description="Export MOL",
+            icon="download",
+            disabled=True,
+            tooltip=_rdkit_tip,
+            layout=widgets.Layout(width="130px"),
+        )
+        self.export_pdb_btn = widgets.Button(
+            description="Export PDB",
+            icon="download",
+            disabled=True,
+            tooltip=_rdkit_tip,
+            layout=widgets.Layout(width="130px"),
+        )
+        self.struct_export_status = widgets.Label()
 
     # ── Molecule section (Cell 4) ─────────────────────────────────────────
 
@@ -933,6 +961,12 @@ class QuantUIApp:
         )
 
         # Export accordion (Advanced)
+        _rdkit_note = (
+            ""
+            if _RDKIT_AVAILABLE
+            else '<p style="color:#888;font-size:12px;margin:4px 0 0">MOL/PDB export requires RDKit '
+            "(<code>conda install -c conda-forge rdkit</code>).</p>"
+        )
         _export_content = widgets.VBox(
             [
                 widgets.HTML(
@@ -940,10 +974,21 @@ class QuantUIApp:
                     "Download a self-contained PySCF script you can study or run outside the notebook.</p>"
                 ),
                 widgets.HBox([self.export_btn, self.export_status]),
+                widgets.HTML('<hr style="margin:10px 0 8px">'),
+                widgets.HTML(
+                    '<p style="color:#555;font-size:13px;margin:0 0 6px">'
+                    "Download the molecular structure in a standard chemistry file format.</p>"
+                    + _rdkit_note
+                ),
+                widgets.HBox(
+                    [self.export_xyz_btn, self.export_mol_btn, self.export_pdb_btn],
+                    layout=widgets.Layout(flex_flow="row wrap", gap="6px"),
+                ),
+                self.struct_export_status,
             ]
         )
         self.advanced_accordion = widgets.Accordion(children=[_export_content])
-        self.advanced_accordion.set_title(0, "Export Script")
+        self.advanced_accordion.set_title(0, "Export")
         self.advanced_accordion.selected_index = None
 
         # Populate on startup
@@ -1068,6 +1113,9 @@ class QuantUIApp:
         self.accumulate_btn.on_click(self._on_accumulate)
         self.clear_btn.on_click(self._on_clear)
         self.export_btn.on_click(self._on_export)
+        self.export_xyz_btn.on_click(self._on_export_xyz)
+        self.export_mol_btn.on_click(self._on_export_mol)
+        self.export_pdb_btn.on_click(self._on_export_pdb)
         # History
         self.past_dd.observe(self._on_past_dd_changed, names="value")
         self.past_refresh_btn.on_click(self._on_past_refresh)
@@ -1270,6 +1318,123 @@ class QuantUIApp:
         except Exception as exc:
             self.export_status.value = f"Error: {exc}"
 
+    def _on_export_xyz(self, btn) -> None:
+        if self._molecule is None:
+            self.struct_export_status.value = "Load a molecule first."
+            return
+        try:
+            mol, method, basis = self._export_molecule_and_label()
+            fname = f"{mol.get_formula()}_{method}_{basis}.xyz"
+            xyz_body = mol.to_xyz_string()
+            full_xyz = (
+                f"{len(mol.atoms)}\n{mol.get_formula()} {method}/{basis}\n{xyz_body}\n"
+            )
+            dest = (
+                (self._last_result_dir / fname)
+                if self._last_result_dir
+                else Path(fname)
+            )
+            dest.write_text(full_xyz, encoding="utf-8")
+            self.struct_export_status.value = f"Saved: {dest}"
+        except Exception as exc:
+            self.struct_export_status.value = f"Error: {exc}"
+
+    def _on_export_mol(self, btn) -> None:
+        if self._molecule is None:
+            self.struct_export_status.value = "Load a molecule first."
+            return
+        try:
+            from rdkit import Chem
+
+            mol, method, basis = self._export_molecule_and_label()
+            fname = f"{mol.get_formula()}_{method}_{basis}.mol"
+            rdmol = self._molecule_to_rdkit(mol)
+            if rdmol is None:
+                self.struct_export_status.value = "RDKit could not parse the structure."
+                return
+            mol_block = Chem.MolToMolBlock(rdmol)
+            dest = (
+                (self._last_result_dir / fname)
+                if self._last_result_dir
+                else Path(fname)
+            )
+            dest.write_text(mol_block, encoding="utf-8")
+            self.struct_export_status.value = f"Saved: {dest}"
+        except Exception as exc:
+            self.struct_export_status.value = f"Error: {exc}"
+
+    def _on_export_pdb(self, btn) -> None:
+        if self._molecule is None:
+            self.struct_export_status.value = "Load a molecule first."
+            return
+        try:
+            from rdkit import Chem
+
+            mol, method, basis = self._export_molecule_and_label()
+            fname = f"{mol.get_formula()}_{method}_{basis}.pdb"
+            rdmol = self._molecule_to_rdkit(mol)
+            if rdmol is None:
+                self.struct_export_status.value = "RDKit could not parse the structure."
+                return
+            pdb_block = Chem.MolToPDBBlock(rdmol)
+            dest = (
+                (self._last_result_dir / fname)
+                if self._last_result_dir
+                else Path(fname)
+            )
+            dest.write_text(pdb_block, encoding="utf-8")
+            self.struct_export_status.value = f"Saved: {dest}"
+        except Exception as exc:
+            self.struct_export_status.value = f"Error: {exc}"
+
+    def _export_molecule_and_label(self):
+        """Return (molecule, method, basis) for structure export.
+
+        For geo opt results, returns the final optimised geometry.
+        Falls back to the currently loaded molecule for all other calc types.
+        """
+        from quantui.optimizer import OptimizationResult
+
+        r = self._last_result
+        if isinstance(r, OptimizationResult):
+            mol = r.molecule
+        else:
+            assert self._molecule is not None
+            mol = self._molecule
+        method = (
+            getattr(r, "method", self.method_dd.value)
+            if r is not None
+            else self.method_dd.value
+        )
+        basis = (
+            getattr(r, "basis", self.basis_dd.value)
+            if r is not None
+            else self.basis_dd.value
+        )
+        return mol, method, basis
+
+    @staticmethod
+    def _molecule_to_rdkit(mol):
+        """Convert a Molecule to an RDKit Mol with inferred bonds (best-effort)."""
+        try:
+            from rdkit import Chem
+
+            xyz_block = (
+                f"{len(mol.atoms)}\n{mol.get_formula()}\n{mol.to_xyz_string()}\n"
+            )
+            rdmol = Chem.MolFromXYZBlock(xyz_block)
+            if rdmol is None:
+                return None
+            try:
+                from rdkit.Chem import rdDetermineBonds
+
+                rdDetermineBonds.DetermineBonds(rdmol, charge=mol.charge)
+            except Exception:
+                pass
+            return rdmol
+        except Exception:
+            return None
+
     # ── Compare ───────────────────────────────────────────────────────────
 
     def _on_compare_refresh(self, btn) -> None:
@@ -1404,6 +1569,9 @@ class QuantUIApp:
         self._molecule = mol
         self.run_btn.disabled = False
         self.export_btn.disabled = False
+        self.export_xyz_btn.disabled = False
+        self.export_mol_btn.disabled = not _RDKIT_AVAILABLE
+        self.export_pdb_btn.disabled = not _RDKIT_AVAILABLE
 
         try:
             n_e = mol.get_electron_count()

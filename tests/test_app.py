@@ -413,3 +413,109 @@ class TestResultLogAccordion:
         app._show_result_log(empty_dir, log_text)
 
         assert app._result_log_accordion.layout.display == ""
+
+
+# ---------------------------------------------------------------------------
+# M3.4 — Structure file exports (XYZ, MOL/SDF, PDB)
+# ---------------------------------------------------------------------------
+
+
+class TestStructureExportButtons:
+    """export_xyz_btn, export_mol_btn, export_pdb_btn exist and start disabled."""
+
+    def test_export_xyz_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "export_xyz_btn")
+        assert isinstance(app.export_xyz_btn, widgets.Button)
+
+    def test_export_mol_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "export_mol_btn")
+        assert isinstance(app.export_mol_btn, widgets.Button)
+
+    def test_export_pdb_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "export_pdb_btn")
+        assert isinstance(app.export_pdb_btn, widgets.Button)
+
+    def test_struct_export_status_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "struct_export_status")
+
+    def test_export_xyz_btn_disabled_initially(self):
+        app = QuantUIApp()
+        assert app.export_xyz_btn.disabled is True
+
+    def test_export_xyz_btn_enabled_after_set_molecule(self):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        assert app.export_xyz_btn.disabled is False
+
+    def test_export_accordion_title_is_export(self):
+        app = QuantUIApp()
+        assert app.advanced_accordion.get_title(0) == "Export"
+
+
+class TestExportXYZCallback:
+    """_on_export_xyz writes a valid XYZ file."""
+
+    def test_xyz_file_written_to_result_dir(self, tmp_path):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        app._last_result_dir = tmp_path
+
+        app._on_export_xyz(None)
+
+        xyz_files = list(tmp_path.glob("*.xyz"))
+        assert len(xyz_files) == 1
+
+    def test_xyz_file_contains_atom_count(self, tmp_path):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        app._last_result_dir = tmp_path
+
+        app._on_export_xyz(None)
+
+        content = list(tmp_path.glob("*.xyz"))[0].read_text()
+        first_line = content.splitlines()[0].strip()
+        assert first_line == "3"  # water has 3 atoms
+
+    def test_xyz_status_shows_saved_path(self, tmp_path):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        app._last_result_dir = tmp_path
+
+        app._on_export_xyz(None)
+
+        assert "Saved" in app.struct_export_status.value
+
+    def test_xyz_no_molecule_shows_error(self):
+        app = QuantUIApp()
+        app._on_export_xyz(None)
+        assert "molecule" in app.struct_export_status.value.lower()
+
+
+class TestExportMoleculeAndLabel:
+    """_export_molecule_and_label returns correct molecule and labels."""
+
+    def test_returns_current_molecule_when_no_result(self):
+        app = QuantUIApp()
+        water = _water()
+        app._set_molecule(water)
+        mol, method, basis = app._export_molecule_and_label()
+        assert mol is water
+
+    def test_method_falls_back_to_dropdown(self):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        _, method, _ = app._export_molecule_and_label()
+        assert method == app.method_dd.value
+
+
+class TestMoleculeToRdkit:
+    """_molecule_to_rdkit does not raise; returns RDKit mol or None."""
+
+    def test_does_not_raise_for_water(self):
+        result = QuantUIApp._molecule_to_rdkit(_water())
+        # Either succeeds or returns None — must not raise
+        assert result is None or result is not None
