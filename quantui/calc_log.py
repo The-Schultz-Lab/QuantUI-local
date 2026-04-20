@@ -38,6 +38,12 @@ _METHOD_COST: dict[str, float] = {
     "PBE": 2.0,
     "PBE0": 2.5,
     "M06-2X": 3.0,
+    "wB97X-D": 3.0,
+    "CAM-B3LYP": 2.5,
+    "M06-L": 2.0,
+    "HSE06": 2.5,
+    "PBE-D3": 2.1,
+    "MP2": 8.0,
 }
 
 

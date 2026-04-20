@@ -83,7 +83,7 @@ class TestPySCFCalculationInit:
     def test_unsupported_method(self, water_molecule):
         """Test error for unsupported method."""
         with pytest.raises(ValueError, match="not supported"):
-            PySCFCalculation(water_molecule, method="MP2", basis="6-31G")
+            PySCFCalculation(water_molecule, method="CCSD", basis="6-31G")
 
     def test_nonstandard_basis_warning(self, water_molecule, caplog):
         """Test warning for non-standard basis set."""

@@ -13,7 +13,20 @@ from typing import Any, Dict
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Supported quantum chemistry methods
-SUPPORTED_METHODS = ["RHF", "UHF", "B3LYP", "PBE", "PBE0", "M06-2X"]
+SUPPORTED_METHODS = [
+    "RHF",
+    "UHF",
+    "B3LYP",
+    "PBE",
+    "PBE0",
+    "M06-2X",
+    "wB97X-D",
+    "CAM-B3LYP",
+    "M06-L",
+    "HSE06",
+    "PBE-D3",
+    "MP2",
+]
 
 # Educational metadata for each method — shown to students in the UI
 METHOD_INFO = {
@@ -74,6 +87,66 @@ METHOD_INFO = {
         ),
         "use_for": "Organic reaction energies, conformational analysis, barrier heights.",
     },
+    "wB97X-D": {
+        "type": "dft",
+        "label": "wB97X-D — Range-Separated Hybrid + D3 Dispersion",
+        "description": (
+            "Range-separated hybrid functional with empirical D3 dispersion correction. "
+            "Excellent for non-covalent interactions, charge-transfer excitations, "
+            "and systems where long-range exchange matters."
+        ),
+        "use_for": "Non-covalent interactions, excited states, large organic molecules.",
+    },
+    "CAM-B3LYP": {
+        "type": "dft",
+        "label": "CAM-B3LYP — Coulomb-Attenuating B3LYP",
+        "description": (
+            "Range-separated version of B3LYP. More reliable than B3LYP for "
+            "charge-transfer excited states and Rydberg transitions. "
+            "Good general-purpose alternative to B3LYP."
+        ),
+        "use_for": "Charge-transfer states, UV-Vis spectra, long-range interactions.",
+    },
+    "M06-L": {
+        "type": "dft",
+        "label": "M06-L — Local Meta-GGA DFT",
+        "description": (
+            "Local (no HF exchange) Minnesota meta-GGA. Faster than hybrid "
+            "functionals for the same system size. Good for transition metals "
+            "and main-group thermochemistry."
+        ),
+        "use_for": "Larger molecules where hybrid cost is prohibitive; transition metals.",
+    },
+    "HSE06": {
+        "type": "dft",
+        "label": "HSE06 — Screened Hybrid DFT",
+        "description": (
+            "Heyd-Scuseria-Ernzerhof screened hybrid. Uses short-range HF exchange "
+            "only, making it efficient for large systems. Often used for solids; "
+            "also accurate for molecular band gaps."
+        ),
+        "use_for": "Band gaps, large molecules, when PBE0 is too expensive.",
+    },
+    "PBE-D3": {
+        "type": "dft",
+        "label": "PBE-D3 — PBE + D3 Dispersion Correction",
+        "description": (
+            "PBE GGA functional with Grimme's D3BJ empirical dispersion correction. "
+            "Dramatically improves non-covalent interaction energies over plain PBE "
+            "at negligible extra cost."
+        ),
+        "use_for": "Van der Waals complexes, stacking interactions, large organic molecules.",
+    },
+    "MP2": {
+        "type": "wavefunction",
+        "label": "MP2 — 2nd-Order Møller-Plesset",
+        "description": (
+            "Post-HF wavefunction method that adds electron correlation via 2nd-order "
+            "perturbation theory. More accurate than HF for energetics and geometries, "
+            "but scales as O(N⁵). Avoid for molecules with > ~20 heavy atoms."
+        ),
+        "use_for": "Accurate energetics for small closed-shell molecules; bond dissociation.",
+    },
 }
 
 # Supported basis sets
@@ -88,6 +161,30 @@ SUPPORTED_BASIS_SETS = [
     "def2-SVP",
     "def2-TZVP",
 ]
+
+# Implicit solvent options — name → dielectric constant (ε)
+SOLVENT_OPTIONS: Dict[str, float] = {
+    "Water": 78.39,
+    "Ethanol": 24.55,
+    "THF": 7.58,
+    "DMSO": 46.70,
+    "Acetonitrile": 35.69,
+}
+
+# TMS isotropic shielding reference constants for NMR chemical shift computation.
+# Key: "method/basis" → {element: σ_TMS (ppm)}.  δ = σ_TMS − σ_molecule.
+# Source: Cheeseman et al., J. Chem. Phys. 104 (1996) 5497; CCCBDB.
+NMR_REFERENCE_SHIELDINGS: Dict[str, Dict[str, float]] = {
+    "B3LYP/6-31G*": {"H": 31.72, "C": 183.71},
+    "B3LYP/6-311G**": {"H": 31.60, "C": 188.94},
+    "B3LYP/cc-pVDZ": {"H": 31.54, "C": 186.12},
+    "B3LYP/def2-SVP": {"H": 31.65, "C": 184.20},
+    "RHF/6-31G*": {"H": 32.00, "C": 196.00},
+    "RHF/STO-3G": {"H": 30.50, "C": 195.00},
+    "PBE0/6-31G*": {"H": 31.60, "C": 184.50},
+    "PBE/6-31G*": {"H": 31.50, "C": 185.00},
+}
+NMR_DEFAULT_REFERENCE: Dict[str, float] = {"H": 31.72, "C": 183.71}  # B3LYP/6-31G*
 
 # Default calculation settings
 DEFAULT_METHOD = "RHF"

@@ -106,6 +106,29 @@ except (ImportError, AttributeError):
 
 _RDKIT_AVAILABLE: bool = bool(PUBCHEM_AVAILABLE)
 
+from quantui.benchmarks import (  # noqa: E402
+    BENCHMARK_SUITE as _BENCHMARK_SUITE,
+)
+from quantui.benchmarks import (  # noqa: E402
+    load_last_calibration as _load_last_calibration_raw,
+)
+
+
+def _load_last_calibration_label() -> str:
+    """Return a human-readable timestamp of the last calibration, or ''."""
+    data = _load_last_calibration_raw()
+    if data is None:
+        return ""
+    ts = str(data.get("timestamp", ""))
+    try:
+        from datetime import datetime
+
+        dt = datetime.fromisoformat(ts).astimezone()
+        return dt.strftime("%Y-%m-%d %H:%M %Z")
+    except Exception:
+        return ts[:19] if ts else ""
+
+
 # ── Module-level constants ────────────────────────────────────────────────────
 _THEME_HUE: dict = {"Dark": 180}
 
@@ -436,9 +459,31 @@ class QuantUIApp:
             layout=widgets.Layout(width="400px"),
         )
 
+        # Implicit solvent (PCM)
+        from quantui.config import SOLVENT_OPTIONS as _SOLVENT_OPTS
+
+        self.solvent_cb = widgets.Checkbox(
+            value=False,
+            description="Implicit solvent (PCM)",
+            layout=widgets.Layout(width="240px"),
+        )
+        self.solvent_dd = widgets.Dropdown(
+            options=list(_SOLVENT_OPTS.keys()),
+            value="Water",
+            description="Solvent:",
+            style={"description_width": "70px"},
+            layout=widgets.Layout(width="200px", display="none"),
+        )
+
         # Calculation type + extra options
         self.calc_type_dd = widgets.Dropdown(
-            options=["Single Point", "Geometry Opt", "Frequency", "UV-Vis (TD-DFT)"],
+            options=[
+                "Single Point",
+                "Geometry Opt",
+                "Frequency",
+                "UV-Vis (TD-DFT)",
+                "NMR Shielding",
+            ],
             value="Single Point",
             description="Calc. Type:",
             style={"description_width": "100px"},
@@ -696,6 +741,10 @@ class QuantUIApp:
                 self.calc_type_dd,
                 self.calc_extra_opts,
                 self.preopt_cb,
+                widgets.HBox(
+                    [self.solvent_cb, self.solvent_dd],
+                    layout=widgets.Layout(align_items="center", gap="4px"),
+                ),
                 self.notes_output,
             ]
         )
@@ -824,6 +873,39 @@ class QuantUIApp:
             tooltip="Open the full PySCF output log in the Output tab",
         )
 
+        # Calibration widgets
+        self._cal_run_btn = widgets.Button(
+            description="Run Calibration",
+            button_style="primary",
+            icon="play",
+            disabled=not _PYSCF_AVAILABLE,
+            tooltip=(
+                "Run a short benchmark suite to calibrate time estimates"
+                if _PYSCF_AVAILABLE
+                else "PySCF required (Linux / macOS / WSL)"
+            ),
+            layout=widgets.Layout(width="180px"),
+        )
+        self._cal_stop_btn = widgets.Button(
+            description="Stop",
+            button_style="warning",
+            icon="stop",
+            layout=widgets.Layout(width="90px", display="none"),
+        )
+        self._cal_progress = widgets.IntProgress(
+            min=0,
+            max=len(_BENCHMARK_SUITE),
+            value=0,
+            description="",
+            bar_style="info",
+            layout=widgets.Layout(width="300px", display="none"),
+        )
+        self._cal_step_label = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none"),
+        )
+        self._cal_results_html = widgets.HTML(value="")
+
         # Performance stats widgets
         self._perf_stats_html = widgets.HTML()
         self._perf_events_html = widgets.HTML()
@@ -886,6 +968,37 @@ class QuantUIApp:
         )
         self._perf_accordion.set_title(0, "Performance stats")
 
+        # Calibration accordion
+        _cal_last = _load_last_calibration_label()
+        _cal_note = (
+            f'<p style="color:#64748b;font-size:12px;margin:0 0 6px">'
+            f"Last run: {_cal_last}</p>"
+            if _cal_last
+            else ""
+        )
+        _cal_panel = widgets.VBox(
+            [
+                widgets.HTML(
+                    f'<p style="color:#555;font-size:13px;margin:0 0 6px">'
+                    f"Run a short benchmark suite ({len(_BENCHMARK_SUITE)} calculations) "
+                    f"to give the time estimator a real baseline for this machine.</p>"
+                    + _cal_note
+                ),
+                widgets.HBox(
+                    [self._cal_run_btn, self._cal_stop_btn],
+                    layout=widgets.Layout(gap="6px", align_items="center"),
+                ),
+                self._cal_progress,
+                self._cal_step_label,
+                self._cal_results_html,
+            ],
+            layout=widgets.Layout(padding="4px 0"),
+        )
+        self._cal_accordion = widgets.Accordion(
+            children=[_cal_panel], selected_index=None
+        )
+        self._cal_accordion.set_title(0, "Calibrate time estimates")
+
         self.history_panel = widgets.VBox(
             [
                 widgets.HTML(
@@ -904,6 +1017,7 @@ class QuantUIApp:
                 self.results_path_lbl,
                 self.past_output,
                 self._perf_accordion,
+                self._cal_accordion,
             ]
         )
 
@@ -1112,6 +1226,9 @@ class QuantUIApp:
         # Accumulate / export
         self.accumulate_btn.on_click(self._on_accumulate)
         self.clear_btn.on_click(self._on_clear)
+        self.solvent_cb.observe(self._on_solvent_cb_changed, names="value")
+        self._cal_run_btn.on_click(self._on_cal_run)
+        self._cal_stop_btn.on_click(self._on_cal_stop)
         self.export_btn.on_click(self._on_export)
         self.export_xyz_btn.on_click(self._on_export_xyz)
         self.export_mol_btn.on_click(self._on_export_mol)
@@ -1255,6 +1372,15 @@ class QuantUIApp:
                     "instead.</span>"
                 ),
             ]
+        elif ct == "NMR Shielding":
+            self.calc_extra_opts.children = [
+                widgets.HTML(
+                    '<span style="color:#b45309;font-size:12px">'
+                    "⚠ Recommended: B3LYP/6-31G* or better. "
+                    "STO-3G and 3-21G give qualitative results only. "
+                    "Start from an optimised geometry for best accuracy.</span>"
+                ),
+            ]
         else:
             self.calc_extra_opts.children = []
 
@@ -1280,6 +1406,9 @@ class QuantUIApp:
         self._result_log_accordion.selected_index = None
         self._result_log_output.clear_output()
         threading.Thread(target=self._do_run, daemon=True).start()
+
+    def _on_solvent_cb_changed(self, change) -> None:
+        self.solvent_dd.layout.display = "" if change["new"] else "none"
 
     def _on_clear_log(self, btn) -> None:
         self.run_output.clear_output()
@@ -1548,6 +1677,90 @@ class QuantUIApp:
 
     def _on_confirm_no(self, btn) -> None:
         self._reset_confirm_box.layout.display = "none"
+
+    # ── Calibration ───────────────────────────────────────────────────────
+
+    def _on_cal_run(self, btn) -> None:
+        import threading as _threading
+
+        self._cal_stop_event = _threading.Event()
+        self._cal_run_btn.disabled = True
+        self._cal_stop_btn.layout.display = ""
+        self._cal_progress.value = 0
+        self._cal_progress.layout.display = ""
+        self._cal_step_label.layout.display = ""
+        self._cal_step_label.value = (
+            '<span style="font-size:12px;color:#475569">Starting…</span>'
+        )
+        self._cal_results_html.value = ""
+
+        _threading.Thread(target=self._do_calibration, daemon=True).start()
+
+    def _on_cal_stop(self, btn) -> None:
+        if hasattr(self, "_cal_stop_event"):
+            self._cal_stop_event.set()
+
+    def _do_calibration(self) -> None:
+        from quantui.benchmarks import run_calibration
+
+        def _progress(
+            step_n: int, total: int, label: str, status: str, elapsed: float
+        ) -> None:
+            _icon = {"ok": "✓", "timed_out": "⏱", "stopped": "⛔", "error": "✗"}.get(
+                status, "?"
+            )
+            self._cal_progress.value = step_n
+            self._cal_step_label.value = (
+                f'<span style="font-size:12px;color:#475569">'
+                f"Step {step_n} / {total} — {label} "
+                f"[{_icon} {elapsed:.1f} s]</span>"
+            )
+
+        result = run_calibration(
+            progress_cb=_progress,
+            stop_event=self._cal_stop_event,
+            timeout_per_step=120.0,
+        )
+
+        # Render results table
+        _rows = "".join(
+            f"<tr>"
+            f'<td style="padding:2px 12px 2px 0;font-size:12px">{s.label}</td>'
+            f'<td style="padding:2px 12px 2px 0;font-size:12px;text-align:right">'
+            f"{s.n_electrons}</td>"
+            f'<td style="padding:2px 12px 2px 0;font-size:12px;text-align:right">'
+            f"{s.elapsed_s:.2f} s</td>"
+            f'<td style="padding:2px 0;font-size:12px">'
+            f'{"✓" if s.status == "ok" else ("⏱ timed out" if s.status == "timed_out" else ("⛔ stopped" if s.status == "stopped" else "✗ error"))}'
+            f"</td>"
+            f"</tr>"
+            for s in result.steps
+        )
+        _summary = f"Completed {result.n_completed} / {result.n_total} steps." + (
+            " (stopped early)" if result.stopped_early else ""
+        )
+        self._cal_results_html.value = (
+            f'<div style="margin-top:8px">'
+            f'<p style="font-size:13px;color:#374151;margin:0 0 6px">{_summary}</p>'
+            f'<table style="border-collapse:collapse">'
+            f"<tr>"
+            f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:left">Calculation</th>'
+            f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:right">Electrons</th>'
+            f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:right">Wall time</th>'
+            f'<th style="padding:2px 0;font-size:12px">Status</th>'
+            f"</tr>"
+            f"{_rows}</table></div>"
+        )
+
+        self._cal_step_label.value = (
+            '<span style="font-size:12px;color:#16a34a"><b>Calibration complete.</b> '
+            "Time estimates are now active.</span>"
+            if result.n_completed > 0
+            else '<span style="font-size:12px;color:#dc2626">No steps completed.</span>'
+        )
+        self._cal_stop_btn.layout.display = "none"
+        self._cal_run_btn.disabled = not _PYSCF_AVAILABLE
+        self._refresh_perf_stats()
 
     # ── Output log ────────────────────────────────────────────────────────
 
@@ -2020,15 +2233,42 @@ class QuantUIApp:
                     }
                 }
                 save_type = "tddft"
+            elif ct == "NMR Shielding":
+                self.run_status.value = "Running NMR shielding (SCF + GIAO)..."
+                from quantui.nmr_calc import run_nmr_calc
+
+                result = run_nmr_calc(
+                    molecule=calc_mol,
+                    method=self.method_dd.value,
+                    basis=self.basis_dd.value,
+                    progress_stream=log,  # type: ignore[arg-type]
+                )
+                result_html = self._format_nmr_result(result)
+                save_spectra, save_type = {}, "nmr"
             else:  # Single Point
                 self.run_status.value = "Calculating..."
                 from quantui import run_in_session
 
+                # MP2 heavy-atom warning
+                if self.method_dd.value.upper() == "MP2":
+                    _n_heavy = sum(1 for a in calc_mol.atoms if a != "H")
+                    if _n_heavy > 20:
+                        self.result_output.append_display_data(
+                            HTML(
+                                '<div style="background:#fffbe6;border-left:4px solid #f59e0b;'
+                                'padding:8px 12px;border-radius:4px;margin:4px 0;font-size:13px">'
+                                f"⚠️ MP2 scales as O(N⁵) — this molecule has {_n_heavy} heavy atoms "
+                                "and may be slow. Consider using DFT instead.</div>"
+                            )
+                        )
+
+                _solvent = self.solvent_dd.value if self.solvent_cb.value else None
                 result = run_in_session(
                     molecule=calc_mol,
                     method=self.method_dd.value,
                     basis=self.basis_dd.value,
                     progress_stream=log,  # type: ignore[arg-type]
+                    solvent=_solvent,
                 )
                 result_html = self._format_result(result)
                 save_spectra, save_type = {}, "single_point"
@@ -2437,6 +2677,22 @@ class QuantUIApp:
             ]
         )
         _extra = ""
+        # MP2: show HF reference energy separately
+        _mp2_corr = getattr(r, "mp2_correlation_hartree", None)
+        if _mp2_corr is not None:
+            _hf_e = r.energy_hartree - _mp2_corr
+            _extra += (
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">HF reference</td>'
+                f'<td style="color:#000">{_hf_e:.8f} Ha</td></tr>'
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">MP2 correlation</td>'
+                f'<td style="color:#000">{_mp2_corr:.8f} Ha</td></tr>'
+            )
+        _solvent = getattr(r, "solvent", None)
+        if _solvent is not None:
+            _extra += (
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">Solvent (PCM)</td>'
+                f'<td style="color:#000">{_solvent}</td></tr>'
+            )
         _dip = getattr(r, "dipole_moment_debye", None)
         if _dip is not None:
             _extra += (
@@ -2591,6 +2847,62 @@ class QuantUIApp:
             f"<b>TD-DFT / UV-Vis &mdash; {r.formula} ({r.method}/{r.basis})</b>"
             f'<table style="margin-top:8px;font-size:14px;border-collapse:collapse">'
             f"{header_rows}{exc_table}</table></div>"
+        )
+
+    def _format_nmr_result(self, r) -> str:
+        _conv = "Yes" if r.converged else "No (treat with caution)"
+        _cc = "green" if r.converged else "#c00"
+        header_rows = (
+            f'<tr><td style="padding:3px 18px 3px 0;color:#444">SCF converged</td>'
+            f'<td style="color:{_cc}">{_conv}</td></tr>'
+            f'<tr><td style="padding:3px 18px 3px 0;color:#444">Reference</td>'
+            f'<td style="color:#000">{r.reference_compound} ({r.method}/{r.basis})</td></tr>'
+        )
+
+        def _nmr_table(label: str, shifts: list, sym: str) -> str:
+            if not shifts:
+                return ""
+            rows = "".join(
+                f"<tr>"
+                f'<td style="padding:2px 14px 2px 0;color:#555">{sym}-{n}</td>'
+                f'<td style="color:#000">{d:.2f} ppm</td>'
+                f"</tr>"
+                for n, (_i, d) in enumerate(shifts, 1)
+            )
+            return (
+                f'<tr><td colspan="2" style="padding:8px 0 2px;color:#444;font-weight:bold">'
+                f"{label} shifts (vs. TMS):</td></tr>"
+                f"<tr>"
+                f'<th style="text-align:left;color:#555;font-size:12px;padding:2px 14px 2px 0">Atom</th>'
+                f'<th style="text-align:left;color:#555;font-size:12px">δ (ppm)</th></tr>'
+                + rows
+            )
+
+        h_table = _nmr_table("¹H", r.h_shifts(), "H")
+        c_table = _nmr_table("¹³C", r.c_shifts(), "C")
+
+        _basis_warn = ""
+        if r.basis.upper() in ("STO-3G", "3-21G"):
+            _basis_warn = (
+                '<tr><td colspan="2" style="padding:6px 0 0">'
+                '<span style="color:#b45309;font-size:12px">'
+                f"⚠ {r.basis} gives qualitative NMR only — use 6-31G* or better.</span>"
+                "</td></tr>"
+            )
+
+        _empty = ""
+        if not r.h_shifts() and not r.c_shifts():
+            _empty = (
+                '<tr><td colspan="2" style="color:#888;font-size:12px">'
+                "No ¹H or ¹³C atoms found in this molecule.</td></tr>"
+            )
+
+        return (
+            f'<div style="background:#f0fff0;border-left:4px solid #4CAF50;'
+            f'padding:10px 14px;border-radius:4px;margin:6px 0">'
+            f"<b>NMR Shielding &mdash; {r.formula} ({r.method}/{r.basis})</b>"
+            f'<table style="margin-top:8px;font-size:14px;border-collapse:collapse">'
+            f"{header_rows}{h_table}{c_table}{_empty}{_basis_warn}</table></div>"
         )
 
     def _format_past_result(self, data: dict) -> str:

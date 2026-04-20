@@ -519,3 +519,326 @@ class TestMoleculeToRdkit:
         result = QuantUIApp._molecule_to_rdkit(_water())
         # Either succeeds or returns None — must not raise
         assert result is None or result is not None
+
+
+# ---------------------------------------------------------------------------
+# M4.1 — Extended DFT functional list
+# ---------------------------------------------------------------------------
+
+
+class TestExtendedDFTFunctionals:
+    """New functionals appear in method_dd options."""
+
+    def test_wb97xd_in_dropdown(self):
+        app = QuantUIApp()
+        assert "wB97X-D" in app.method_dd.options
+
+    def test_cam_b3lyp_in_dropdown(self):
+        app = QuantUIApp()
+        assert "CAM-B3LYP" in app.method_dd.options
+
+    def test_m06l_in_dropdown(self):
+        app = QuantUIApp()
+        assert "M06-L" in app.method_dd.options
+
+    def test_hse06_in_dropdown(self):
+        app = QuantUIApp()
+        assert "HSE06" in app.method_dd.options
+
+    def test_pbe_d3_in_dropdown(self):
+        app = QuantUIApp()
+        assert "PBE-D3" in app.method_dd.options
+
+    def test_mp2_in_dropdown(self):
+        app = QuantUIApp()
+        assert "MP2" in app.method_dd.options
+
+
+# ---------------------------------------------------------------------------
+# M4.2 — MP2 energy
+# ---------------------------------------------------------------------------
+
+
+class TestMP2SessionResult:
+    """mp2_correlation_hartree field on SessionResult."""
+
+    def test_mp2_corr_defaults_to_none(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.0,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="MP2",
+            basis="STO-3G",
+            formula="H2O",
+        )
+        assert r.mp2_correlation_hartree is None
+
+    def test_mp2_corr_stored(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.3,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="MP2",
+            basis="STO-3G",
+            formula="H2O",
+            mp2_correlation_hartree=-0.3,
+        )
+        assert r.mp2_correlation_hartree == pytest.approx(-0.3)
+
+
+class TestMP2FormatResult:
+    """_format_result shows HF reference and MP2 correlation when present."""
+
+    def test_hf_reference_shown_when_mp2(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.3,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="MP2",
+            basis="STO-3G",
+            formula="H2O",
+            mp2_correlation_hartree=-0.3,
+        )
+        app = QuantUIApp()
+        html = app._format_result(r)
+        assert "HF reference" in html
+        assert "MP2 correlation" in html
+
+
+# ---------------------------------------------------------------------------
+# M4.3 — Implicit solvent (PCM)
+# ---------------------------------------------------------------------------
+
+
+class TestSolventWidgets:
+    """solvent_cb and solvent_dd exist and behave correctly."""
+
+    def test_solvent_cb_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "solvent_cb")
+        assert isinstance(app.solvent_cb, widgets.Checkbox)
+
+    def test_solvent_dd_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "solvent_dd")
+        assert isinstance(app.solvent_dd, widgets.Dropdown)
+
+    def test_solvent_dd_hidden_initially(self):
+        app = QuantUIApp()
+        assert app.solvent_dd.layout.display == "none"
+
+    def test_solvent_dd_revealed_when_cb_checked(self):
+        app = QuantUIApp()
+        app.solvent_cb.value = True
+        assert app.solvent_dd.layout.display == ""
+
+    def test_solvent_dd_hidden_when_cb_unchecked(self):
+        app = QuantUIApp()
+        app.solvent_cb.value = True
+        app.solvent_cb.value = False
+        assert app.solvent_dd.layout.display == "none"
+
+    def test_water_is_solvent_option(self):
+        app = QuantUIApp()
+        assert "Water" in app.solvent_dd.options
+
+    def test_solvent_field_on_session_result(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.0,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="RHF",
+            basis="STO-3G",
+            formula="H2O",
+            solvent="Water",
+        )
+        assert r.solvent == "Water"
+
+    def test_solvent_shown_in_format_result(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.0,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="RHF",
+            basis="STO-3G",
+            formula="H2O",
+            solvent="Ethanol",
+        )
+        app = QuantUIApp()
+        html = app._format_result(r)
+        assert "Ethanol" in html
+        assert "PCM" in html
+
+
+# ---------------------------------------------------------------------------
+# M-CAL — Calibration UI widgets
+# ---------------------------------------------------------------------------
+
+
+class TestCalibrationWidgets:
+    """Calibration accordion and its child widgets exist in correct initial state."""
+
+    def test_cal_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_cal_accordion")
+        assert isinstance(app._cal_accordion, widgets.Accordion)
+
+    def test_cal_run_btn_exists(self):
+        app = QuantUIApp()
+        assert isinstance(app._cal_run_btn, widgets.Button)
+
+    def test_cal_stop_btn_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._cal_stop_btn.layout.display == "none"
+
+    def test_cal_progress_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._cal_progress.layout.display == "none"
+
+    def test_cal_step_label_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._cal_step_label.layout.display == "none"
+
+    def test_cal_run_btn_disabled_when_pyscf_unavailable(self):
+        from quantui.app import _PYSCF_AVAILABLE
+
+        app = QuantUIApp()
+        # Button state must match module-level availability flag
+        assert app._cal_run_btn.disabled == (not _PYSCF_AVAILABLE)
+
+    def test_cal_progress_max_equals_suite_length(self):
+        from quantui.benchmarks import BENCHMARK_SUITE
+
+        app = QuantUIApp()
+        assert app._cal_progress.max == len(BENCHMARK_SUITE)
+
+    def test_on_cal_stop_sets_event(self):
+        import threading
+
+        app = QuantUIApp()
+        app._cal_stop_event = threading.Event()
+        app._on_cal_stop(None)
+        assert app._cal_stop_event.is_set()
+
+
+# ---------------------------------------------------------------------------
+# M5 — NMR Shielding widgets
+# ---------------------------------------------------------------------------
+
+
+class TestNMRWidgets:
+    """NMR Shielding option exists and callback wires correctly."""
+
+    def test_nmr_in_calc_type_options(self):
+        app = QuantUIApp()
+        assert "NMR Shielding" in app.calc_type_dd.options
+
+    def test_calc_type_dd_has_five_options(self):
+        app = QuantUIApp()
+        assert len(app.calc_type_dd.options) == 5
+
+    def test_nmr_calc_type_shows_note(self):
+        app = QuantUIApp()
+        app.calc_type_dd.value = "NMR Shielding"
+        # calc_extra_opts should contain an HTML note about basis recommendations
+        assert len(app.calc_extra_opts.children) == 1
+        note = app.calc_extra_opts.children[0]
+        assert isinstance(note, widgets.HTML)
+        assert "6-31G*" in note.value
+
+    def test_nmr_note_mentions_sto3g_warning(self):
+        app = QuantUIApp()
+        app.calc_type_dd.value = "NMR Shielding"
+        note = app.calc_extra_opts.children[0]
+        assert "STO-3G" in note.value
+
+    def test_switching_away_from_nmr_clears_opts(self):
+        app = QuantUIApp()
+        app.calc_type_dd.value = "NMR Shielding"
+        app.calc_type_dd.value = "Single Point"
+        assert len(app.calc_extra_opts.children) == 0
+
+
+class TestFormatNMRResult:
+    """_format_nmr_result produces correct HTML."""
+
+    def _make_nmr(self, basis="6-31G*", converged=True):
+        from quantui.nmr_calc import NMRResult
+
+        return NMRResult(
+            atom_symbols=["O", "H", "H"],
+            shielding_iso_ppm=[320.1, 28.5, 28.5],
+            chemical_shifts_ppm={1: 3.22, 2: 3.22},
+            method="B3LYP",
+            basis=basis,
+            formula="H2O",
+            converged=converged,
+        )
+
+    def test_returns_string(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert isinstance(html, str)
+
+    def test_contains_formula(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert "H2O" in html
+
+    def test_contains_method_and_basis(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert "B3LYP" in html
+        assert "6-31G*" in html
+
+    def test_h_shifts_table_present(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert "¹H" in html
+        assert "3.22" in html
+
+    def test_sto3g_warning_shown(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr(basis="STO-3G"))
+        assert "STO-3G" in html
+        assert "qualitative" in html
+
+    def test_no_sto3g_warning_for_631g(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr(basis="6-31G*"))
+        assert "qualitative" not in html
+
+    def test_not_converged_shows_warning(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr(converged=False))
+        assert "caution" in html
+
+    def test_no_hc_atoms_shows_empty_message(self):
+        from quantui.nmr_calc import NMRResult
+
+        r = NMRResult(
+            atom_symbols=["N", "N"],
+            shielding_iso_ppm=[100.0, 100.0],
+            chemical_shifts_ppm={},
+            method="RHF",
+            basis="STO-3G",
+            formula="N2",
+        )
+        app = QuantUIApp()
+        html = app._format_nmr_result(r)
+        assert "No ¹H or ¹³C" in html
