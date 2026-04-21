@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
-from typing import IO, List, Optional
+from typing import IO, Any, List, Optional
 
 from .molecule import Molecule
 
@@ -69,6 +69,11 @@ class SessionResult:
     dipole_moment_debye: Optional[float] = None
     mp2_correlation_hartree: Optional[float] = None
     solvent: Optional[str] = None
+    mo_energy_hartree: Optional[Any] = None  # np.ndarray (n_mo,) or (2, n_mo) UHF
+    mo_occ: Optional[Any] = None  # np.ndarray (n_mo,) or (2, n_mo) UHF
+    mo_coeff: Optional[Any] = None  # np.ndarray (n_ao, n_mo) or (2, n_ao, n_mo) UHF
+    pyscf_mol_atom: Optional[Any] = None  # list of (symbol, [x,y,z]) tuples (Angstrom)
+    pyscf_mol_basis: Optional[str] = None  # basis set string for cube generation
 
     @property
     def energy_ev(self) -> float:
@@ -308,6 +313,21 @@ def run_in_session(
         except Exception:
             pass
 
+    # MO arrays for orbital visualization (non-fatal if extraction fails)
+    _mo_energy_ha_arr: Optional[Any] = None
+    _mo_occ_arr: Optional[Any] = None
+    _mo_coeff_arr: Optional[Any] = None
+    _pyscf_mol_atom: Optional[Any] = None
+    _pyscf_mol_basis: Optional[str] = None
+    try:
+        _mo_energy_ha_arr = _np.array(mf.mo_energy)
+        _mo_occ_arr = _np.array(mf.mo_occ)
+        _mo_coeff_arr = _np.array(mf.mo_coeff)
+        _pyscf_mol_atom = molecule.to_pyscf_format()
+        _pyscf_mol_basis = basis
+    except Exception:
+        pass
+
     formula = molecule.get_formula()
     logger.info(
         "Session calculation: %s %s/%s  E=%.8f Ha  converged=%s  iters=%d",
@@ -332,4 +352,9 @@ def run_in_session(
         dipole_moment_debye=dipole_moment_debye,
         mp2_correlation_hartree=mp2_correlation_hartree,
         solvent=solvent,
+        mo_energy_hartree=_mo_energy_ha_arr,
+        mo_occ=_mo_occ_arr,
+        mo_coeff=_mo_coeff_arr,
+        pyscf_mol_atom=_pyscf_mol_atom,
+        pyscf_mol_basis=_pyscf_mol_basis,
     )

@@ -22,13 +22,16 @@ Built for classroom teaching at the
 - **3D visualization** — interactive py3Dmol or PlotlyMol viewer with a live
   backend toggle when both are installed; post-calculation structure rendered
   automatically in the results panel
-- **In-session calculations** — RHF, UHF, 9 DFT functionals, and MP2 via
-  PySCF, running in your Python kernel (no batch submission)
+- **In-session calculations** — RHF, UHF, 9 DFT functionals, MP2, and NMR
+  shielding via PySCF, running in your Python kernel (no batch submission)
 - **Implicit solvent** — PCM solvation (Water, Ethanol, THF, DMSO,
   Acetonitrile) via a single checkbox
 - **Rich results** — total energy, HOMO-LUMO gap, Mulliken charges, dipole
-  moment, thermochemistry (H, S, G at 298 K), and a side-by-side comparison
-  table for multiple calculations
+  moment, thermochemistry (H, S, G at 298 K), IR spectrum chart (stick and
+  Lorentzian-broadened), ¹H/¹³C NMR chemical shifts, orbital energy-level
+  diagram, HOMO/LUMO isosurface (cube-file rendering with toggle for HOMO-1,
+  HOMO, LUMO, LUMO+1), and a side-by-side comparison table for multiple
+  calculations
 - **Geometry optimization** — BFGS optimizer with step-by-step trajectory
   animation; vibrational frequency analysis with animated normal modes
 - **Results persistence** — every calculation is saved automatically to a
@@ -36,6 +39,8 @@ Built for classroom teaching at the
   after a kernel restart; the full `pyscf.log` is shown inline
 - **Structure exports** — download XYZ, MOL/SDF, or PDB files alongside the
   saved results; script export for a standalone `.py` file
+- **Timing calibration** — one-click benchmark suite populates the time
+  estimator with real machine data so predictions are accurate from the first run
 - **Voilà app mode** — serve the notebook as a polished widget-only UI (no code
   visible) for classroom demos, with dark mode toggle and dedicated output log
 
@@ -140,8 +145,9 @@ Five step-by-step notebooks in [`notebooks/tutorials/`](notebooks/tutorials/):
 | --- | --- |
 | Single Point | Energy, HOMO-LUMO gap, Mulliken charges, dipole moment |
 | Geometry Opt | Optimised structure, trajectory animation |
-| Frequency | Vibrational frequencies, ZPVE, IR intensities, thermochemistry (H/S/G at 298 K), animated normal modes |
+| Frequency | Vibrational frequencies, ZPVE, IR intensities, thermochemistry (H/S/G at 298 K), animated normal modes, IR spectrum chart (stick / Lorentzian broadened) |
 | UV-Vis (TD-DFT) | Excitation energies, oscillator strengths, UV-Vis spectrum plot |
+| NMR Shielding | ¹H and ¹³C chemical shifts relative to TMS via GIAO; tabulated by element |
 
 ### Basis sets
 
@@ -175,20 +181,23 @@ quantui/                  Main package
   molecule.py             Molecule input and validation
   session_calc.py         In-session PySCF runner (RHF/UHF/DFT/MP2/PCM)
   freq_calc.py            Vibrational frequency + thermochemistry analysis
+  ir_plot.py              IR spectrum chart (stick and Lorentzian broadened)
   tddft_calc.py           TD-DFT UV-Vis excited-state calculations
+  nmr_calc.py             NMR shielding + ¹H/¹³C chemical shift prediction
   optimizer.py            QM geometry optimization with trajectory
   visualization_py3dmol.py  3D viewer (py3Dmol + PlotlyMol backends)
   pubchem.py              PubChem molecule search
   comparison.py           Side-by-side result tables
   results_storage.py      Timestamped result persistence
   calc_log.py             Performance logging and time estimation
-  config.py               Methods, basis sets, solvent options, presets
+  benchmarks.py           Timing calibration benchmark suite
+  config.py               Methods, basis sets, solvent/NMR options, presets
   ase_bridge.py           ASE structure I/O
   preopt.py               LJ force-field pre-optimization
 notebooks/
   molecule_computations.ipynb   Main student-facing interface
   tutorials/                    Step-by-step guided notebooks (01–05)
-tests/                    pytest test suite (497+ tests)
+tests/                    pytest test suite (575+ tests)
 apptainer/                Container definition for reproducible deployment
 local-setup/              Conda environment definition
 pyproject.toml            Package metadata and tool config

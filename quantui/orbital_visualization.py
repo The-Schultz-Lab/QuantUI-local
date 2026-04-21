@@ -189,7 +189,7 @@ def plot_orbital_diagram(
     matplotlib.figure.Figure
     """
     import matplotlib.patches as mpatches
-    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
 
     energies = info.mo_energies_ev
     n_occ = info.n_occupied
@@ -202,7 +202,10 @@ def plot_orbital_diagram(
     subset = energies[start:end]
     subset_occ = np.arange(start, end) < n_occ
 
-    fig, ax = plt.subplots(figsize=figsize)
+    # Use Figure directly (not plt.subplots) to avoid triggering the IPython
+    # GUI event loop in interactive / test environments.
+    fig = Figure(figsize=figsize)
+    ax = fig.add_subplot(111)
 
     # Draw energy levels
     line_half_width = 0.3
@@ -387,6 +390,85 @@ def generate_cube_file(
         mol,
         str(output_path),
         mo_coeff[:, orbital_index],
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        margin=margin,
+    )
+    logger.info("Wrote cube file: %s", output_path)
+    return output_path
+
+
+def generate_cube_from_arrays(
+    mol_atom: list,
+    mol_basis: str,
+    mo_coeff: np.ndarray,
+    orbital_index: int,
+    output_path: Path,
+    *,
+    nx: int = 60,
+    ny: int = 60,
+    nz: int = 60,
+    margin: float = 5.0,
+) -> Path:
+    """
+    Generate a cube file from in-session MO data (no ``.npz`` file required).
+
+    Unlike :func:`generate_cube_file`, this function takes the atom list
+    and MO coefficient array directly, as stored in :class:`SessionResult`
+    or :class:`OptimizationResult`.
+
+    Parameters
+    ----------
+    mol_atom : list
+        Atom list in PySCF format — list of ``(symbol, [x, y, z])`` tuples
+        with coordinates in Angstrom.
+    mol_basis : str
+        Basis set string (e.g. ``'6-31G*'``).
+    mo_coeff : ndarray
+        MO coefficient matrix, shape ``(n_ao, n_mo)`` for RHF or
+        ``(2, n_ao, n_mo)`` for UHF.  Alpha-spin coefficients are used for UHF.
+    orbital_index : int
+        0-based MO index to visualise.
+    output_path : Path
+        Where to write the ``.cube`` file.
+    nx, ny, nz : int
+        Grid resolution along each axis.
+    margin : float
+        Extra space (Bohr) beyond atomic extents.
+
+    Returns
+    -------
+    Path
+        The written cube file path.
+
+    Raises
+    ------
+    ImportError
+        If PySCF is not available.
+    """
+    try:
+        from pyscf import gto
+        from pyscf.tools import cubegen
+    except ImportError as exc:
+        raise ImportError(
+            "PySCF is required for cube file generation (Linux/WSL only).\n"
+            "  conda install -c conda-forge pyscf"
+        ) from exc
+
+    mol = gto.M(atom=mol_atom, basis=mol_basis, unit="Angstrom")
+
+    coeff = np.asarray(mo_coeff)
+    if coeff.ndim == 3:
+        coeff = coeff[0]  # UHF: use alpha spin
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cubegen.orbital(
+        mol,
+        str(output_path),
+        coeff[:, orbital_index],
         nx=nx,
         ny=ny,
         nz=nz,

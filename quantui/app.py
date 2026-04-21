@@ -813,6 +813,95 @@ class QuantUIApp:
         self.vib_accordion.set_title(0, "Vibrational Mode Viewer")
         self.vib_accordion.selected_index = None  # collapsed by default
 
+        # IR Spectrum accordion (hidden until a Frequency result is available)
+        self._ir_mode_toggle = widgets.ToggleButtons(
+            options=["Stick", "Broadened"],
+            value="Stick",
+            style={"button_width": "80px", "font_size": "12px"},
+            layout=widgets.Layout(margin="0 8px 0 0"),
+        )
+        self._ir_fwhm_slider = widgets.FloatSlider(
+            value=20.0,
+            min=5.0,
+            max=100.0,
+            step=5.0,
+            description="Line width:",
+            style={"description_width": "80px"},
+            layout=widgets.Layout(width="260px", display="none"),
+        )
+        try:
+            import plotly.graph_objects as _go
+
+            self._ir_fig = _go.FigureWidget(
+                layout=dict(
+                    xaxis=dict(title="Wavenumber (cm⁻¹)", range=[4000, 400]),
+                    yaxis=dict(title="IR Intensity (km/mol)", rangemode="tozero"),
+                    template="plotly_white",
+                    showlegend=False,
+                    margin=dict(l=60, r=20, t=20, b=55),
+                    height=300,
+                    plot_bgcolor="#fafafa",
+                )
+            )
+            _ir_plotly_available = True
+        except ImportError:
+            self._ir_fig = None
+            _ir_plotly_available = False
+
+        _ir_controls = widgets.HBox(
+            [self._ir_mode_toggle, self._ir_fwhm_slider],
+            layout=widgets.Layout(align_items="center", margin="0 0 6px 0"),
+        )
+        _ir_body_children = [_ir_controls]
+        if _ir_plotly_available and self._ir_fig is not None:
+            _ir_body_children.append(self._ir_fig)
+        self._ir_accordion = widgets.Accordion(
+            children=[
+                widgets.VBox(
+                    _ir_body_children,
+                    layout=widgets.Layout(padding="8px"),
+                )
+            ],
+            layout=widgets.Layout(display="none", margin="8px 0"),
+        )
+        self._ir_accordion.set_title(0, "IR Spectrum")
+        self._ir_accordion.selected_index = None
+
+        # Orbital energy diagram + isosurface accordion (Single Point / Geo Opt)
+        self._orb_diagram_html = widgets.HTML(
+            value="",
+            layout=widgets.Layout(width="100%"),
+        )
+        self._orb_toggle = widgets.ToggleButtons(
+            options=["HOMO-1", "HOMO", "LUMO", "LUMO+1"],
+            value="HOMO",
+            style={"button_width": "70px", "font_size": "12px"},
+            layout=widgets.Layout(margin="8px 0 4px 0"),
+        )
+        self._orb_iso_output = widgets.Output()
+        self._orb_iso_controls = widgets.VBox(
+            [
+                widgets.HTML(
+                    '<span style="font-size:12px;color:#555;font-weight:bold">'
+                    "Orbital isosurface:</span>"
+                ),
+                self._orb_toggle,
+                self._orb_iso_output,
+            ],
+            layout=widgets.Layout(display="none", margin="8px 0 0 0"),
+        )
+        self._orb_accordion = widgets.Accordion(
+            children=[
+                widgets.VBox(
+                    [self._orb_diagram_html, self._orb_iso_controls],
+                    layout=widgets.Layout(padding="8px"),
+                )
+            ],
+            layout=widgets.Layout(display="none", margin="8px 0"),
+        )
+        self._orb_accordion.set_title(0, "Orbital Diagram")
+        self._orb_accordion.selected_index = None
+
         # Result directory path label (hidden until a calculation saves)
         self._result_dir_label = widgets.HTML(
             value="",
@@ -833,8 +922,10 @@ class QuantUIApp:
                 widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
                 self.result_output,
                 self.result_viz_output,
+                self._orb_accordion,
                 self.traj_accordion,
                 self.vib_accordion,
+                self._ir_accordion,
                 self._result_dir_label,
                 self._result_log_accordion,
             ]
@@ -1400,6 +1491,8 @@ class QuantUIApp:
         self.result_viz_output.clear_output()
         self.traj_accordion.layout.display = "none"
         self.vib_accordion.layout.display = "none"
+        self._ir_accordion.layout.display = "none"
+        self._orb_accordion.layout.display = "none"
         self._result_dir_label.value = ""
         self._result_dir_label.layout.display = "none"
         self._result_log_accordion.layout.display = "none"
@@ -2093,6 +2186,179 @@ class QuantUIApp:
         self.vib_accordion.selected_index = None
         self.vib_accordion.layout.display = ""
 
+    def _show_ir_spectrum(self, freq_result) -> None:
+        """Populate and reveal the IR Spectrum accordion after a Frequency result."""
+        if self._ir_fig is None:
+            return
+
+        freqs = list(freq_result.frequencies_cm1 or [])
+        ints = list(freq_result.ir_intensities or [])
+        if not freqs or not ints:
+            return
+
+        # Store for callbacks
+        self._last_ir_freqs = freqs
+        self._last_ir_ints = ints
+
+        self._update_ir_figure("Stick", 20.0)
+
+        # Wire callbacks (replace any prior bindings)
+        self._ir_mode_toggle.unobserve_all()
+        self._ir_fwhm_slider.unobserve_all()
+
+        def _on_mode(change) -> None:
+            mode = change["new"]
+            self._ir_fwhm_slider.layout.display = "" if mode == "Broadened" else "none"
+            self._update_ir_figure(mode, self._ir_fwhm_slider.value)
+
+        def _on_fwhm(change) -> None:
+            if self._ir_mode_toggle.value == "Broadened":
+                self._update_ir_figure("Broadened", change["new"])
+
+        self._ir_mode_toggle.observe(_on_mode, names="value")
+        self._ir_fwhm_slider.observe(_on_fwhm, names="value")
+
+        # Reset toggle/slider to defaults
+        self._ir_mode_toggle.value = "Stick"
+        self._ir_fwhm_slider.value = 20.0
+        self._ir_fwhm_slider.layout.display = "none"
+
+        self._ir_accordion.selected_index = None
+        self._ir_accordion.layout.display = ""
+
+    def _update_ir_figure(self, mode: str, fwhm: float) -> None:
+        """Re-render the IR FigureWidget for the given mode and FWHM."""
+        if self._ir_fig is None:
+            return
+        from quantui.ir_plot import plot_ir_spectrum
+
+        new_fig = plot_ir_spectrum(
+            self._last_ir_freqs,
+            self._last_ir_ints,
+            mode=mode.lower(),
+            fwhm=fwhm,
+        )
+        with self._ir_fig.batch_update():
+            self._ir_fig.data = ()
+            for trace in new_fig.data:
+                self._ir_fig.add_trace(trace)
+            self._ir_fig.update_layout(new_fig.layout)
+
+    def _show_orbital_diagram(self, result) -> None:
+        """Build and reveal orbital diagram accordion after Single Point or Geo Opt."""
+        import base64
+        import io as _io
+
+        mo_energy = getattr(result, "mo_energy_hartree", None)
+        mo_occ = getattr(result, "mo_occ", None)
+        if mo_energy is None or mo_occ is None:
+            return
+
+        try:
+            from quantui.orbital_visualization import (
+                orbital_info_from_arrays,
+                plot_orbital_diagram,
+            )
+
+            info = orbital_info_from_arrays(mo_energy, mo_occ, formula=result.formula)
+            fig = plot_orbital_diagram(info)
+            from matplotlib.backends.backend_agg import FigureCanvasAgg as _AggCanvas
+
+            _AggCanvas(fig)  # attach Agg canvas for savefig in any environment
+            buf = _io.BytesIO()
+            fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+            buf.seek(0)
+            img_b64 = base64.b64encode(buf.read()).decode()
+            self._orb_diagram_html.value = (
+                f'<img src="data:image/png;base64,{img_b64}" '
+                'style="max-width:100%;height:auto" />'
+            )
+        except Exception:
+            return
+
+        self._last_orb_info = info
+        self._last_orb_mo_coeff = getattr(result, "mo_coeff", None)
+        self._last_orb_mol_atom = getattr(result, "pyscf_mol_atom", None)
+        self._last_orb_mol_basis = getattr(result, "pyscf_mol_basis", None)
+
+        if (
+            self._last_orb_mo_coeff is not None
+            and self._last_orb_mol_atom is not None
+            and self._last_orb_mol_basis is not None
+        ):
+            self._orb_iso_output.clear_output()
+            self._orb_toggle.unobserve_all()
+            self._orb_toggle.value = "HOMO"
+
+            def _on_orb_toggle(change) -> None:
+                threading.Thread(
+                    target=self._render_orbital_isosurface,
+                    args=(change["new"],),
+                    daemon=True,
+                ).start()
+
+            self._orb_toggle.observe(_on_orb_toggle, names="value")
+            self._orb_iso_controls.layout.display = ""
+            threading.Thread(
+                target=self._render_orbital_isosurface,
+                args=("HOMO",),
+                daemon=True,
+            ).start()
+        else:
+            self._orb_iso_controls.layout.display = "none"
+
+        self._orb_accordion.selected_index = None
+        self._orb_accordion.layout.display = ""
+
+    def _render_orbital_isosurface(self, orbital_label: str) -> None:
+        """Generate a cube file and render an orbital isosurface (Linux/WSL only)."""
+        import tempfile
+
+        orb_info = getattr(self, "_last_orb_info", None)
+        if orb_info is None:
+            return
+
+        n_occ = orb_info.n_occupied
+        n_total = len(orb_info.mo_energies_ev)
+        _idx_map = {
+            "HOMO-1": n_occ - 2,
+            "HOMO": n_occ - 1,
+            "LUMO": n_occ,
+            "LUMO+1": n_occ + 1,
+        }
+        orb_idx = _idx_map.get(orbital_label)
+        if orb_idx is None or orb_idx < 0 or orb_idx >= n_total:
+            return
+
+        mo_coeff = getattr(self, "_last_orb_mo_coeff", None)
+        mol_atom = getattr(self, "_last_orb_mol_atom", None)
+        mol_basis = getattr(self, "_last_orb_mol_basis", None)
+        if mo_coeff is None or mol_atom is None or mol_basis is None:
+            return
+
+        try:
+            from quantui.orbital_visualization import (
+                generate_cube_from_arrays,
+                plot_cube_isosurface,
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                cube_path = Path(tmpdir) / f"orbital_{orbital_label}.cube"
+                generate_cube_from_arrays(
+                    mol_atom, mol_basis, mo_coeff, orb_idx, cube_path
+                )
+                fig = plot_cube_isosurface(
+                    cube_path, title=f"{orbital_label} Isosurface"
+                )
+        except Exception:
+            return
+
+        from IPython.display import display as _ipy_display
+
+        self._orb_iso_output.clear_output()
+        with self._orb_iso_output:
+            _ipy_display(fig)
+
     def _render_vib_mode(self, vib_data, molecule, mode_number: int) -> None:
         """Render vibrational animation for the given mode into ``vib_output``.
 
@@ -2287,8 +2553,12 @@ class QuantUIApp:
             # Show calc-type-specific extra panels
             if ct == "Geometry Opt":
                 self._show_opt_trajectory(result)
+                self._show_orbital_diagram(result)
             elif ct == "Frequency":
                 self._show_vib_animation(result, calc_mol)
+                self._show_ir_spectrum(result)
+            elif ct == "Single Point":
+                self._show_orbital_diagram(result)
 
             self.step_progress.complete(2)
             self.step_progress.complete(3)

@@ -829,6 +829,7 @@ class TestFormatNMRResult:
         assert "caution" in html
 
     def test_no_hc_atoms_shows_empty_message(self):
+
         from quantui.nmr_calc import NMRResult
 
         r = NMRResult(
@@ -842,3 +843,168 @@ class TestFormatNMRResult:
         app = QuantUIApp()
         html = app._format_nmr_result(r)
         assert "No ¹H or ¹³C" in html
+
+
+# ---------------------------------------------------------------------------
+# M-IR — IR Spectrum accordion widgets
+# ---------------------------------------------------------------------------
+
+
+class TestIRSpectrumWidgets:
+    """IR Spectrum accordion and controls exist in correct initial state."""
+
+    def test_ir_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_ir_accordion")
+        assert isinstance(app._ir_accordion, widgets.Accordion)
+
+    def test_ir_accordion_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._ir_accordion.layout.display == "none"
+
+    def test_ir_mode_toggle_exists(self):
+        app = QuantUIApp()
+        assert isinstance(app._ir_mode_toggle, widgets.ToggleButtons)
+
+    def test_ir_mode_toggle_default_stick(self):
+        app = QuantUIApp()
+        assert app._ir_mode_toggle.value == "Stick"
+
+    def test_ir_mode_toggle_has_two_options(self):
+        app = QuantUIApp()
+        assert set(app._ir_mode_toggle.options) == {"Stick", "Broadened"}
+
+    def test_fwhm_slider_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._ir_fwhm_slider.layout.display == "none"
+
+    def test_fwhm_slider_default_20(self):
+        app = QuantUIApp()
+        assert app._ir_fwhm_slider.value == 20.0
+
+    def test_fwhm_slider_range(self):
+        app = QuantUIApp()
+        assert app._ir_fwhm_slider.min == 5.0
+        assert app._ir_fwhm_slider.max == 100.0
+
+
+class TestShowIRSpectrum:
+    """_show_ir_spectrum reveals accordion and wires mode toggle."""
+
+    def _make_freq_result(self):
+        from unittest.mock import MagicMock
+
+        r = MagicMock()
+        r.frequencies_cm1 = [500.0, 1000.0, 3000.0]
+        r.ir_intensities = [10.0, 50.0, 5.0]
+        return r
+
+    def test_accordion_revealed_after_show(self):
+        app = QuantUIApp()
+        if app._ir_fig is None:
+            pytest.skip("plotly FigureWidget not available")
+        app._last_ir_freqs = []
+        app._last_ir_ints = []
+        app._show_ir_spectrum(self._make_freq_result())
+        assert app._ir_accordion.layout.display == ""
+
+    def test_fwhm_slider_shown_when_broadened(self):
+        app = QuantUIApp()
+        if app._ir_fig is None:
+            pytest.skip("plotly FigureWidget not available")
+        app._show_ir_spectrum(self._make_freq_result())
+        app._ir_mode_toggle.value = "Broadened"
+        assert app._ir_fwhm_slider.layout.display == ""
+
+    def test_fwhm_slider_hidden_when_stick(self):
+        app = QuantUIApp()
+        if app._ir_fig is None:
+            pytest.skip("plotly FigureWidget not available")
+        app._show_ir_spectrum(self._make_freq_result())
+        app._ir_mode_toggle.value = "Broadened"
+        app._ir_mode_toggle.value = "Stick"
+        assert app._ir_fwhm_slider.layout.display == "none"
+
+
+# ---------------------------------------------------------------------------
+# M6 — Orbital Diagram accordion
+# ---------------------------------------------------------------------------
+
+
+class TestOrbitalAccordionWidgets:
+    """Orbital accordion widgets exist and have the correct initial state."""
+
+    def test_orb_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_orb_accordion")
+
+    def test_orb_accordion_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._orb_accordion.layout.display == "none"
+
+    def test_orb_diagram_html_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_orb_diagram_html")
+
+    def test_orb_toggle_has_four_options(self):
+        app = QuantUIApp()
+        assert set(app._orb_toggle.options) == {"HOMO-1", "HOMO", "LUMO", "LUMO+1"}
+
+    def test_orb_toggle_default_homo(self):
+        app = QuantUIApp()
+        assert app._orb_toggle.value == "HOMO"
+
+    def test_orb_iso_controls_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._orb_iso_controls.layout.display == "none"
+
+    def test_orb_accordion_hidden_after_run_clicked(self):
+        app = QuantUIApp()
+        app._orb_accordion.layout.display = ""
+        app._on_run_clicked(None)
+        assert app._orb_accordion.layout.display == "none"
+
+
+class TestShowOrbitalDiagram:
+    """_show_orbital_diagram reveals accordion when MO data is present."""
+
+    def _make_result_with_mo(self):
+        from unittest.mock import MagicMock
+
+        import numpy as np
+
+        r = MagicMock()
+        r.formula = "H2O"
+        r.mo_energy_hartree = np.array([-1.5, -0.8, 0.2, 0.9])
+        r.mo_occ = np.array([2.0, 2.0, 0.0, 0.0])
+        r.mo_coeff = None
+        r.pyscf_mol_atom = None
+        r.pyscf_mol_basis = None
+        return r
+
+    def test_accordion_revealed_with_mo_data(self):
+        app = QuantUIApp()
+        app._show_orbital_diagram(self._make_result_with_mo())
+        assert app._orb_accordion.layout.display == ""
+
+    def test_accordion_stays_hidden_when_no_mo_data(self):
+        from unittest.mock import MagicMock
+
+        app = QuantUIApp()
+        r = MagicMock()
+        r.mo_energy_hartree = None
+        r.mo_occ = None
+        app._show_orbital_diagram(r)
+        assert app._orb_accordion.layout.display == "none"
+
+    def test_diagram_html_populated_with_img(self):
+        app = QuantUIApp()
+        app._show_orbital_diagram(self._make_result_with_mo())
+        # matplotlib is a base dep — the img tag must be present
+        assert "<img" in app._orb_diagram_html.value
+
+    def test_isosurface_controls_hidden_when_no_mo_coeff(self):
+        app = QuantUIApp()
+        app._show_orbital_diagram(self._make_result_with_mo())
+        # mo_coeff is None in mock → iso controls stay hidden
+        assert app._orb_iso_controls.layout.display == "none"

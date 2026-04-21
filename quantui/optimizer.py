@@ -47,7 +47,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, List, Optional
+from typing import IO, Any, List, Optional
 
 from .ase_bridge import ASE_AVAILABLE, atoms_to_molecule, molecule_to_atoms
 from .molecule import Molecule
@@ -120,14 +120,15 @@ try:
                 raise RuntimeError("No Atoms object attached to calculator.")
 
             # Build PySCF molecule from the current ASE geometry
-            mol = gto.Mole()
-            mol.atom = [
+            _atom_list_for_cube = [
                 (sym, pos)
                 for sym, pos in zip(
                     self.atoms.get_chemical_symbols(),
                     self.atoms.get_positions().tolist(),
                 )
             ]
+            mol = gto.Mole()
+            mol.atom = _atom_list_for_cube
             mol.basis = self.basis
             mol.charge = self.charge
             mol.spin = self.spin
@@ -150,6 +151,10 @@ try:
             mf.verbose = 0
             mf.stdout = _sink
             mf.kernel()
+
+            # Save final SCF state for orbital visualization
+            self._last_mf = mf
+            self._last_atom_list = _atom_list_for_cube
 
             # Analytical nuclear gradient (Hartree/Bohr)
             grad_driver = mf.nuc_grad_method()
@@ -203,6 +208,11 @@ class OptimizationResult:
     method: str
     basis: str
     formula: str
+    mo_energy_hartree: Optional[Any] = None  # from final SCF step
+    mo_occ: Optional[Any] = None
+    mo_coeff: Optional[Any] = None
+    pyscf_mol_atom: Optional[Any] = None  # atom list at final geometry (Angstrom)
+    pyscf_mol_basis: Optional[str] = None
 
     @property
     def energy_hartree(self) -> float:
@@ -419,6 +429,26 @@ def optimize_geometry(
     n_steps = max(0, len(trajectory) - 1)
     formula = molecule.get_formula()
 
+    # Extract MO data from the final SCF step (non-fatal)
+    _opt_mo_energy: Optional[Any] = None
+    _opt_mo_occ: Optional[Any] = None
+    _opt_mo_coeff: Optional[Any] = None
+    _opt_mol_atom: Optional[Any] = None
+    _opt_mol_basis: Optional[str] = None
+    try:
+        import numpy as _np_mo
+
+        _last_mf = getattr(atoms.calc, "_last_mf", None)
+        _last_atom_list = getattr(atoms.calc, "_last_atom_list", None)
+        if _last_mf is not None:
+            _opt_mo_energy = _np_mo.array(_last_mf.mo_energy)
+            _opt_mo_occ = _np_mo.array(_last_mf.mo_occ)
+            _opt_mo_coeff = _np_mo.array(_last_mf.mo_coeff)
+            _opt_mol_atom = _last_atom_list
+            _opt_mol_basis = basis
+    except Exception:
+        pass
+
     logger.info(
         "Geometry optimization: %s %s/%s  steps=%d  converged=%s  "
         "E_final=%.8f Ha  RMSD~%.4f Å",
@@ -440,6 +470,11 @@ def optimize_geometry(
         method=method,
         basis=basis,
         formula=formula,
+        mo_energy_hartree=_opt_mo_energy,
+        mo_occ=_opt_mo_occ,
+        mo_coeff=_opt_mo_coeff,
+        pyscf_mol_atom=_opt_mol_atom,
+        pyscf_mol_basis=_opt_mol_basis,
     )
 
 
