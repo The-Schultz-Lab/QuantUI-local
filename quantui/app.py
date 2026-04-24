@@ -269,6 +269,7 @@ class QuantUIApp:
         self._molecule: Optional[Molecule] = None
         self._last_result: Any = None
         self._results: List = []
+        self._pending_traj_result: Any = None
 
         # Availability (copied from module-level flags)
         self._pyscf_available: bool = _PYSCF_AVAILABLE
@@ -569,6 +570,29 @@ class QuantUIApp:
             style={"description_width": "100px"},
             layout=widgets.Layout(width="180px"),
         )
+
+        # ── Frequency calc extra widgets ──────────────────────────────────────
+        self._freq_seed_dd = widgets.Dropdown(
+            options=[("(use current molecule)", "")],
+            description="Seed geometry:",
+            style={"description_width": "110px"},
+            layout=widgets.Layout(width="420px"),
+            tooltip="Optionally load the final optimised geometry from a previous Geo Opt result",
+        )
+        self._freq_seed_refresh_btn = widgets.Button(
+            description="",
+            icon="refresh",
+            layout=widgets.Layout(width="32px", height="32px"),
+            tooltip="Refresh the list of saved geometry optimisations",
+        )
+        self._freq_preopt_cb = widgets.Checkbox(
+            value=False,
+            description="Pre-optimize geometry first (recommended for unoptimised inputs)",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="100%"),
+        )
+        self._freq_seed_note = widgets.HTML("")
+
         self.calc_extra_opts = widgets.VBox([])
 
         # Context-help buttons
@@ -849,6 +873,7 @@ class QuantUIApp:
         )
         self.traj_accordion.set_title(0, "Trajectory Viewer")
         self.traj_accordion.selected_index = None  # collapsed by default
+        self.traj_accordion.observe(self._on_traj_expand, names=["selected_index"])
 
         # Vibrational animation accordion (Frequency only — hidden until Freq completes)
         self.vib_mode_dd = widgets.Dropdown(
@@ -925,8 +950,92 @@ class QuantUIApp:
         self._ir_accordion.selected_index = None
 
         # Orbital energy diagram + isosurface accordion (Single Point / Geo Opt)
-        self._orb_diagram_html = widgets.HTML(
-            value="",
+        try:
+            import plotly.graph_objects as _go
+
+            self._orb_fig_widget = _go.FigureWidget(
+                layout=dict(
+                    height=460,
+                    margin=dict(l=60, r=110, t=50, b=30),
+                    xaxis=dict(
+                        showticklabels=False,
+                        showgrid=False,
+                        zeroline=False,
+                        fixedrange=True,
+                    ),
+                    yaxis=dict(
+                        title="Energy (eV)",
+                        showgrid=True,
+                        gridcolor="#e5e7eb",
+                        tickformat=".1f",
+                    ),
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    hovermode="closest",
+                )
+            )
+            _orb_plotly_available = True
+        except ImportError:
+            self._orb_fig_widget = None
+            _orb_plotly_available = False
+
+        self._orb_ymin_input = widgets.BoundedFloatText(
+            value=-30.0,
+            min=-500.0,
+            max=200.0,
+            step=1.0,
+            description="Y min:",
+            layout=widgets.Layout(width="140px"),
+            style={"description_width": "45px"},
+        )
+        self._orb_ymax_input = widgets.BoundedFloatText(
+            value=5.0,
+            min=-500.0,
+            max=500.0,
+            step=1.0,
+            description="Y max:",
+            layout=widgets.Layout(width="140px"),
+            style={"description_width": "45px"},
+        )
+        self._orb_n_orb_input = widgets.BoundedIntText(
+            value=20,
+            min=4,
+            max=200,
+            step=2,
+            description="Show N:",
+            layout=widgets.Layout(width="120px"),
+            style={"description_width": "50px"},
+        )
+        _orb_controls_row = widgets.HBox(
+            [
+                widgets.HTML(
+                    '<span style="font-size:11px;color:#555;font-weight:600">Y range:</span>'
+                ),
+                self._orb_ymin_input,
+                self._orb_ymax_input,
+                widgets.HTML(
+                    '<span style="font-size:11px;color:#555;font-weight:600;margin-left:8px">'
+                    "Orbitals shown:</span>"
+                ),
+                self._orb_n_orb_input,
+            ],
+            layout=widgets.Layout(
+                align_items="center",
+                flex_wrap="wrap",
+                gap="4px",
+                margin="0 0 6px 0",
+            ),
+        )
+        _orb_diagram_content: list = [_orb_controls_row]
+        if _orb_plotly_available and self._orb_fig_widget is not None:
+            _orb_diagram_content.append(self._orb_fig_widget)
+        else:
+            self._orb_diagram_html = widgets.HTML(
+                value="", layout=widgets.Layout(width="100%")
+            )
+            _orb_diagram_content.append(self._orb_diagram_html)
+        self._orb_diagram_box = widgets.VBox(
+            _orb_diagram_content,
             layout=widgets.Layout(width="100%"),
         )
         self._orb_toggle = widgets.ToggleButtons(
@@ -950,7 +1059,7 @@ class QuantUIApp:
         self._orb_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
-                    [self._orb_diagram_html, self._orb_iso_controls],
+                    [self._orb_diagram_box],
                     layout=widgets.Layout(padding="8px"),
                 )
             ],
@@ -958,6 +1067,51 @@ class QuantUIApp:
         )
         self._orb_accordion.set_title(0, "Orbital Diagram")
         self._orb_accordion.selected_index = None
+
+        # Post-calculate panel — isosurface and other heavy on-demand analyses
+        self._iso_generate_btn = widgets.Button(
+            description="Generate Isosurface",
+            button_style="primary",
+            icon="flask",
+            disabled=True,
+            tooltip=(
+                "Generate a 3D orbital isosurface. "
+                "Available after running or loading a Single Point or Geometry Optimization."
+            ),
+            layout=widgets.Layout(width="200px", margin="8px 0 4px 0"),
+        )
+        _iso_body = widgets.VBox(
+            [
+                widgets.HTML(
+                    '<p style="color:#555;font-size:12px;margin:0 0 8px">'
+                    "Visualise a molecular orbital as a 3D isosurface (Linux / WSL only — "
+                    "requires PySCF and RDKit). Run or load a Single Point or Geometry "
+                    "Optimization first, then click <b>Generate</b>.</p>"
+                ),
+                self._orb_iso_controls,
+                self._iso_generate_btn,
+            ],
+            layout=widgets.Layout(padding="8px"),
+        )
+        self._iso_accordion = widgets.Accordion(
+            children=[_iso_body],
+            layout=widgets.Layout(margin="8px 0"),
+        )
+        self._iso_accordion.set_title(0, "Orbital Isosurface")
+        self._iso_accordion.selected_index = None
+
+        self.post_calc_panel = widgets.VBox(
+            [
+                widgets.HTML(
+                    '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+                    "Heavy analyses that run on demand after a calculation completes. "
+                    "Run a Single Point or Geometry Optimization (or load one from History "
+                    "and click <b>View log</b>), then use the tools below.</p>"
+                ),
+                self._iso_accordion,
+            ],
+            layout=widgets.Layout(padding="8px 0"),
+        )
 
         # Result directory path label (hidden until a calculation saves)
         self._result_dir_label = widgets.HTML(
@@ -979,12 +1133,7 @@ class QuantUIApp:
                 widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
                 self.result_output,
                 self.result_viz_output,
-                self._orb_accordion,
-                self.traj_accordion,
-                self.vib_accordion,
-                self._ir_accordion,
                 self._result_dir_label,
-                self._result_log_accordion,
             ]
         )
 
@@ -1284,6 +1433,11 @@ class QuantUIApp:
                 ),
                 self._log_source_lbl,
                 self._log_output_html,
+                self._orb_accordion,
+                self.traj_accordion,
+                self.vib_accordion,
+                self._ir_accordion,
+                self._result_log_accordion,
             ],
             layout=widgets.Layout(padding="8px 0"),
         )
@@ -1336,6 +1490,7 @@ class QuantUIApp:
                 self.history_panel,
                 self.compare_panel,
                 self.log_tab_panel,
+                self.post_calc_panel,
                 self.help_tab_panel,
             ]
         )
@@ -1343,7 +1498,8 @@ class QuantUIApp:
         self.root_tab.set_title(1, "History")
         self.root_tab.set_title(2, "Compare")
         self.root_tab.set_title(3, "Output")
-        self.root_tab.set_title(4, "Help")
+        self.root_tab.set_title(4, "Post-calculate")
+        self.root_tab.set_title(5, "Help")
 
     # ══ CALLBACK WIRING ══════════════════════════════════════════════════════
 
@@ -1364,6 +1520,10 @@ class QuantUIApp:
         self.change_mol_btn.on_click(self._on_expand_mol_input)
         # Calc type
         self.calc_type_dd.observe(self._on_calc_type_changed, names="value")
+        self._freq_seed_dd.observe(self._on_freq_seed_changed, names="value")
+        self._freq_seed_refresh_btn.on_click(
+            lambda _btn: self._refresh_freq_seed_options()
+        )
         # Notes + estimate
         self.method_dd.observe(self._update_notes, names="value")
         self.basis_dd.observe(self._update_notes, names="value")
@@ -1404,6 +1564,12 @@ class QuantUIApp:
         self.help_topic_dd.observe(self._on_help_topic_changed, names="value")
         # Vibrational mode selector
         self.vib_mode_dd.observe(self._on_vib_mode_changed, names="value")
+        # Orbital diagram axis controls
+        self._orb_ymin_input.observe(self._on_orb_range_changed, names="value")
+        self._orb_ymax_input.observe(self._on_orb_range_changed, names="value")
+        self._orb_n_orb_input.observe(self._on_orb_range_changed, names="value")
+        # Orbital isosurface generate button
+        self._iso_generate_btn.on_click(self._on_iso_generate)
 
     # ══ CALLBACK METHODS ═════════════════════════════════════════════════════
 
@@ -1552,6 +1718,16 @@ class QuantUIApp:
                     layout=widgets.Layout(gap="8px"),
                 ),
             ]
+        elif ct == "Frequency":
+            self._refresh_freq_seed_options()
+            self.calc_extra_opts.children = [
+                widgets.HBox(
+                    [self._freq_seed_dd, self._freq_seed_refresh_btn],
+                    layout=widgets.Layout(align_items="center", gap="6px"),
+                ),
+                self._freq_preopt_cb,
+                self._freq_seed_note,
+            ]
         elif ct == "UV-Vis (TD-DFT)":
             self.calc_extra_opts.children = [
                 self.nstates_si,
@@ -1572,6 +1748,44 @@ class QuantUIApp:
             ]
         else:
             self.calc_extra_opts.children = []
+
+    def _refresh_freq_seed_options(self) -> None:
+        """Populate _freq_seed_dd with saved geometry-opt results."""
+        from quantui.results_storage import list_results, load_result
+
+        options = [("(use current molecule)", "")]
+        for d in list_results():
+            try:
+                data = load_result(d)
+                if data.get("calc_type") != "geometry_opt":
+                    continue
+                traj_file = d / "trajectory.json"
+                if not traj_file.exists():
+                    continue
+                ts = data.get("timestamp", d.name[:19])
+                label = (
+                    f"{data['formula']}  {data['method']}/{data['basis']}" f"  —  {ts}"
+                )
+                options.append((label, str(d)))
+            except Exception:
+                continue
+        self._freq_seed_dd.options = options
+
+    def _on_freq_seed_changed(self, change) -> None:
+        """Enable/disable pre-opt checkbox and update the seed note."""
+        path_str = change["new"]
+        if path_str:
+            # A history geometry is selected — pre-optimize makes no sense.
+            self._freq_preopt_cb.value = False
+            self._freq_preopt_cb.disabled = True
+            self._freq_seed_note.value = (
+                '<span style="font-size:12px;color:#16a34a">'
+                "✓ Final optimised geometry will be loaded from the selected result."
+                "</span>"
+            )
+        else:
+            self._freq_preopt_cb.disabled = False
+            self._freq_seed_note.value = ""
 
     # ── Help buttons ──────────────────────────────────────────────────────
 
@@ -1808,17 +2022,27 @@ class QuantUIApp:
 
     def _on_past_dd_changed(self, change) -> None:
         path_str = change["new"]
+        # Hide result-specific accordions whenever the selection changes so stale
+        # content from a previous "View log" click doesn't persist.
+        self._orb_accordion.layout.display = "none"
+        self.traj_accordion.layout.display = "none"
+        self._pending_traj_result = None
+        self._ir_accordion.layout.display = "none"
+        self._result_log_accordion.layout.display = "none"
+        self._result_dir_label.layout.display = "none"
+        self._iso_generate_btn.disabled = True
         if not path_str:
             self.past_output.clear_output()
             return
-        self.past_output.clear_output(wait=True)
-        try:
-            from quantui import load_result
+        self.past_output.clear_output()
+        with self.past_output:
+            try:
+                from quantui import load_result
 
-            data = load_result(Path(path_str))
-            self.past_output.append_display_data(HTML(self._format_past_result(data)))
-        except Exception as exc:
-            self.past_output.append_stdout(f"Could not load result: {exc}\n")
+                data = load_result(Path(path_str))
+                display(HTML(self._format_past_result(data)))
+            except Exception as exc:
+                print(f"Could not load result: {exc}")
 
     def _on_past_refresh(self, btn) -> None:
         self._refresh_results_browser()
@@ -1841,17 +2065,97 @@ class QuantUIApp:
         threading.Thread(target=_reset, daemon=True).start()
 
     def _on_view_log(self, btn) -> None:
+        import types
+
         path_str = self.past_dd.value
         if not path_str:
             return
-        log_path = Path(path_str) / "pyscf.log"
+        result_dir = Path(path_str)
+
+        # Read log text
+        log_path = result_dir / "pyscf.log"
         if log_path.exists():
             text = log_path.read_text(encoding="utf-8", errors="replace")
-            label = Path(path_str).name
+            label = result_dir.name
         else:
             text = "(No pyscf.log found for this result.)"
             label = ""
+
+        # Reset accordions that belong to a specific calc type
+        self.traj_accordion.layout.display = "none"
+        self._pending_traj_result = None
+        self._ir_accordion.layout.display = "none"
+
+        # Populate inline log view and navigate to the Output tab
         self._update_log_panel(text, label)
+        # Full Output Log accordion — always available
+        self._show_result_log(result_dir, text)
+
+        # Load result.json to reconstruct calc-type-specific panels
+        try:
+            from quantui import load_result
+            from quantui.results_storage import load_orbitals, load_trajectory
+
+            data = load_result(result_dir)
+            calc_type = data.get("calc_type", "")
+            formula = data.get("formula", "")
+
+            # Orbital diagram — available for SP and Geo Opt (orbitals.npz)
+            if calc_type in ("single_point", "geometry_opt"):
+                try:
+                    orb = load_orbitals(result_dir)
+                    orb.formula = formula
+                    self._show_orbital_diagram(orb)
+                except Exception:
+                    pass
+
+            # Geometry opt → trajectory carousel (if trajectory.json was saved)
+            if calc_type == "geometry_opt":
+                traj_file = result_dir / "trajectory.json"
+                if traj_file.exists():
+                    try:
+                        traj, energies = load_trajectory(result_dir)
+                        if len(traj) >= 2:
+                            stub = types.SimpleNamespace(
+                                trajectory=traj,
+                                energies_hartree=energies,
+                                formula=formula,
+                            )
+                            self._pending_traj_result = stub
+                            self.traj_accordion.layout.display = ""
+                    except Exception:
+                        pass
+
+            # Frequency → IR spectrum + vibrational mode viewer
+            elif calc_type == "frequency":
+                ir = data.get("spectra", {}).get("ir", {})
+                mol_data = data.get("spectra", {}).get("molecule", {})
+                freqs = ir.get("frequencies_cm1")
+                ints = ir.get("ir_intensities")
+                displacements = ir.get("displacements")
+
+                if freqs and ints:
+                    freq_stub = types.SimpleNamespace(
+                        frequencies_cm1=freqs,
+                        ir_intensities=ints,
+                        displacements=displacements,
+                    )
+                    self._show_ir_spectrum(freq_stub)
+
+                    # Vibrational mode viewer needs displacements + molecule geometry
+                    if displacements and mol_data.get("atoms"):
+                        from quantui.molecule import Molecule as _Mol
+
+                        hist_mol = _Mol(
+                            atoms=mol_data["atoms"],
+                            coordinates=mol_data["coords"],
+                            charge=mol_data.get("charge", 0),
+                            multiplicity=mol_data.get("multiplicity", 1),
+                        )
+                        self._show_vib_animation(freq_stub, hist_mol)
+        except Exception:
+            pass
+
         self._goto_output_tab()
 
     # ── Perf stats reset ──────────────────────────────────────────────────
@@ -2092,86 +2396,444 @@ class QuantUIApp:
         self._result_dir_label.layout.display = ""
 
         # Log accordion — prefer on-disk file (written by save_result) over in-memory string
+        import html as _html_mod
+
         _log_path = saved_dir / "pyscf.log"
         try:
             log_content = _log_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             log_content = log_text
 
+        if not log_content.strip():
+            log_content = "(No output captured for this calculation.)"
+
+        self._result_log_output.clear_output()
         with self._result_log_output:
             display(
                 HTML(
-                    f'<pre style="font-size:11px;max-height:300px;overflow-y:auto;'
+                    f'<pre style="font-size:11px;max-height:400px;overflow-y:auto;'
                     f'white-space:pre-wrap;word-break:break-all;margin:0;padding:6px">'
-                    f"{log_content}</pre>"
+                    f"{_html_mod.escape(log_content)}</pre>"
                 )
             )
         self._result_log_accordion.layout.display = ""
 
-    def _show_opt_trajectory(self, opt_result) -> None:
-        """Render geo-opt trajectory animation and energy chart in the trajectory panel.
-
-        Uses plotlyMol's ``create_trajectory_animation``. Safe to call from a
-        background thread — uses ``with output:`` context.  No-op if plotlyMol
-        is not installed.
-        """
-        traj = opt_result.trajectory
-        energies = opt_result.energies_hartree
-        if len(traj) < 2:
+    def _on_traj_expand(self, change) -> None:
+        """Lazily generate the trajectory animation when the accordion is first opened."""
+        if change["new"] != 0:
             return
-
-        try:
-            import plotly.graph_objects as go
-            from IPython.display import display as _ipy_display
-            from plotlymol3d import create_trajectory_animation
-        except ImportError:
+        result = self._pending_traj_result
+        if result is None:
             return
+        self._pending_traj_result = None
 
-        # Build full XYZ blocks (count + title + coords).
-        xyzblocks = [
-            f"{len(m.atoms)}\n{m.get_formula()}\n{m.to_xyz_string()}" for m in traj
-        ]
-
-        anim_fig = create_trajectory_animation(
-            xyzblocks=xyzblocks,
-            energies_hartree=energies if energies else None,
-            charge=traj[0].charge,
-            mode="ball+stick",
-            resolution=12,
-            title=f"Geo Opt: {opt_result.formula}",
-        )
-        anim_fig.update_layout(height=420)
-
-        # Energy convergence chart (relative energies in kcal/mol).
-        _HARTREE_TO_KCAL = 627.5094740631
-        e0 = energies[0] if energies else 0.0
-        rel_e = [(e - e0) * _HARTREE_TO_KCAL for e in energies] if energies else []
-        energy_fig = go.Figure(
-            go.Scatter(
-                x=list(range(len(rel_e))),
-                y=rel_e,
-                mode="lines+markers",
-                name="ΔE",
-                line=dict(color="#2563eb", width=2),
-                marker=dict(size=6),
-            )
-        )
-        energy_fig.update_layout(
-            title="Energy Convergence",
-            xaxis_title="Optimization Step",
-            yaxis_title="ΔE (kcal/mol)",
-            height=280,
-            margin=dict(l=60, r=20, t=40, b=40),
-        )
+        from IPython.display import HTML as _H
+        from IPython.display import display as _d
 
         self.traj_output.clear_output()
         with self.traj_output:
-            _ipy_display(anim_fig)
-            _ipy_display(energy_fig)
+            _d(
+                _H(
+                    '<p style="color:#555;font-style:italic;padding:8px">Loading trajectory viewer…</p>'
+                )
+            )
 
-        # Reveal the accordion (collapsed).
-        self.traj_accordion.selected_index = None
-        self.traj_accordion.layout.display = ""
+        def _render():
+            try:
+                self._show_opt_trajectory(result)
+            except Exception as exc:
+                from IPython.display import HTML as _H2
+                from IPython.display import display as _d2
+
+                self.traj_output.clear_output()
+                with self.traj_output:
+                    _d2(
+                        _H2(
+                            f'<p style="color:#b91c1c;padding:8px">⚠ Trajectory rendering failed: {exc}</p>'
+                        )
+                    )
+
+        threading.Thread(target=_render, daemon=True).start()
+
+    def _show_opt_trajectory(self, opt_result) -> None:
+        """Build the trajectory carousel and energy chart in the trajectory panel.
+
+        Shows a step slider for flipping through frames and an energy-convergence
+        chart.  An Export button generates a standalone HTML animation file on demand.
+        Safe to call from a background thread.
+
+        When plotlymol is available:
+        - Bond perception runs once on frame 0 (RDKit DetermineConnectivity is slow).
+        - All remaining frames are pre-rendered in a background thread pool so
+          slider navigation is instant after a few seconds.
+        """
+        import concurrent.futures
+
+        from IPython.display import display as _ipy_display
+
+        traj = opt_result.trajectory
+        energies = opt_result.energies_hartree
+        n = len(traj)
+        if n < 2:
+            return
+
+        _HARTREE_TO_KCAL = 627.5094740631
+        e0 = energies[0] if energies else 0.0
+        rel_e = [(e - e0) * _HARTREE_TO_KCAL for e in energies] if energies else []
+
+        # --- Energy convergence chart ---
+        _has_plotly = False
+        try:
+            import plotly.graph_objects as go
+
+            energy_fig = go.Figure(
+                go.Scatter(
+                    x=list(range(n)),
+                    y=rel_e,
+                    mode="lines+markers",
+                    name="ΔE",
+                    line=dict(color="#2563eb", width=2),
+                    marker=dict(size=6),
+                )
+            )
+            energy_fig.update_layout(
+                title="Energy Convergence",
+                xaxis_title="Step",
+                yaxis_title="ΔE (kcal/mol)",
+                height=220,
+                margin=dict(l=60, r=20, t=40, b=40),
+            )
+            _has_plotly = True
+        except ImportError:
+            pass
+
+        # --- Pre-build XYZ blocks (reused by carousel, fast path, and export) ---
+        _charge = traj[0].charge
+        _xyzblocks = [
+            f"{len(m.atoms)}\n{m.get_formula()}\n{m.to_xyz_string()}" for m in traj
+        ]
+        _FRAME_W, _FRAME_H, _FRAME_RES = 460, 340, 8
+
+        # --- Attempt to set up fast-path: bond perception once on frame 0 ---
+        # draw_3D_mol accepts a pre-parsed RDKit mol and skips bond perception,
+        # so we only pay that cost for the first frame instead of every frame.
+        _ref_mol = None
+        _plotlymol_fast = False
+        try:
+            from plotlymol3d import (
+                draw_3D_mol as _draw_3D_mol,
+            )
+            from plotlymol3d import (
+                format_figure as _fmt_fig,
+            )
+            from plotlymol3d import (
+                format_lighting as _fmt_light,
+            )
+            from plotlymol3d import (
+                make_subplots as _make_subplots,
+            )
+            from plotlymol3d import (
+                xyzblock_to_rdkitmol as _xyz_to_rdkit,
+            )
+            from rdkit import Chem as _Chem
+
+            from quantui.visualization_py3dmol import LIGHTING_PRESETS as _LP
+
+            _ref_mol = _xyz_to_rdkit(_xyzblocks[0], charge=_charge)
+            _plotlymol_fast = _ref_mol is not None
+        except Exception:
+            pass
+
+        def _build_fig_fast(idx: int):
+            """Reuse frame-0 bond topology; only swap in new atom positions."""
+            mol_xyz = _Chem.MolFromXYZBlock(_xyzblocks[idx] + "\n")
+            if mol_xyz is None:
+                return None
+            rw = _Chem.RWMol(_ref_mol)
+            conf_src = mol_xyz.GetConformer()
+            conf_dst = rw.GetConformer()
+            for atom_idx in range(rw.GetNumAtoms()):
+                conf_dst.SetAtomPosition(atom_idx, conf_src.GetAtomPosition(atom_idx))
+            fig = _make_subplots(rows=1, cols=1, specs=[[{"type": "scene"}]])
+            _draw_3D_mol(fig, rw.GetMol(), _FRAME_RES, "ball+stick")
+            fig = _fmt_fig(fig)
+            fig = _fmt_light(fig, **_LP.get("soft", _LP["soft"]))
+            fig.update_layout(
+                width=_FRAME_W,
+                height=_FRAME_H,
+                paper_bgcolor="white",
+                scene=dict(bgcolor="white"),
+                margin=dict(l=0, r=0, t=0, b=0),
+            )
+            return fig
+
+        def _build_fig(idx: int):
+            """Return (kind, obj) for frame idx; fast path when bonds are cached."""
+            if _plotlymol_fast:
+                try:
+                    fig = _build_fig_fast(idx)
+                    if fig is not None:
+                        return ("plotly", fig)
+                except Exception:
+                    pass
+            # Slow fallback: full plotlymol pipeline
+            try:
+                from quantui.visualization_py3dmol import visualize_molecule_plotlymol
+
+                fig = visualize_molecule_plotlymol(
+                    traj[idx],
+                    mode="ball+stick",
+                    resolution=_FRAME_RES,
+                    width=_FRAME_W,
+                    height=_FRAME_H,
+                )
+                return ("plotly", fig)
+            except ImportError:
+                pass
+            # Last resort: py3Dmol
+            try:
+                import py3Dmol as _p3d
+
+                view = _p3d.view(width=_FRAME_W, height=_FRAME_H)
+                view.addModel(_xyzblocks[idx], "xyz")
+                view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
+                view.setBackgroundColor("white")
+                view.zoomTo()
+                return ("py3dmol", view)
+            except Exception as exc:
+                return ("error", str(exc))
+
+        _frame_cache: dict = {}
+
+        # --- Carousel controls ---
+        _step_slider = widgets.IntSlider(
+            value=0,
+            min=0,
+            max=n - 1,
+            description="Step:",
+            continuous_update=False,
+            style={"description_width": "40px"},
+            layout=widgets.Layout(width="360px"),
+        )
+        _step_info = widgets.HTML(value=self._traj_step_html(0, traj, energies, rel_e))
+        _frame_out = widgets.Output(layout=widgets.Layout(min_height="340px"))
+        _cache_label = widgets.HTML(
+            value=f'<span style="color:#888;font-size:11px;font-style:italic">'
+            f"Pre-rendering frames… 0 / {n}</span>"
+        )
+
+        def _display_frame(idx: int) -> None:
+            kind, obj = _frame_cache[idx]
+            _frame_out.clear_output()
+            with _frame_out:
+                if kind == "error":
+                    _ipy_display(
+                        HTML(
+                            f'<p style="color:#b91c1c;padding:8px">Frame render failed: {obj}</p>'
+                        )
+                    )
+                else:
+                    _ipy_display(obj)
+
+        def _update_frame(change) -> None:
+            idx = change["new"]
+            _step_info.value = self._traj_step_html(idx, traj, energies, rel_e)
+            if idx in _frame_cache:
+                _display_frame(idx)
+                return
+            _frame_out.clear_output()
+            with _frame_out:
+                _ipy_display(
+                    HTML(
+                        '<p style="color:#555;font-style:italic;padding:8px">Rendering…</p>'
+                    )
+                )
+
+            def _on_demand():
+                try:
+                    _frame_cache[idx] = _build_fig(idx)
+                    _display_frame(idx)
+                except Exception as exc:
+                    _frame_out.clear_output()
+                    with _frame_out:
+                        _ipy_display(
+                            HTML(
+                                f'<p style="color:#b91c1c;padding:8px">Frame render failed: {exc}</p>'
+                            )
+                        )
+
+            threading.Thread(target=_on_demand, daemon=True).start()
+
+        _step_slider.observe(_update_frame, names="value")
+
+        # --- Export button ---
+        _export_btn = widgets.Button(
+            description="Export Animation",
+            icon="download",
+            layout=widgets.Layout(width="160px", margin="0 0 0 12px"),
+            tooltip="Generate a standalone HTML animation file (may take a minute)",
+        )
+        _export_status = widgets.HTML()
+
+        def _on_export(_btn):
+            _btn.disabled = True
+            _export_status.value = (
+                f'<span style="color:#555;font-style:italic">'
+                f"Generating {n}-frame animation, please wait…</span>"
+            )
+
+            def _do_export():
+                try:
+                    from plotlymol3d import create_trajectory_animation
+
+                    anim_fig = create_trajectory_animation(
+                        xyzblocks=_xyzblocks,
+                        energies_hartree=energies if energies else None,
+                        charge=_charge,
+                        mode="ball+stick",
+                        resolution=12,
+                        title=f"Geo Opt: {opt_result.formula}",
+                    )
+                    _result_dir = getattr(self, "_last_result_dir", None)
+                    out_path = (
+                        _result_dir / "trajectory_animation.html"
+                        if _result_dir is not None
+                        else Path.home() / f"{opt_result.formula}_trajectory.html"
+                    )
+                    anim_fig.write_html(str(out_path))
+                    _export_status.value = (
+                        f'<span style="color:#16a34a;font-size:12px">'
+                        f"✓ Saved: {out_path}</span>"
+                    )
+                except Exception as exc:
+                    _export_status.value = (
+                        f'<span style="color:#b91c1c">Export failed: {exc}</span>'
+                    )
+                finally:
+                    _btn.disabled = False
+
+            threading.Thread(target=_do_export, daemon=True).start()
+
+        _export_btn.on_click(_on_export)
+
+        # --- Assemble layout ---
+        _header = widgets.HBox(
+            [_step_slider, _export_btn],
+            layout=widgets.Layout(align_items="center", margin="4px 0"),
+        )
+        _panel = widgets.VBox(
+            [_header, _step_info, _cache_label, _frame_out, _export_status]
+        )
+
+        # Display panel immediately — clears the “Loading…” message right away.
+        self.traj_output.clear_output()
+        with self.traj_output:
+            if _has_plotly and rel_e:
+                _ipy_display(energy_fig)
+            _ipy_display(_panel)
+
+        # Show placeholder while frame 0 renders in the background.
+        _frame_out.clear_output()
+        with _frame_out:
+            _ipy_display(
+                HTML(
+                    '<p style="color:#555;font-style:italic;padding:8px">'
+                    "Rendering frame 0…</p>"
+                )
+            )
+
+        # Render all frames (0 first, then 1+) in a background thread.
+        def _prerender_all() -> None:
+            try:
+                _frame_cache[0] = _build_fig(0)
+                _display_frame(0)
+                _cache_label.value = (
+                    f'<span style="color:#888;font-size:11px;font-style:italic">'
+                    f"Pre-rendering frames… 1 / {n}</span>"
+                )
+                if n > 1:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                        futures = {pool.submit(_build_fig, i): i for i in range(1, n)}
+                        done = 1
+                        for fut in concurrent.futures.as_completed(futures):
+                            i = futures[fut]
+                            try:
+                                _frame_cache[i] = fut.result()
+                            except Exception:
+                                pass
+                            done += 1
+                            _cache_label.value = (
+                                f'<span style="color:#888;font-size:11px;font-style:italic">'
+                                f"Pre-rendering frames… {done} / {n}</span>"
+                            )
+            except Exception:
+                pass
+            _cache_label.value = (
+                f'<span style="color:#16a34a;font-size:11px">'
+                f"✓ All {n} frames ready</span>"
+            )
+
+        threading.Thread(target=_prerender_all, daemon=True).start()
+
+    def _traj_step_html(self, step: int, traj, energies, rel_e) -> str:
+        """One-line info label for the given trajectory step index."""
+        n = len(traj)
+        mol = traj[step]
+        e_abs = f"{energies[step]:.8f} Ha" if energies and step < len(energies) else "—"
+        delta = (
+            f" &nbsp;·&nbsp; ΔE = {rel_e[step]:+.3f} kcal/mol"
+            if rel_e and step < len(rel_e)
+            else ""
+        )
+        return (
+            f'<span style="font-size:12px;color:#666">'
+            f"Step {step} / {n - 1} &nbsp;·&nbsp; {mol.get_formula()}"
+            f" &nbsp;·&nbsp; E = {e_abs}{delta}</span>"
+        )
+
+    def _render_traj_frame(self, molecule, output_widget) -> None:
+        """Render a single trajectory frame into output_widget (thread-safe).
+
+        Tries plotlymol first, falls back to py3Dmol.
+        """
+        try:
+            from quantui.visualization_py3dmol import visualize_molecule_plotlymol
+
+            fig = visualize_molecule_plotlymol(
+                molecule, mode="ball+stick", resolution=8, width=460, height=340
+            )
+            output_widget.clear_output()
+            with output_widget:
+                display(fig)
+            return
+        except ImportError:
+            pass
+
+        # Fallback: py3Dmol
+        try:
+            import py3Dmol as _p3d
+
+            xyz = (
+                f"{len(molecule.atoms)}\n"
+                f"{molecule.get_formula()}\n"
+                f"{molecule.to_xyz_string()}"
+            )
+            view = _p3d.view(width=460, height=340)
+            view.addModel(xyz, "xyz")
+            view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
+            view.setBackgroundColor("white")
+            view.zoomTo()
+            output_widget.clear_output()
+            with output_widget:
+                display(view)
+        except Exception as exc:
+            output_widget.clear_output()
+            with output_widget:
+                display(
+                    HTML(
+                        f'<p style="color:#b91c1c;padding:8px">Frame render failed: {exc}</p>'
+                    )
+                )
 
     def _build_vib_data_from_freq_result(self, freq_result, molecule):
         """Construct a ``plotlymol3d.VibrationalData`` from a FreqResult.
@@ -2355,34 +3017,16 @@ class QuantUIApp:
             self._ir_fig.update_layout(new_fig.layout)
 
     def _show_orbital_diagram(self, result) -> None:
-        """Build and reveal orbital diagram accordion after Single Point or Geo Opt."""
-        import base64
-        import io as _io
-
+        """Build and reveal the interactive orbital diagram accordion."""
         mo_energy = getattr(result, "mo_energy_hartree", None)
         mo_occ = getattr(result, "mo_occ", None)
         if mo_energy is None or mo_occ is None:
             return
 
         try:
-            from quantui.orbital_visualization import (
-                orbital_info_from_arrays,
-                plot_orbital_diagram,
-            )
+            from quantui.orbital_visualization import orbital_info_from_arrays
 
             info = orbital_info_from_arrays(mo_energy, mo_occ, formula=result.formula)
-            fig = plot_orbital_diagram(info)
-            from matplotlib.backends.backend_agg import FigureCanvasAgg as _AggCanvas
-
-            _AggCanvas(fig)  # attach Agg canvas for savefig in any environment
-            buf = _io.BytesIO()
-            fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-            buf.seek(0)
-            img_b64 = base64.b64encode(buf.read()).decode()
-            self._orb_diagram_html.value = (
-                f'<img src="data:image/png;base64,{img_b64}" '
-                'style="max-width:100%;height:auto" />'
-            )
         except Exception:
             return
 
@@ -2391,34 +3035,103 @@ class QuantUIApp:
         self._last_orb_mol_atom = getattr(result, "pyscf_mol_atom", None)
         self._last_orb_mol_basis = getattr(result, "pyscf_mol_basis", None)
 
+        if self._orb_fig_widget is not None:
+            try:
+                from quantui.orbital_visualization import plot_orbital_diagram_plotly
+
+                fig = plot_orbital_diagram_plotly(
+                    info, max_orbitals=self._orb_n_orb_input.value
+                )
+                # Sync axis limit controls to auto-computed range
+                yr = fig.layout.yaxis.range
+                if yr is not None:
+                    self._orb_ymin_input.value = round(float(yr[0]), 2)
+                    self._orb_ymax_input.value = round(float(yr[1]), 2)
+                self._orb_fig_widget.data = []
+                for trace in fig.data:
+                    self._orb_fig_widget.add_trace(trace)
+                self._orb_fig_widget.update_layout(fig.layout)
+            except Exception:
+                pass
+        else:
+            # Fallback: static matplotlib PNG (plotly not installed)
+            import base64
+            import io as _io
+
+            try:
+                from matplotlib.backends.backend_agg import (
+                    FigureCanvasAgg as _AggCanvas,
+                )
+
+                from quantui.orbital_visualization import plot_orbital_diagram
+
+                mpl_fig = plot_orbital_diagram(info)
+                _AggCanvas(mpl_fig)
+                buf = _io.BytesIO()
+                mpl_fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+                buf.seek(0)
+                img_b64 = base64.b64encode(buf.read()).decode()
+                self._orb_diagram_html.value = (
+                    f'<img src="data:image/png;base64,{img_b64}" '
+                    'style="max-width:100%;height:auto" />'
+                )
+            except Exception:
+                pass
+
         if (
             self._last_orb_mo_coeff is not None
             and self._last_orb_mol_atom is not None
             and self._last_orb_mol_basis is not None
         ):
             self._orb_iso_output.clear_output()
-            self._orb_toggle.unobserve_all()
             self._orb_toggle.value = "HOMO"
-
-            def _on_orb_toggle(change) -> None:
-                threading.Thread(
-                    target=self._render_orbital_isosurface,
-                    args=(change["new"],),
-                    daemon=True,
-                ).start()
-
-            self._orb_toggle.observe(_on_orb_toggle, names="value")
             self._orb_iso_controls.layout.display = ""
-            threading.Thread(
-                target=self._render_orbital_isosurface,
-                args=("HOMO",),
-                daemon=True,
-            ).start()
+            self._iso_generate_btn.disabled = False
         else:
             self._orb_iso_controls.layout.display = "none"
+            self._iso_generate_btn.disabled = True
 
         self._orb_accordion.selected_index = None
         self._orb_accordion.layout.display = ""
+
+    def _on_iso_generate(self, btn) -> None:
+        """Generate an orbital isosurface for the currently selected orbital."""
+        orbital_label = self._orb_toggle.value
+        btn.disabled = True
+        btn.description = "Generating…"
+
+        def _run():
+            try:
+                self._render_orbital_isosurface(orbital_label)
+            finally:
+                btn.disabled = False
+                btn.description = "Generate Isosurface"
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_orb_range_changed(self, _change=None) -> None:
+        """Live-update the orbital diagram when axis limits or orbital count changes."""
+        info = getattr(self, "_last_orb_info", None)
+        if info is None or self._orb_fig_widget is None:
+            return
+        ymin = self._orb_ymin_input.value
+        ymax = self._orb_ymax_input.value
+        if ymin >= ymax:
+            return
+        try:
+            from quantui.orbital_visualization import plot_orbital_diagram_plotly
+
+            fig = plot_orbital_diagram_plotly(
+                info,
+                max_orbitals=self._orb_n_orb_input.value,
+                yrange=(ymin, ymax),
+            )
+            self._orb_fig_widget.data = []
+            for trace in fig.data:
+                self._orb_fig_widget.add_trace(trace)
+            self._orb_fig_widget.update_layout(fig.layout)
+        except Exception:
+            pass
 
     def _render_orbital_isosurface(self, orbital_label: str) -> None:
         """Generate a cube file and render an orbital isosurface (Linux/WSL only)."""
@@ -2460,7 +3173,17 @@ class QuantUIApp:
                 fig = plot_cube_isosurface(
                     cube_path, title=f"{orbital_label} Isosurface"
                 )
-        except Exception:
+        except Exception as _exc:
+            from IPython.display import HTML as _H
+            from IPython.display import display as _d
+
+            self._orb_iso_output.clear_output()
+            with self._orb_iso_output:
+                _d(
+                    _H(
+                        f'<p style="color:#b91c1c;padding:8px">⚠ Orbital isosurface failed: {_exc}</p>'
+                    )
+                )
             return
 
         from IPython.display import display as _ipy_display
@@ -2571,9 +3294,52 @@ class QuantUIApp:
                 result_html = self._format_opt_result(result)
                 save_spectra, save_type = {}, "geometry_opt"
             elif ct == "Frequency":
-                self.run_status.value = "Computing frequencies (SCF + Hessian)..."
                 from quantui.freq_calc import run_freq_calc
 
+                # ── Step 1: resolve seed geometry ─────────────────────────────
+                _seed_path = self._freq_seed_dd.value
+                if _seed_path:
+                    from quantui.results_storage import load_trajectory
+
+                    self.run_status.value = "Loading seed geometry from history…"
+                    _seed_traj, _ = load_trajectory(Path(_seed_path))
+                    calc_mol = _seed_traj[-1]
+                    log.write(
+                        f"\nSeed geometry loaded from: {Path(_seed_path).name}\n"
+                        f"  Formula: {calc_mol.get_formula()}  "
+                        f"Atoms: {len(calc_mol.atoms)}\n\n"
+                    )
+
+                # ── Step 2: optional geometry pre-optimisation ────────────────
+                if self._freq_preopt_cb.value:
+                    from quantui import optimize_geometry
+
+                    self.run_status.value = "Pre-optimizing geometry before frequency…"
+                    log.write(
+                        "\n── Pre-optimisation (before frequency analysis) ──────────────────\n"
+                    )
+                    _pre_opt = optimize_geometry(
+                        molecule=calc_mol,
+                        method=self.method_dd.value,
+                        basis=self.basis_dd.value,
+                        progress_stream=log,  # type: ignore[arg-type]
+                    )
+                    calc_mol = _pre_opt.molecule
+                    _conv_str = (
+                        "converged" if _pre_opt.converged else "did NOT fully converge"
+                    )
+                    log.write(
+                        f"\nPre-optimisation {_conv_str} in {_pre_opt.n_steps} steps."
+                        f"  E = {_pre_opt.energies_hartree[-1]:.8f} Ha\n\n"
+                    )
+                    if not _pre_opt.converged:
+                        log.write(
+                            "⚠ Pre-optimisation did not fully converge — "
+                            "proceeding with best available geometry.\n\n"
+                        )
+
+                # ── Step 3: frequency analysis ────────────────────────────────
+                self.run_status.value = "Computing frequencies (SCF + Hessian)…"
                 result = run_freq_calc(
                     molecule=calc_mol,
                     method=self.method_dd.value,
@@ -2581,12 +3347,31 @@ class QuantUIApp:
                     progress_stream=log,  # type: ignore[arg-type]
                 )
                 result_html = self._format_freq_result(result)
+                _displacements_serialized = None
+                if result.displacements is not None:
+                    try:
+                        import numpy as _np_d
+
+                        _displacements_serialized = _np_d.asarray(
+                            result.displacements
+                        ).tolist()
+                    except Exception:
+                        pass
                 save_spectra = {
                     "ir": {
                         "frequencies_cm1": result.frequencies_cm1,
                         "ir_intensities": result.ir_intensities,
                         "zpve_hartree": result.zpve_hartree,
-                    }
+                        "displacements": _displacements_serialized,
+                    },
+                    "molecule": {
+                        "atoms": list(calc_mol.atoms),
+                        "coords": [
+                            list(map(float, row)) for row in calc_mol.coordinates
+                        ],
+                        "charge": calc_mol.charge,
+                        "multiplicity": calc_mol.multiplicity,
+                    },
                 }
                 save_type = "frequency"
             elif ct == "UV-Vis (TD-DFT)":
@@ -2662,7 +3447,9 @@ class QuantUIApp:
 
             # Show calc-type-specific extra panels
             if ct == "Geometry Opt":
-                self._show_opt_trajectory(result)
+                # Stash trajectory data; animation renders lazily when the accordion opens.
+                self._pending_traj_result = result
+                self.traj_accordion.layout.display = ""
                 self._show_orbital_diagram(result)
             elif ct == "Frequency":
                 self._show_vib_animation(result, calc_mol)
@@ -2676,6 +3463,7 @@ class QuantUIApp:
             # Persist to disk
             try:
                 from quantui import save_result
+                from quantui.results_storage import save_orbitals, save_trajectory
 
                 _saved_dir = save_result(
                     result,
@@ -2684,6 +3472,15 @@ class QuantUIApp:
                     spectra=save_spectra,
                 )
                 self._last_result_dir = _saved_dir
+                # Persist trajectory so history viewer can replay it.
+                if ct == "Geometry Opt":
+                    _traj = getattr(result, "trajectory", None)
+                    _e_list = getattr(result, "energies_hartree", [])
+                    if _traj:
+                        save_trajectory(_saved_dir, _traj, _e_list or [])
+                # Persist MO data for orbital diagram + isosurface replay.
+                if ct in ("Single Point", "Geometry Opt"):
+                    save_orbitals(_saved_dir, result)
                 self._refresh_results_browser()
                 self._populate_compare_list()
                 self._update_log_panel(
@@ -2862,6 +3659,9 @@ class QuantUIApp:
             except Exception:
                 pass
         self.past_dd.options = options if options else [("(no saved results)", "")]
+        # Keep frequency seed dropdown in sync if it's currently visible.
+        if self.calc_type_dd.value == "Frequency":
+            self._refresh_freq_seed_options()
 
     def _refresh_comparison(self) -> None:
         from quantui import comparison_table_html, summary_from_session_result
@@ -2913,17 +3713,58 @@ class QuantUIApp:
 
     def _render_log(self, text: str, source_label: str = "") -> None:
         import html as _html_mod
+        import re as _re
+
+        _bfgs_re = _re.compile(r"^BFGS:\s+(\d+)\s+\S+\s+([-\d.]+)\s+([\d.]+)")
 
         lines = text.splitlines()
         rows = []
         for line in lines:
             esc = _html_mod.escape(line)
-            if "converged SCF energy" in line or "SCF converged" in line:
+            # ── Geometry optimisation (ASE BFGS) ──────────────────────────────
+            if line.startswith("BFGS:"):
+                m = _bfgs_re.match(line)
+                if m:
+                    fmax = float(m.group(3))
+                    # Colour by convergence: green when nearly converged, teal otherwise
+                    style = (
+                        "color:#16a34a;font-weight:600"
+                        if fmax < 0.1
+                        else "color:#0d9488"
+                    )
+                else:
+                    style = "color:#0d9488"
+            elif line.strip() == "Step Time Energy fmax":
+                style = "color:#334155;font-weight:700"
+            # ── Post-optimisation summary ──────────────────────────────────────
+            elif line.startswith("── Final SCF"):
+                style = "color:#6d28d9;font-weight:600"
+            elif "HOMO-LUMO gap:" in line:
+                style = "color:#6d28d9;font-weight:600"
+            # ── SCF convergence ────────────────────────────────────────────────
+            elif "converged SCF energy" in line or "SCF converged" in line:
                 style = "color:#16a34a;font-weight:600"
-            elif "cycle=" in line and "E=" in line:
-                style = "color:#475569"
-            elif "HOMO" in line or "LUMO" in line:
+            elif line.lstrip().startswith("cycle=") and "E=" in line:
+                style = "color:#64748b"
+            # ── MO / orbital info (verbose=4) ──────────────────────────────────
+            elif "MO energies" in line or "** MO" in line:
+                style = "color:#1d4ed8;font-weight:600"
+            elif "HOMO" in line or "LUMO" in line or "All MO energies" in line:
                 style = "color:#2563eb"
+            elif line.lstrip().startswith("occupied:") or line.lstrip().startswith(
+                "virtual:"
+            ):
+                style = "color:#3b82f6"
+            # ── Thermo / properties ────────────────────────────────────────────
+            elif "Mulliken" in line or "mulliken" in line:
+                style = "color:#7c3aed"
+            elif "dipole" in line.lower() or "Dipole" in line:
+                style = "color:#7c3aed"
+            elif "nuclear repulsion" in line.lower() or "Nuclear repulsion" in line:
+                style = "color:#94a3b8"
+            elif "E(MP2)" in line or "MP2 correlation" in line:
+                style = "color:#0891b2"
+            # ── Warnings / errors ──────────────────────────────────────────────
             elif "Warning" in line or "warning" in line:
                 style = "color:#d97706"
             elif "Error" in line or "error" in line or "failed" in line:
@@ -3286,6 +4127,22 @@ class QuantUIApp:
         )
 
     def _format_past_result(self, data: dict) -> str:
+        _ct_labels = {
+            "single_point": ("Single Point", "#2563eb", "#dbeafe"),
+            "geometry_opt": ("Geometry Optimization", "#7c3aed", "#ede9fe"),
+            "frequency": ("Frequency Analysis", "#15803d", "#dcfce7"),
+            "tddft": ("TD-DFT", "#b45309", "#fef3c7"),
+            "nmr": ("NMR", "#0d9488", "#ccfbf1"),
+        }
+        ct = data.get("calc_type", "")
+        _ct_label, _ct_fg, _ct_bg = _ct_labels.get(
+            ct, (ct.replace("_", " ").title(), "#555", "#f3f4f6")
+        )
+        _ct_badge = (
+            f'<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            f"background:{_ct_bg};color:{_ct_fg};font-size:12px;font-weight:700;"
+            f'letter-spacing:0.03em;margin-bottom:6px">{_ct_label}</span>'
+        )
         _conv = "Yes" if data.get("converged") else "No (treat results with caution)"
         _cc = "green" if data.get("converged") else "#c00"
         _gap = (
@@ -3313,6 +4170,7 @@ class QuantUIApp:
         return (
             f'<div style="background:#f0fff0;border-left:4px solid #4CAF50;'
             f'padding:10px 14px;border-radius:4px;margin:6px 0">'
+            f"{_ct_badge}<br>"
             f'<b>{data["formula"]} &mdash; {data["method"]}/{data["basis"]}</b>'
             f'&ensp;<small style="color:#777">{ts}</small>'
             f'<table style="margin-top:8px;font-size:14px;border-collapse:collapse">'

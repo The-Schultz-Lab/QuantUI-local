@@ -449,6 +449,53 @@ def optimize_geometry(
     except Exception:
         pass
 
+    # Write a final MO summary to the progress stream (replaces per-step verbose output
+    # which is suppressed to avoid thousands of SCF lines for long optimizations).
+    if _opt_mo_energy is not None and _opt_mo_occ is not None:
+        try:
+            import numpy as _np_summary
+
+            _HARTREE_TO_EV_s = 27.211386245988
+            _e_ev_raw = _np_summary.asarray(_opt_mo_energy) * _HARTREE_TO_EV_s
+            _occ_raw = _np_summary.asarray(_opt_mo_occ)
+            # For UHF the arrays are (2, n_mo); use alpha spin for summary.
+            if _e_ev_raw.ndim == 2:
+                _e_ev_1d = _e_ev_raw[0]
+                _occ_1d = _occ_raw[0]
+            else:
+                _e_ev_1d = _e_ev_raw
+                _occ_1d = _occ_raw
+            _homo_idx = (
+                int(_np_summary.where(_occ_1d > 0)[0][-1])
+                if (_occ_1d > 0).any()
+                else -1
+            )
+            _lumo_idx = (
+                int(_np_summary.where(_occ_1d == 0)[0][0])
+                if (_occ_1d == 0).any()
+                else -1
+            )
+            _stream.write(
+                "\n── Final SCF (optimised geometry) ────────────────────────────────────\n"
+            )
+            if _homo_idx >= 0:
+                _stream.write(
+                    f"  HOMO (MO #{_homo_idx}): {_e_ev_1d[_homo_idx]:.4f} eV\n"
+                )
+            if _lumo_idx >= 0:
+                _stream.write(
+                    f"  LUMO (MO #{_lumo_idx}): {_e_ev_1d[_lumo_idx]:.4f} eV\n"
+                )
+            if _homo_idx >= 0 and _lumo_idx >= 0:
+                _stream.write(
+                    f"  HOMO-LUMO gap: {_e_ev_1d[_lumo_idx] - _e_ev_1d[_homo_idx]:.4f} eV\n"
+                )
+            _stream.write(
+                f"  All MO energies (eV): {' '.join(f'{e:.3f}' for e in _e_ev_1d)}\n"
+            )
+        except Exception:
+            pass
+
     logger.info(
         "Geometry optimization: %s %s/%s  steps=%d  converged=%s  "
         "E_final=%.8f Ha  RMSD~%.4f Å",

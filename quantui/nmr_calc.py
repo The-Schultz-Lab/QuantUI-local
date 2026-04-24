@@ -98,7 +98,7 @@ def run_nmr_calc(
     mol.basis = basis
     mol.charge = molecule.charge
     mol.spin = molecule.multiplicity - 1
-    mol.verbose = 0
+    mol.verbose = 4
     mol.stdout = stream
     mol.build()
 

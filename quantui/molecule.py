@@ -245,7 +245,7 @@ class Molecule:
         lines = []
         for atom, coord in zip(self.atoms, self.coordinates):
             x, y, z = coord
-            lines.append(f"{atom} {x} {y} {z}")
+            lines.append(f"{atom} {x:.10f} {y:.10f} {z:.10f}")
 
         return "\n".join(lines)
 

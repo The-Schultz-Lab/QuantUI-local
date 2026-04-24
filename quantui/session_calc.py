@@ -126,7 +126,7 @@ def run_in_session(
     molecule: Molecule,
     method: str = "RHF",
     basis: str = "6-31G",
-    verbose: int = 3,
+    verbose: int = 4,
     progress_stream: Optional[IO[str]] = None,
     solvent: Optional[str] = None,
 ) -> SessionResult:

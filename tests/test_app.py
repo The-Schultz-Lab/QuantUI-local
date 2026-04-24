@@ -117,13 +117,20 @@ class TestDefaultWidgetValues:
 class TestTabStructure:
     """root_tab has the correct number and titles of tabs."""
 
-    def test_five_tabs(self):
+    def test_six_tabs(self):
         app = QuantUIApp()
-        assert len(app.root_tab.children) == 5
+        assert len(app.root_tab.children) == 6
 
     def test_tab_titles(self):
         app = QuantUIApp()
-        expected = ["Calculate", "History", "Compare", "Output", "Help"]
+        expected = [
+            "Calculate",
+            "History",
+            "Compare",
+            "Output",
+            "Post-calculate",
+            "Help",
+        ]
         for i, title in enumerate(expected):
             assert app.root_tab.get_title(i) == title
 

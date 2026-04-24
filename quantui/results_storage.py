@@ -143,3 +143,144 @@ def load_result(result_dir: Path) -> dict:
     """Return the parsed ``result.json`` from *result_dir*."""
     data: dict = json.loads((result_dir / "result.json").read_text())
     return data
+
+
+def save_orbitals(result_dir: Path, result: object) -> None:
+    """Persist MO data to *result_dir*/orbitals.npz and orbitals_meta.json.
+
+    Saves ``mo_energy_hartree``, ``mo_occ``, and ``mo_coeff`` as a compressed
+    NumPy archive and ``pyscf_mol_atom`` / ``pyscf_mol_basis`` as JSON so the
+    orbital diagram and isosurface can be replayed from history.
+    """
+    import numpy as _np
+
+    mo_e = getattr(result, "mo_energy_hartree", None)
+    mo_occ = getattr(result, "mo_occ", None)
+    mo_coeff = getattr(result, "mo_coeff", None)
+    mol_atom = getattr(result, "pyscf_mol_atom", None)
+    mol_basis = getattr(result, "pyscf_mol_basis", None)
+
+    if mo_e is None and mo_occ is None:
+        return
+
+    arrays: dict = {}
+    if mo_e is not None:
+        arrays["mo_energy_hartree"] = _np.asarray(mo_e)
+    if mo_occ is not None:
+        arrays["mo_occ"] = _np.asarray(mo_occ)
+    if mo_coeff is not None:
+        arrays["mo_coeff"] = _np.asarray(mo_coeff)
+    if arrays:
+        _np.savez_compressed(str(result_dir / "orbitals.npz"), **arrays)
+
+    meta: dict = {}
+    if mol_atom is not None:
+        # Convert list-of-tuples to JSON-safe list-of-lists.
+        meta["mol_atom"] = [[sym, list(coords)] for sym, coords in mol_atom]
+    if mol_basis is not None:
+        meta["mol_basis"] = mol_basis
+    if meta:
+        (result_dir / "orbitals_meta.json").write_text(json.dumps(meta))
+
+
+def load_orbitals(result_dir: Path):
+    """Reload MO data saved by :func:`save_orbitals`.
+
+    Returns a ``SimpleNamespace`` with ``mo_energy_hartree``, ``mo_occ``,
+    ``mo_coeff``, ``pyscf_mol_atom``, ``pyscf_mol_basis``, and ``formula``
+    (empty string if not known).
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``orbitals.npz`` does not exist in *result_dir*.
+    """
+    import types
+
+    import numpy as _np
+
+    npz_path = result_dir / "orbitals.npz"
+    if not npz_path.exists():
+        raise FileNotFoundError(npz_path)
+
+    data = _np.load(str(npz_path))
+    stub = types.SimpleNamespace(
+        mo_energy_hartree=(
+            data["mo_energy_hartree"] if "mo_energy_hartree" in data else None
+        ),
+        mo_occ=data["mo_occ"] if "mo_occ" in data else None,
+        mo_coeff=data["mo_coeff"] if "mo_coeff" in data else None,
+        pyscf_mol_atom=None,
+        pyscf_mol_basis=None,
+        formula="",
+    )
+    meta_path = result_dir / "orbitals_meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        stub.pyscf_mol_atom = meta.get("mol_atom")
+        stub.pyscf_mol_basis = meta.get("mol_basis")
+    return stub
+
+
+def save_trajectory(result_dir: Path, trajectory: list, energies: list) -> None:
+    """Persist geometry-optimisation trajectory to *result_dir*/trajectory.json.
+
+    Parameters
+    ----------
+    result_dir:
+        Directory returned by :func:`save_result`.
+    trajectory:
+        List of ``Molecule`` objects (one per optimisation step).
+    energies:
+        List of total energies in Hartree, parallel to *trajectory*.
+    """
+    if not trajectory:
+        return
+    mol0 = trajectory[0]
+    data = {
+        "atoms": list(mol0.atoms),
+        "charge": mol0.charge,
+        "multiplicity": mol0.multiplicity,
+        "steps": [
+            {
+                "coords": [list(row) for row in mol.coordinates],
+                "energy": energies[i] if i < len(energies) else None,
+            }
+            for i, mol in enumerate(trajectory)
+        ],
+    }
+    (result_dir / "trajectory.json").write_text(json.dumps(data))
+
+
+def load_trajectory(result_dir: Path):
+    """Reload a saved trajectory as (molecules, energies).
+
+    Returns
+    -------
+    tuple[list, list]
+        ``(trajectory, energies_hartree)`` where *trajectory* is a list of
+        ``Molecule`` objects and *energies_hartree* is a parallel list of
+        floats (``None`` entries are dropped to an empty list if all absent).
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``trajectory.json`` does not exist in *result_dir*.
+    """
+    from quantui.molecule import Molecule
+
+    raw = json.loads((result_dir / "trajectory.json").read_text())
+    atoms = raw["atoms"]
+    charge = raw.get("charge", 0)
+    mult = raw.get("multiplicity", 1)
+    trajectory = []
+    energies = []
+    for step in raw["steps"]:
+        trajectory.append(
+            Molecule(atoms, step["coords"], charge=charge, multiplicity=mult)
+        )
+        energies.append(step["energy"])
+    # If every energy is None the list is meaningless; return empty instead.
+    if all(e is None for e in energies):
+        energies = []
+    return trajectory, energies

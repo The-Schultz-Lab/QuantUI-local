@@ -171,7 +171,7 @@ def run_freq_calc(
     mol.basis = basis
     mol.charge = molecule.charge
     mol.spin = molecule.multiplicity - 1
-    mol.verbose = 3
+    mol.verbose = 4
     mol.stdout = stream
     mol.build()
 
@@ -225,6 +225,8 @@ def run_freq_calc(
 
     try:
         hess_obj = mf.Hessian()
+        hess_obj.verbose = mol.verbose
+        hess_obj.stdout = stream
         h = hess_obj.kernel()
 
         freq_info = pyscf_thermo.harmonic_analysis(mol, h)

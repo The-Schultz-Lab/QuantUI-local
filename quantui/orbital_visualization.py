@@ -289,6 +289,174 @@ def plot_orbital_diagram(
 
 
 # ============================================================================
+# Plotly interactive energy-level diagram
+# ============================================================================
+
+
+def plot_orbital_diagram_plotly(
+    info: OrbitalInfo,
+    *,
+    max_orbitals: int = 20,
+    yrange: Optional[Tuple[float, float]] = None,
+    title: Optional[str] = None,
+    width: int = 380,
+    height: int = 460,
+):
+    """Interactive Plotly orbital energy-level diagram.
+
+    Returns a ``plotly.graph_objects.Figure`` suitable for embedding in a
+    ``go.FigureWidget``.  Each MO is drawn as a short horizontal line;
+    hover shows the MO index and energy in eV.  HOMO/LUMO are highlighted
+    with labels and a gap annotation.
+
+    Parameters
+    ----------
+    info:
+        Orbital data.
+    max_orbitals:
+        Maximum number of MOs to display, centred on the HOMO–LUMO gap.
+    yrange:
+        Explicit ``(y_min, y_max)`` in eV; auto-computed when ``None``.
+    title:
+        Custom plot title; defaults to ``"Orbital Energy Levels — {formula}"``.
+    width, height:
+        Figure dimensions in pixels.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    import plotly.graph_objects as go
+
+    energies = info.mo_energies_ev
+    n_occ = info.n_occupied
+    n_total = len(energies)
+
+    half = max_orbitals // 2
+    start = max(0, n_occ - half)
+    end = min(n_total, n_occ + half)
+
+    LHW = 0.3  # half-width of each horizontal line in x
+
+    traces = []
+    for idx in range(start, end):
+        e = float(energies[idx])
+        is_homo = idx == n_occ - 1
+        is_lumo = idx == n_occ
+        is_occ = idx < n_occ
+
+        if is_homo:
+            color, lw = "#2171b5", 3.0
+            hover = f"MO #{idx + 1} — HOMO<br>{e:+.4f} eV"
+        elif is_lumo:
+            color, lw = "#e6550d", 3.0
+            hover = f"MO #{idx + 1} — LUMO<br>{e:+.4f} eV"
+        elif is_occ:
+            color, lw = "#2171b5", 1.5
+            hover = f"MO #{idx + 1} (occupied)<br>{e:+.4f} eV"
+        else:
+            color, lw = "#9e9e9e", 1.5
+            hover = f"MO #{idx + 1} (virtual)<br>{e:+.4f} eV"
+
+        traces.append(
+            go.Scatter(
+                x=[-LHW, LHW],
+                y=[e, e],
+                mode="lines",
+                line=dict(color=color, width=lw),
+                hovertemplate=hover + "<extra></extra>",
+                showlegend=False,
+                name="",
+            )
+        )
+
+    homo_e = info.homo_energy_ev
+    lumo_e = info.lumo_energy_ev
+    gap = info.homo_lumo_gap_ev
+    bracket_x = -LHW - 0.15
+
+    annotations = [
+        dict(
+            x=LHW + 0.04,
+            y=homo_e,
+            xref="x",
+            yref="y",
+            text="<b>HOMO</b>",
+            showarrow=False,
+            font=dict(size=11, color="#2171b5"),
+            xanchor="left",
+            yanchor="middle",
+        ),
+        dict(
+            x=LHW + 0.04,
+            y=lumo_e,
+            xref="x",
+            yref="y",
+            text="<b>LUMO</b>",
+            showarrow=False,
+            font=dict(size=11, color="#e6550d"),
+            xanchor="left",
+            yanchor="middle",
+        ),
+        dict(
+            x=bracket_x,
+            y=homo_e,
+            ax=bracket_x,
+            ay=lumo_e,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            text=f"<b>{gap:.2f} eV</b>",
+            font=dict(size=10, color="#e6550d"),
+            arrowhead=2,
+            arrowwidth=1.5,
+            arrowcolor="#e6550d",
+            xanchor="right",
+        ),
+    ]
+
+    subset = energies[start:end]
+    span = float(subset.max()) - float(subset.min())
+    margin = max(0.5, span * 0.08 + 0.5)
+    if yrange is None:
+        y_min = float(subset.min()) - margin
+        y_max = float(subset.max()) + margin
+    else:
+        y_min, y_max = yrange
+
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        width=width,
+        height=height,
+        margin=dict(l=60, r=110, t=50, b=30),
+        title=dict(
+            text=title or f"Orbital Energy Levels — {info.formula}",
+            font=dict(size=13, family="Arial"),
+        ),
+        xaxis=dict(
+            range=[-0.9, 0.9],
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            fixedrange=True,
+        ),
+        yaxis=dict(
+            title="Energy (eV)",
+            range=[y_min, y_max],
+            showgrid=True,
+            gridcolor="#e5e7eb",
+            tickformat=".1f",
+        ),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        annotations=annotations,
+        hovermode="closest",
+    )
+    return fig
+
+
+# ============================================================================
 # Summary HTML (for notebooks)
 # ============================================================================
 
