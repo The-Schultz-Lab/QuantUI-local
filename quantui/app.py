@@ -3262,7 +3262,29 @@ class QuantUIApp:
             n_atoms=len(mol.atoms),
         )
         _run_wall_t = time.perf_counter()
+        _run_cpu_t = time.process_time()
         log = _LogCapture(self.run_output, self.run_status)
+
+        # Write structured log header immediately so it appears at the top of output
+        try:
+            from quantui.log_utils import format_log_header as _fmt_log_hdr
+
+            _hdr_calc_type = {
+                "Geometry Opt": "geometry_opt",
+                "Frequency": "frequency",
+                "UV-Vis (TD-DFT)": "tddft",
+                "NMR Shielding": "nmr",
+            }.get(self.calc_type_dd.value, "single_point")
+            log.write(
+                _fmt_log_hdr(
+                    formula=mol.get_formula(),
+                    method=self.method_dd.value,
+                    basis=self.basis_dd.value,
+                    calc_type=_hdr_calc_type,
+                )
+            )
+        except Exception:
+            pass
 
         try:
             calc_mol = mol
@@ -3435,6 +3457,7 @@ class QuantUIApp:
                 save_spectra, save_type = {}, "single_point"
 
             _elapsed = time.perf_counter() - _run_wall_t
+            _elapsed_cpu = time.process_time() - _run_cpu_t
             self._last_result = result
             self.accumulate_btn.disabled = False
 
@@ -3459,6 +3482,22 @@ class QuantUIApp:
 
             self.step_progress.complete(2)
             self.step_progress.complete(3)
+
+            # Write structured log footer
+            try:
+                from quantui.log_utils import format_log_footer as _fmt_log_ftr
+
+                log.write(
+                    _fmt_log_ftr(
+                        result=result,
+                        wall_time=_elapsed,
+                        cpu_time=_elapsed_cpu,
+                        log_text=log.getvalue(),
+                        success=True,
+                    )
+                )
+            except Exception:
+                pass
 
             # Persist to disk
             try:
@@ -3541,9 +3580,25 @@ class QuantUIApp:
             import traceback as _tb
 
             _elapsed = time.perf_counter() - _run_wall_t
+            _elapsed_cpu = time.process_time() - _run_cpu_t
             _tb_str = _tb.format_exc()
             # Full details → Output tab (for debugging/instructors)
             log.write(f"\n--- Calculation Error ---\n{exc}\n\n{_tb_str}")
+            # Structured failure footer
+            try:
+                from quantui.log_utils import format_log_footer as _fmt_log_ftr
+
+                log.write(
+                    _fmt_log_ftr(
+                        result=None,
+                        wall_time=_elapsed,
+                        cpu_time=_elapsed_cpu,
+                        log_text=log.getvalue(),
+                        success=False,
+                    )
+                )
+            except Exception:
+                pass
             # Write to persistent error log
             try:
                 import datetime as _dt
@@ -3721,8 +3776,42 @@ class QuantUIApp:
         rows = []
         for line in lines:
             esc = _html_mod.escape(line)
+            # ── Log header / footer structure ─────────────────────────────────
+            if len(line) >= 40 and line == "=" * len(line):
+                style = "color:#1e3a5f;font-weight:700"
+            elif "QuantUI — Quantum Chemistry Interface" in line:
+                style = "color:#6d28d9;font-weight:700"
+            elif line.startswith("  ── "):
+                style = "color:#334155;font-weight:700"
+            elif line.startswith("  ✓"):
+                style = "color:#16a34a;font-weight:700"
+            elif line.startswith("  ✗"):
+                style = "color:#dc2626;font-weight:700"
+            elif (
+                line.startswith("  Machine:")
+                or line.startswith("  GPU:")
+                or line.startswith("  Threads:")
+            ):
+                style = "color:#475569"
+            elif (
+                line.startswith("  Molecule:")
+                or line.startswith("  Method/Basis:")
+                or line.startswith("  Calc type:")
+                or line.startswith("  Started:")
+            ):
+                style = "color:#1d4ed8"
+            elif (
+                line.startswith("    Energy:")
+                or line.startswith("    HOMO-LUMO gap:")
+                or line.startswith("    ZPVE:")
+            ):
+                style = "color:#0f766e;font-weight:600"
+            elif line.startswith("    Wall time:"):
+                style = "color:#64748b"
+            elif line.startswith("    ✔") or line.startswith("    ⚠"):
+                style = "color:#d97706"
             # ── Geometry optimisation (ASE BFGS) ──────────────────────────────
-            if line.startswith("BFGS:"):
+            elif line.startswith("BFGS:"):
                 m = _bfgs_re.match(line)
                 if m:
                     fmax = float(m.group(3))
