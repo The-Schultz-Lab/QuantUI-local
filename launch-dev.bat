@@ -8,6 +8,12 @@ if not exist "%~dp0quantui-local.sif" (
     exit /b 1
 )
 
+echo NOTE: The container provides the quantui Python package.
+echo       Notebook edits (notebooks/) are always live.
+echo       Edits to quantui/*.py require a container rebuild to take effect.
+echo       For package-level dev, use launch-native.bat instead.
+echo.
+
 REM Convert the Windows repo path to a WSL path for portability
 for /f "delims=" %%i in ('wsl wslpath -a "%~dp0"') do set WSLPATH=%%i
 

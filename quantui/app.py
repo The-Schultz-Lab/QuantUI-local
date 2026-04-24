@@ -57,10 +57,22 @@ except ImportError:
 
 try:
     from quantui.visualization_py3dmol import (
+        DEFAULT_LIGHTING as _DEFAULT_LIGHTING,
+    )
+    from quantui.visualization_py3dmol import (
+        DEFAULT_STYLE as _DEFAULT_VIZ_STYLE,
+    )
+    from quantui.visualization_py3dmol import (
+        LIGHTING_OPTIONS as _LIGHTING_OPTIONS,
+    )
+    from quantui.visualization_py3dmol import (
         PLOTLYMOL_AVAILABLE as _PLOTLYMOL_VIZ,
     )
     from quantui.visualization_py3dmol import (
         PY3DMOL_AVAILABLE as _PY3DMOL_VIZ,
+    )
+    from quantui.visualization_py3dmol import (
+        VIZ_STYLE_OPTIONS as _VIZ_STYLE_OPTIONS,
     )
     from quantui.visualization_py3dmol import (
         display_molecule as _display_molecule,
@@ -72,6 +84,21 @@ except ImportError:
     _display_molecule = None  # type: ignore[assignment]
     _PLOTLYMOL_VIZ = False
     _PY3DMOL_VIZ = False
+    _DEFAULT_VIZ_STYLE = "ball+stick"
+    _DEFAULT_LIGHTING = "soft"
+    _VIZ_STYLE_OPTIONS = [
+        ("Ball & Stick", "ball+stick"),
+        ("Stick", "stick"),
+        ("Sphere (VDW)", "sphere"),
+        ("Line", "line"),
+    ]
+    _LIGHTING_OPTIONS = [
+        ("Soft", "soft"),
+        ("Default", "default"),
+        ("Bright", "bright"),
+        ("Metallic", "metallic"),
+        ("Dramatic", "dramatic"),
+    ]
 
 _VizBackend = Literal["auto", "py3dmol", "plotlymol"]
 _BOTH_VIZ_AVAILABLE: bool = _PLOTLYMOL_VIZ and _PY3DMOL_VIZ
@@ -412,6 +439,34 @@ class QuantUIApp:
             )
         else:
             self.viz_backend_toggle = None  # type: ignore[assignment]
+
+        # 3D viewer style and lighting controls
+        self._viz_style: str = _DEFAULT_VIZ_STYLE
+        self._viz_lighting: str = _DEFAULT_LIGHTING
+        self.viz_style_dd = widgets.Dropdown(
+            options=_VIZ_STYLE_OPTIONS,
+            value=_DEFAULT_VIZ_STYLE,
+            description="Style:",
+            style={"description_width": "40px"},
+            layout=widgets.Layout(width="180px"),
+            disabled=not VISUALIZATION_AVAILABLE,
+        )
+        # Lighting only applies to the PlotlyMol backend
+        _lighting_available = VISUALIZATION_AVAILABLE and _PLOTLYMOL_VIZ
+        self.viz_lighting_dd = widgets.Dropdown(
+            options=_LIGHTING_OPTIONS,
+            value=_DEFAULT_LIGHTING,
+            description="Lighting:",
+            style={"description_width": "58px"},
+            layout=widgets.Layout(width="170px"),
+            disabled=not _lighting_available,
+        )
+        if not _lighting_available:
+            self.viz_lighting_dd.layout.visibility = "hidden"
+        self.viz_controls_box = widgets.HBox(
+            [self.viz_style_dd, self.viz_lighting_dd],
+            layout=widgets.Layout(gap="8px", margin="2px 0 0 0", align_items="center"),
+        )
         self.notes_output = widgets.Output()
         self.perf_estimate_html = widgets.HTML()
 
@@ -705,6 +760,8 @@ class QuantUIApp:
         ]
         if self.viz_backend_toggle is not None:
             _mol_container_children.append(self.viz_backend_toggle)
+        if VISUALIZATION_AVAILABLE:
+            _mol_container_children.append(self.viz_controls_box)
         self.mol_input_container = widgets.VBox(
             _mol_container_children,
             layout=widgets.Layout(margin="0 0 4px 0"),
@@ -1294,6 +1351,10 @@ class QuantUIApp:
         # 3D viewer backend toggle (only wired when both backends are available)
         if self.viz_backend_toggle is not None:
             self.viz_backend_toggle.observe(self._on_viz_backend_changed, names="value")
+        # 3D viewer style and lighting controls
+        if VISUALIZATION_AVAILABLE:
+            self.viz_style_dd.observe(self._on_viz_style_changed, names="value")
+            self.viz_lighting_dd.observe(self._on_viz_lighting_changed, names="value")
         # Theme
         self.theme_btn.observe(self._on_theme_changed, names="value")
         # Molecule input
@@ -1357,10 +1418,45 @@ class QuantUIApp:
 
     def _on_viz_backend_changed(self, change) -> None:
         self._viz_backend = change["new"]  # type: ignore[assignment]
+        # Lighting only works with the PlotlyMol backend
+        _lighting_usable = _PLOTLYMOL_VIZ and self._viz_backend == "plotlymol"
+        self.viz_lighting_dd.disabled = not _lighting_usable
+        self.viz_lighting_dd.layout.visibility = (
+            "visible" if _lighting_usable else "hidden"
+        )
         if self._molecule is not None and _display_molecule is not None:
             self.viz_output.clear_output()
             with self.viz_output:
-                _display_molecule(self._molecule, backend=self._viz_backend)
+                _display_molecule(
+                    self._molecule,
+                    backend=self._viz_backend,
+                    style=self._viz_style,
+                    lighting=self._viz_lighting,
+                )
+
+    def _on_viz_style_changed(self, change) -> None:
+        self._viz_style = change["new"]
+        if self._molecule is not None and _display_molecule is not None:
+            self.viz_output.clear_output()
+            with self.viz_output:
+                _display_molecule(
+                    self._molecule,
+                    backend=self._viz_backend,
+                    style=self._viz_style,
+                    lighting=self._viz_lighting,
+                )
+
+    def _on_viz_lighting_changed(self, change) -> None:
+        self._viz_lighting = change["new"]
+        if self._molecule is not None and _display_molecule is not None:
+            self.viz_output.clear_output()
+            with self.viz_output:
+                _display_molecule(
+                    self._molecule,
+                    backend=self._viz_backend,
+                    style=self._viz_style,
+                    lighting=self._viz_lighting,
+                )
 
     # ── Molecule input ────────────────────────────────────────────────────
 
@@ -1441,6 +1537,8 @@ class QuantUIApp:
         _children = [self.mol_input_expanded, self.mol_info_html, self.viz_output]
         if self.viz_backend_toggle is not None:
             _children.append(self.viz_backend_toggle)
+        if VISUALIZATION_AVAILABLE:
+            _children.append(self.viz_controls_box)
         self.mol_input_container.children = _children
 
     # ── Calc type ─────────────────────────────────────────────────────────
@@ -1909,7 +2007,12 @@ class QuantUIApp:
         self.viz_output.clear_output()
         if _display_molecule is not None:
             with self.viz_output:
-                _display_molecule(mol, backend=self._viz_backend)
+                _display_molecule(
+                    mol,
+                    backend=self._viz_backend,
+                    style=self._viz_style,
+                    lighting=self._viz_lighting,
+                )
 
         self._update_notes()
 
@@ -1926,6 +2029,8 @@ class QuantUIApp:
         _collapsed_children = [self.mol_input_collapsed, self.viz_output]
         if self.viz_backend_toggle is not None:
             _collapsed_children.append(self.viz_backend_toggle)
+        if VISUALIZATION_AVAILABLE:
+            _collapsed_children.append(self.viz_controls_box)
         self.mol_input_container.children = _collapsed_children
 
     def _queue_main_thread_callback(self, callback, *args, **kwargs) -> None:
@@ -1967,7 +2072,12 @@ class QuantUIApp:
             return
         self.result_viz_output.clear_output()
         with self.result_viz_output:
-            _display_molecule(molecule, backend=self._viz_backend)
+            _display_molecule(
+                molecule,
+                backend=self._viz_backend,
+                style=self._viz_style,
+                lighting=self._viz_lighting,
+            )
 
     def _show_result_log(self, saved_dir: Path, log_text: str) -> None:
         """Populate the result-directory label and output-log accordion.

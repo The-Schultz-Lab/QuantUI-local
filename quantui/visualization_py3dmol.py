@@ -16,7 +16,7 @@ from typing import Literal, cast
 
 logger = logging.getLogger(__name__)
 
-Py3DmolStyle = Literal["stick", "sphere", "line", "cartoon"]
+Py3DmolStyle = Literal["ball+stick", "stick", "sphere", "line", "cartoon"]
 BackendName = Literal["auto", "py3dmol", "plotlymol"]
 
 # Check available visualization backends
@@ -30,11 +30,44 @@ except ImportError:
 
 try:
     from plotlymol3d import draw_3D_rep
+    from plotlymol3d import format_lighting as _plotlymol_format_lighting
 
     PLOTLYMOL_AVAILABLE = True
 except ImportError:
     PLOTLYMOL_AVAILABLE = False
+    _plotlymol_format_lighting = None  # type: ignore[assignment]
     logger.info("PlotlyMol not available (optional)")
+
+# ── Visualization style and lighting constants ────────────────────────────────
+
+# Display-style options presented in the UI.  The value is the canonical key
+# used internally; each backend maps it to its own representation.
+VIZ_STYLE_OPTIONS: list[tuple[str, str]] = [
+    ("Ball & Stick", "ball+stick"),
+    ("Stick", "stick"),
+    ("Sphere (VDW)", "sphere"),
+    ("Line", "line"),
+]
+
+# Named lighting presets — identical to those in the plotlyMol dash app.
+# Only applied when the PlotlyMol backend is active.
+LIGHTING_PRESETS: dict[str, dict] = {
+    "soft": {"ambient": 0.4, "diffuse": 0.8, "specular": 0.1, "roughness": 0.8},
+    "default": {"ambient": 0.0, "diffuse": 1.0, "specular": 0.0, "roughness": 1.0},
+    "bright": {"ambient": 0.5, "diffuse": 0.8, "specular": 0.3, "roughness": 0.5},
+    "metallic": {"ambient": 0.2, "diffuse": 0.7, "specular": 1.0, "roughness": 0.1},
+    "dramatic": {"ambient": 0.0, "diffuse": 1.0, "specular": 0.6, "roughness": 0.2},
+}
+LIGHTING_OPTIONS: list[tuple[str, str]] = [
+    ("Soft", "soft"),
+    ("Default", "default"),
+    ("Bright", "bright"),
+    ("Metallic", "metallic"),
+    ("Dramatic", "dramatic"),
+]
+
+DEFAULT_STYLE: str = "ball+stick"
+DEFAULT_LIGHTING: str = "soft"
 
 
 def is_visualization_available() -> bool:
@@ -82,10 +115,11 @@ def molecule_to_xyz_string(molecule) -> str:
 
 def visualize_molecule_py3dmol(
     molecule,
-    style: Py3DmolStyle = "stick",
+    style: Py3DmolStyle = "ball+stick",
     width: int = 600,
     height: int = 500,
     bgcolor: str = "white",
+    lighting: str = "soft",  # accepted for API symmetry; py3Dmol has no preset lighting
 ):
     """
     Create interactive 3D visualization using py3Dmol.
@@ -136,8 +170,11 @@ def visualize_molecule_py3dmol(
     # Add molecule
     view.addModel(xyz_string, "xyz")
 
-    # Set style
-    view.setStyle({style: {}})
+    # Set style — "ball+stick" requires a compound spec in py3Dmol
+    if style == "ball+stick":
+        view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
+    else:
+        view.setStyle({style: {}})
 
     # Set background
     view.setBackgroundColor(bgcolor)
@@ -149,7 +186,13 @@ def visualize_molecule_py3dmol(
 
 
 def _validate_py3dmol_style(style: str) -> Py3DmolStyle:
-    valid_styles: tuple[Py3DmolStyle, ...] = ("stick", "sphere", "line", "cartoon")
+    valid_styles: tuple[Py3DmolStyle, ...] = (
+        "ball+stick",
+        "stick",
+        "sphere",
+        "line",
+        "cartoon",
+    )
     if style not in valid_styles:
         raise ValueError(f"style must be one of {list(valid_styles)}, got '{style}'")
     return cast(Py3DmolStyle, style)
@@ -162,6 +205,7 @@ def visualize_molecule_plotlymol(
     width: int = 600,
     height: int = 500,
     bgcolor: str = "#ffffff",
+    lighting: str = "soft",
 ):
     """
     Create interactive 3D visualization using PlotlyMol (optional backend).
@@ -219,6 +263,9 @@ def visualize_molecule_plotlymol(
             mode=mode,
             resolution=resolution,
         )
+        if _plotlymol_format_lighting is not None:
+            preset = LIGHTING_PRESETS.get(lighting, LIGHTING_PRESETS["soft"])
+            fig = _plotlymol_format_lighting(fig, **preset)
     finally:
         os.unlink(tmp.name)
 
@@ -235,10 +282,11 @@ def visualize_molecule_plotlymol(
 def visualize_molecule(
     molecule,
     backend: BackendName = "auto",
-    style: str = "stick",
+    style: str = "ball+stick",
     width: int = 600,
     height: int = 500,
     bgcolor: str = "white",
+    lighting: str = "soft",
     **kwargs,
 ):
     """
@@ -291,14 +339,30 @@ def visualize_molecule(
     if backend == "py3dmol":
         py3dmol_style = _validate_py3dmol_style(style)
         return visualize_molecule_py3dmol(
-            molecule, style=py3dmol_style, width=width, height=height, bgcolor=bgcolor
+            molecule,
+            style=py3dmol_style,
+            width=width,
+            height=height,
+            bgcolor=bgcolor,
+            lighting=lighting,
         )
     elif backend == "plotlymol":
-        # Map common styles to PlotlyMol modes
-        mode_map = {"stick": "stick", "sphere": "vdw"}
+        # Map UI style keys to PlotlyMol mode names
+        mode_map = {
+            "ball+stick": "ball+stick",
+            "stick": "stick",
+            "sphere": "vdw",
+            "line": "stick",  # plotlyMol has no line mode; use stick
+        }
         mode = mode_map.get(style, "ball+stick")
         return visualize_molecule_plotlymol(
-            molecule, mode=mode, width=width, height=height, bgcolor=bgcolor, **kwargs
+            molecule,
+            mode=mode,
+            width=width,
+            height=height,
+            bgcolor=bgcolor,
+            lighting=lighting,
+            **kwargs,
         )
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -307,10 +371,11 @@ def visualize_molecule(
 def display_molecule(
     molecule,
     backend: Literal["auto", "py3dmol", "plotlymol"] = "auto",
-    style: str = "stick",
+    style: str = "ball+stick",
     show_info: bool = True,
     width: int = 600,
     height: int = 500,
+    lighting: str = "soft",
 ):
     """
     Display molecule in Jupyter notebook with optional info box.
@@ -372,7 +437,12 @@ def display_molecule(
     # Create and display visualization
     try:
         viz = visualize_molecule(
-            molecule, backend=backend, style=style, width=width, height=height
+            molecule,
+            backend=backend,
+            style=style,
+            width=width,
+            height=height,
+            lighting=lighting,
         )
 
         # display(viz) triggers py3Dmol's _repr_html_() method, which embeds
