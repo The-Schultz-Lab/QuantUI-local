@@ -1,3 +1,6 @@
+# Dev launcher stamp (written by launch-native.bat to skip redundant pip install)
+.dev_install_stamp
+
 # Python
 __pycache__/
 *.py[cod]
