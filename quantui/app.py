@@ -1157,10 +1157,17 @@ class QuantUIApp:
             icon="bar-chart",
             layout=widgets.Layout(display="none", width="160px", margin="8px 0 0 0"),
         )
+        # Label above the 3D viewer — updated by _do_run to say "Optimized geometry"
+        # for Geometry Opt, or hidden for other calc types that don't change geometry.
+        self._viz_label = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none"),
+        )
         self.results_tab_panel = widgets.VBox(
             [
                 widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
                 self.result_output,
+                self._viz_label,
                 self.result_viz_output,
                 self._result_dir_label,
                 # advanced_accordion appended in _assemble_tabs (built later in
@@ -1171,6 +1178,9 @@ class QuantUIApp:
         )
         # Backward-compat alias — existing methods that reference results_panel still work
         self.results_panel = self.results_tab_panel
+
+        # ── Analysis tab: molecule viewer (shown for all calc types) ─────
+        self._analysis_mol_output = widgets.Output()
 
         # ── Analysis tab panel (Tab 2) ────────────────────────────────────
         self._analysis_context_lbl = widgets.HTML(
@@ -1191,6 +1201,7 @@ class QuantUIApp:
         self.analysis_tab_panel = widgets.VBox(
             [
                 self._analysis_context_lbl,
+                self._analysis_mol_output,
                 self._analysis_empty_html,
                 self._orb_accordion,
                 self.traj_accordion,
@@ -1897,6 +1908,9 @@ class QuantUIApp:
         self.run_output.clear_output()
         self.result_output.clear_output()
         self.result_viz_output.clear_output()
+        self._analysis_mol_output.clear_output()
+        self._viz_label.layout.display = "none"
+        self._viz_label.value = ""
         self.traj_accordion.layout.display = "none"
         self.vib_accordion.layout.display = "none"
         self._ir_accordion.layout.display = "none"
@@ -2326,10 +2340,77 @@ class QuantUIApp:
             self._analysis_empty_html.layout.display = (
                 "none" if _hist_has_analysis else ""
             )
+            # Mirror structure into Analysis tab viewer
+            try:
+                _mol = self._mol_from_result_dir(result_dir, data)
+                if _mol is not None:
+                    self._show_result_3d(_mol, extra_output=self._analysis_mol_output)
+                else:
+                    self._analysis_mol_output.clear_output()
+            except Exception:
+                pass
         except Exception:
             pass
 
         self._goto_output_tab()
+
+    def _mol_from_result_dir(self, result_dir: Path, data: dict):
+        """Try to reconstruct a displayable Molecule from a saved result directory.
+
+        Returns a Molecule or None if geometry data is not available.
+        Tries sources in order: frequency spectra → orbitals_meta → trajectory.
+        """
+        import json as _json
+
+        from quantui.molecule import Molecule
+
+        ct = data.get("calc_type", "")
+
+        # Frequency: geometry stored inside spectra.molecule
+        if ct == "frequency":
+            mol_data = data.get("spectra", {}).get("molecule", {})
+            if mol_data.get("atoms") and mol_data.get("coords"):
+                try:
+                    return Molecule(
+                        atoms=mol_data["atoms"],
+                        coordinates=mol_data["coords"],
+                        charge=mol_data.get("charge", 0),
+                        multiplicity=mol_data.get("multiplicity", 1),
+                    )
+                except Exception:
+                    pass
+
+        # Single point / Geo opt: atom list from orbitals_meta.json
+        meta_path = result_dir / "orbitals_meta.json"
+        if meta_path.exists():
+            try:
+                meta = _json.loads(meta_path.read_text())
+                mol_atom = meta.get("mol_atom")
+                if mol_atom:
+                    atoms = [sym for sym, _ in mol_atom]
+                    coords = [c for _, c in mol_atom]
+                    return Molecule(atoms=atoms, coordinates=coords)
+            except Exception:
+                pass
+
+        # Geo opt fallback: last step of trajectory.json
+        if ct == "geometry_opt":
+            traj_path = result_dir / "trajectory.json"
+            if traj_path.exists():
+                try:
+                    traj_data = _json.loads(traj_path.read_text())
+                    steps = traj_data.get("steps", [])
+                    if steps:
+                        return Molecule(
+                            atoms=traj_data["atoms"],
+                            coordinates=steps[-1]["coords"],
+                            charge=traj_data.get("charge", 0),
+                            multiplicity=traj_data.get("multiplicity", 1),
+                        )
+                except Exception:
+                    pass
+
+        return None
 
     def _history_load_results(self, data: dict, result_dir: Path) -> None:
         """Display a history result card in the Results tab and navigate there."""
@@ -2337,6 +2418,10 @@ class QuantUIApp:
         with self.result_output:
             display(HTML(self._format_past_result(data, result_dir=result_dir)))
         self._result_dir_label.layout.display = "none"
+        # Also show 3D structure if geometry is recoverable
+        mol = self._mol_from_result_dir(result_dir, data)
+        if mol is not None:
+            self._show_result_3d(mol)
         self.root_tab.selected_index = 1
 
     def _history_load_analysis(self, result_dir: Path) -> None:
@@ -2426,6 +2511,15 @@ class QuantUIApp:
             )
             self._to_analysis_btn.layout.display = "" if _has else "none"
             self._analysis_empty_html.layout.display = "none" if _has else ""
+            # Mirror structure into Analysis tab viewer
+            try:
+                _mol = self._mol_from_result_dir(result_dir, data)
+                if _mol is not None:
+                    self._show_result_3d(_mol, extra_output=self._analysis_mol_output)
+                else:
+                    self._analysis_mol_output.clear_output()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -2644,21 +2738,26 @@ class QuantUIApp:
         self._set_molecule_state_only(mol)
         self._queue_main_thread_callback(self._set_molecule, mol, status_message)
 
-    def _show_result_3d(self, molecule) -> None:
+    def _show_result_3d(self, molecule, extra_output=None) -> None:
         """Render molecule 3D structure in the result visualization panel.
 
+        Renders into ``result_viz_output`` and, if supplied, into *extra_output*
+        as well (used to mirror the structure into the Analysis tab viewer).
         Safe to call from a background thread — uses ``with output:`` context.
         """
         if _display_molecule is None or molecule is None:
             return
-        self.result_viz_output.clear_output()
-        with self.result_viz_output:
-            _display_molecule(
-                molecule,
-                backend=self._viz_backend,
-                style=self._viz_style,
-                lighting=self._viz_lighting,
-            )
+        for _out in [self.result_viz_output, extra_output]:
+            if _out is None:
+                continue
+            _out.clear_output()
+            with _out:
+                _display_molecule(
+                    molecule,
+                    backend=self._viz_backend,
+                    style=self._viz_style,
+                    lighting=self._viz_lighting,
+                )
 
     def _show_result_log(self, saved_dir: Path, log_text: str) -> None:
         """Populate the result-directory label and output-log accordion.
@@ -3228,12 +3327,26 @@ class QuantUIApp:
         self._last_vib_data = vib_data
         self._last_vib_molecule = molecule
 
-        # Render the first selected mode.
-        self._render_vib_mode(vib_data, molecule, options[0][1])
+        # Show loading indicator and render in a background thread so _do_run
+        # is not blocked while the animation is generated (can take several seconds).
+        _first_label, _first_mode = options[0]
+        self.vib_output.clear_output()
+        with self.vib_output:
+            display(
+                HTML(
+                    f'<p style="color:#555;font-style:italic;padding:8px">'
+                    f"⏳ Rendering vibrational animation ({_first_label})…</p>"
+                )
+            )
+        threading.Thread(
+            target=self._render_vib_mode,
+            args=(vib_data, molecule, _first_mode),
+            daemon=True,
+        ).start()
 
-        # Reveal the accordion (collapsed by default).
-        self.vib_accordion.selected_index = None
+        # Reveal the accordion (auto-open so the animation is visible).
         self.vib_accordion.layout.display = ""
+        self.vib_accordion.selected_index = 0
 
     def _show_ir_spectrum(self, freq_result) -> None:
         """Populate and reveal the IR Spectrum accordion after a Frequency result."""
@@ -3376,6 +3489,15 @@ class QuantUIApp:
         orbital_label = self._orb_toggle.value
         btn.disabled = True
         btn.description = "Generating…"
+        self._orb_iso_output.clear_output()
+        with self._orb_iso_output:
+            display(
+                HTML(
+                    f'<p style="color:#555;font-style:italic;padding:4px 0">'
+                    f"⏳ Generating {orbital_label} cube file and rendering isosurface"
+                    f" — this may take 15–30 s…</p>"
+                )
+            )
 
         def _run():
             try:
@@ -3474,10 +3596,21 @@ class QuantUIApp:
 
         Safe to call from background thread via ``with output:`` context.
         """
+        from IPython.display import HTML as _H
+        from IPython.display import display as _ipy_display
+
+        def _err(msg: str) -> None:
+            self.vib_output.clear_output()
+            with self.vib_output:
+                _ipy_display(_H(f'<p style="color:#b91c1c;padding:8px">⚠ {msg}</p>'))
+
         try:
-            from IPython.display import display as _ipy_display
             from plotlymol3d import create_vibration_animation, xyzblock_to_rdkitmol
-        except ImportError:
+        except ImportError as exc:
+            _err(
+                f"Vibrational animation requires plotlymol3d "
+                f"(<code>pip install plotlymol3d</code>): {exc}"
+            )
             return
 
         # Build an RDKit mol for bond connectivity (required by animation function).
@@ -3487,7 +3620,8 @@ class QuantUIApp:
         )
         try:
             rdmol = xyzblock_to_rdkitmol(xyzblock, charge=molecule.charge)
-        except Exception:
+        except Exception as exc:
+            _err(f"Could not parse molecule for bond connectivity: {exc}")
             return
 
         try:
@@ -3501,7 +3635,8 @@ class QuantUIApp:
                 resolution=12,
             )
             anim_fig.update_layout(height=420)
-        except Exception:
+        except Exception as exc:
+            _err(f"Animation generation failed: {exc}")
             return
 
         self.vib_output.clear_output()
@@ -3515,6 +3650,20 @@ class QuantUIApp:
         molecule = getattr(self, "_last_vib_molecule", None)
         if vib_data is None or molecule is None:
             return
+        # Show a loading indicator immediately so the user gets feedback while
+        # the animation generates in the background.
+        _label = next(
+            (lbl for lbl, num in self.vib_mode_dd.options if num == mode_number),
+            f"mode {mode_number}",
+        )
+        self.vib_output.clear_output()
+        with self.vib_output:
+            display(
+                HTML(
+                    f'<p style="color:#555;font-style:italic;padding:8px">'
+                    f"⏳ Rendering vibrational animation ({_label})…</p>"
+                )
+            )
         threading.Thread(
             target=self._render_vib_mode,
             args=(vib_data, molecule, mode_number),
@@ -3741,15 +3890,22 @@ class QuantUIApp:
             self.result_output.append_display_data(HTML(result_html))
             self.run_status.value = f"Done in {_elapsed:.1f} s."
 
-            # Show 3D structure in the result panel
+            # Show 3D structure in the result panel and mirrored in Analysis tab
             _viz_mol = result.molecule if ct == "Geometry Opt" else calc_mol
-            self._show_result_3d(_viz_mol)
+            if ct == "Geometry Opt":
+                self._viz_label.value = (
+                    '<p style="color:#555;font-size:12px;font-weight:600;'
+                    'margin:6px 0 2px">Optimized geometry</p>'
+                )
+                self._viz_label.layout.display = ""
+            self._show_result_3d(_viz_mol, extra_output=self._analysis_mol_output)
 
             # Show calc-type-specific extra panels
             if ct == "Geometry Opt":
-                # Stash trajectory data; animation renders lazily when the accordion opens.
+                # Stash trajectory and open accordion immediately to start rendering.
                 self._pending_traj_result = result
                 self.traj_accordion.layout.display = ""
+                self.traj_accordion.selected_index = 0  # triggers lazy render
                 self._show_orbital_diagram(result)
             elif ct == "Frequency":
                 self._show_vib_animation(result, calc_mol)
