@@ -270,6 +270,7 @@ class QuantUIApp:
         self._last_result: Any = None
         self._results: List = []
         self._pending_traj_result: Any = None
+        self.root_tab: widgets.Tab
 
         # Availability (copied from module-level flags)
         self._pyscf_available: bool = _PYSCF_AVAILABLE
@@ -1211,7 +1212,7 @@ class QuantUIApp:
         )
         self._iso_accordion = widgets.Accordion(
             children=[_iso_body],
-            layout=widgets.Layout(margin="8px 0"),
+            layout=widgets.Layout(display="none", margin="8px 0"),
         )
         self._iso_accordion.set_title(0, "Orbital Isosurface")
         self._iso_accordion.selected_index = None
@@ -1313,11 +1314,14 @@ class QuantUIApp:
             ),
             layout=widgets.Layout(display="none"),
         )
+        self._build_ana_switcher()
         self.analysis_tab_panel = widgets.VBox(
             [
                 self._analysis_context_lbl,
                 self._analysis_mol_output,
                 self._analysis_empty_html,
+                self._ana_switcher_box,
+                self._ana_unavail_html,
                 self._orb_accordion,
                 self._pes_scan_accordion,
                 self.traj_accordion,
@@ -1329,6 +1333,119 @@ class QuantUIApp:
         )
         # Backward-compat alias for post_calc_panel references in tests
         self.post_calc_panel = self.analysis_tab_panel
+
+    # ── Analysis panel switcher ───────────────────────────────────────────
+
+    def _build_ana_switcher(self) -> None:
+        """Build the always-visible panel switcher strip for the Analysis tab."""
+        _PANEL_META = [
+            ("Orbitals", self._orb_accordion, "Single Point / UV-Vis"),
+            ("Trajectory", self.traj_accordion, "Geometry Opt / PES Scan"),
+            ("Vibrational", self.vib_accordion, "Frequency"),
+            ("IR Spectrum", self._ir_accordion, "Frequency"),
+            ("PES Scan", self._pes_scan_accordion, "PES Scan"),
+            ("Isosurface", self._iso_accordion, "Single Point (Linux/WSL only)"),
+        ]
+        self._ana_panel_names: list = [m[0] for m in _PANEL_META]
+        self._ana_accordions: list = [m[1] for m in _PANEL_META]
+        self._ana_available: set = set()
+        self._ana_active: str = ""
+        self._ana_unavail_html = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none", margin="4px 0 8px"),
+        )
+        self._ana_btns: list = []
+        for name, _acc, when in _PANEL_META:
+            btn = widgets.Button(
+                description=name,
+                button_style="",
+                tooltip=f"Available after: {when}",
+                layout=widgets.Layout(margin="0"),
+            )
+            btn.layout.opacity = "0.35"
+            btn.on_click(lambda _b, n=name: self._on_ana_panel_click(n))
+            self._ana_btns.append(btn)
+        self._ana_switcher_box = widgets.HBox(
+            self._ana_btns,
+            layout=widgets.Layout(
+                flex_wrap="wrap",
+                gap="4px",
+                margin="0 0 6px 0",
+                padding="6px 4px",
+                border="1px solid #e2e8f0",
+                border_radius="6px",
+            ),
+        )
+
+    def _on_ana_panel_click(self, name: str) -> None:
+        if name in self._ana_available:
+            self._select_ana_panel(name)
+        else:
+            # Grey out all buttons except clicked; show "not available" note
+            for btn in self._ana_btns:
+                btn.button_style = ""
+            for btn, pname in zip(self._ana_btns, self._ana_panel_names):
+                if pname == name:
+                    btn.button_style = "warning"
+            for acc in self._ana_accordions:
+                acc.layout.display = "none"
+            self._ana_unavail_html.value = (
+                f'<p style="color:#92400e;background:#fffbeb;border:1px solid #fde68a;'
+                f'border-radius:4px;padding:6px 12px;margin:0;font-size:13px">'
+                f"<b>{name}</b> is not available for this calculation type.</p>"
+            )
+            self._ana_unavail_html.layout.display = ""
+            self._ana_active = ""
+
+    def _select_ana_panel(self, name: str) -> None:
+        """Show the named panel; hide all others and update button styles."""
+        self._ana_active = name
+        self._ana_unavail_html.layout.display = "none"
+        for pname, acc, btn in zip(
+            self._ana_panel_names, self._ana_accordions, self._ana_btns
+        ):
+            if pname == name:
+                acc.layout.display = ""
+                acc.selected_index = 0
+                btn.button_style = "primary"
+            else:
+                acc.layout.display = "none"
+                btn.button_style = ""
+
+    def _activate_ana_panel(self, name: str, auto_select: bool = True) -> None:
+        """Mark a panel as available (full opacity) and optionally select it."""
+        self._ana_available.add(name)
+        for btn, pname in zip(self._ana_btns, self._ana_panel_names):
+            if pname == name:
+                btn.layout.opacity = "1.0"
+                btn.tooltip = name
+        if auto_select:
+            self._select_ana_panel(name)
+
+    def _deactivate_all_ana_panels(self) -> None:
+        """Reset all panels to hidden/unavailable; used at start of each new run."""
+        self._ana_available.clear()
+        self._ana_active = ""
+        self._ana_unavail_html.layout.display = "none"
+        for acc, btn, _name, meta in zip(
+            self._ana_accordions,
+            self._ana_btns,
+            self._ana_panel_names,
+            # Re-read tooltips from scratch
+            [
+                "Single Point / UV-Vis",
+                "Geometry Opt / PES Scan",
+                "Frequency",
+                "Frequency",
+                "PES Scan",
+                "Single Point (Linux/WSL only)",
+            ],
+        ):
+            acc.layout.display = "none"
+            acc.selected_index = None
+            btn.button_style = ""
+            btn.layout.opacity = "0.35"
+            btn.tooltip = f"Available after: {meta}"
 
     # ── History panel (Cell 8) ────────────────────────────────────────────
 
@@ -2115,11 +2232,7 @@ class QuantUIApp:
         self._analysis_mol_output.clear_output()
         self._viz_label.layout.display = "none"
         self._viz_label.value = ""
-        self.traj_accordion.layout.display = "none"
-        self.vib_accordion.layout.display = "none"
-        self._ir_accordion.layout.display = "none"
-        self._orb_accordion.layout.display = "none"
-        self._pes_scan_accordion.layout.display = "none"
+        self._deactivate_all_ana_panels()
         self._pes_plot_html.value = ""
         self._result_dir_label.value = ""
         self._result_dir_label.layout.display = "none"
@@ -2363,12 +2476,10 @@ class QuantUIApp:
 
     def _on_past_dd_changed(self, change) -> None:
         path_str = change["new"]
-        # Hide result-specific accordions whenever the selection changes so stale
+        # Hide result-specific panels whenever the selection changes so stale
         # content from a previous "View log" click doesn't persist.
-        self._orb_accordion.layout.display = "none"
-        self.traj_accordion.layout.display = "none"
+        self._deactivate_all_ana_panels()
         self._pending_traj_result = None
-        self._ir_accordion.layout.display = "none"
         self._result_log_accordion.layout.display = "none"
         self._result_dir_label.layout.display = "none"
         self._iso_generate_btn.disabled = True
@@ -2447,10 +2558,8 @@ class QuantUIApp:
             text = "(No pyscf.log found for this result.)"
             label = ""
 
-        # Reset accordions that belong to a specific calc type
-        self.traj_accordion.layout.display = "none"
+        self._deactivate_all_ana_panels()
         self._pending_traj_result = None
-        self._ir_accordion.layout.display = "none"
 
         # Populate inline log view and navigate to the Output tab
         self._update_log_panel(text, label)
@@ -2488,7 +2597,7 @@ class QuantUIApp:
                                 formula=formula,
                             )
                             self._pending_traj_result = stub
-                            self.traj_accordion.layout.display = ""
+                            self._activate_ana_panel("Trajectory")
                     except Exception:
                         pass
 
@@ -2643,9 +2752,8 @@ class QuantUIApp:
         )
         label = result_dir.name if log_path.exists() else ""
 
-        self.traj_accordion.layout.display = "none"
+        self._deactivate_all_ana_panels()
         self._pending_traj_result = None
-        self._ir_accordion.layout.display = "none"
         self._update_log_panel(text, label)
         self._show_result_log(result_dir, text)
 
@@ -2677,7 +2785,7 @@ class QuantUIApp:
                                 formula=formula,
                             )
                             self._pending_traj_result = stub
-                            self.traj_accordion.layout.display = ""
+                            self._activate_ana_panel("Trajectory")
                     except Exception:
                         pass
 
@@ -3561,8 +3669,7 @@ class QuantUIApp:
         ).start()
 
         # Reveal the accordion (auto-open so the animation is visible).
-        self.vib_accordion.layout.display = ""
-        self.vib_accordion.selected_index = 0
+        self._activate_ana_panel("Vibrational")
 
     def _show_ir_spectrum(self, freq_result) -> None:
         """Populate and reveal the IR Spectrum accordion after a Frequency result."""
@@ -3598,8 +3705,7 @@ class QuantUIApp:
         self._ir_fwhm_slider.value = 20.0
         self._ir_fwhm_slider.layout.display = "none"
 
-        self._ir_accordion.selected_index = None
-        self._ir_accordion.layout.display = ""
+        self._activate_ana_panel("IR Spectrum")
 
     def _update_ir_figure(self, mode: str, fwhm: float) -> None:
         """Re-render the IR spectrum chart for the given mode and FWHM."""
@@ -3699,8 +3805,9 @@ class QuantUIApp:
             self._orb_iso_controls.layout.display = "none"
             self._iso_generate_btn.disabled = True
 
-        self._orb_accordion.selected_index = None
-        self._orb_accordion.layout.display = ""
+        self._activate_ana_panel("Orbitals")
+        if not self._iso_generate_btn.disabled:
+            self._activate_ana_panel("Isosurface", auto_select=False)
 
     def _on_iso_generate(self, btn) -> None:
         """Generate an orbital isosurface for the currently selected orbital."""
@@ -4152,8 +4259,7 @@ class QuantUIApp:
             if ct == "Geometry Opt":
                 # Stash trajectory and open accordion immediately to start rendering.
                 self._pending_traj_result = result
-                self.traj_accordion.layout.display = ""
-                self.traj_accordion.selected_index = 0  # triggers lazy render
+                self._activate_ana_panel("Trajectory")
                 self._show_orbital_diagram(result)
             elif ct == "Frequency":
                 self._show_vib_animation(result, calc_mol)
@@ -5010,15 +5116,13 @@ class QuantUIApp:
         except Exception:
             pass
 
-        self._pes_scan_accordion.layout.display = ""
-        self._pes_scan_accordion.selected_index = 0
+        self._activate_ana_panel("PES Scan")
 
         # Reuse trajectory accordion for the scan geometry sequence
         if result.coordinates_list:
             self._pending_traj_result = result
             self.traj_accordion.set_title(0, "Geometry at Each Scan Point")
-            self.traj_accordion.layout.display = ""
-            self.traj_accordion.selected_index = 0  # triggers lazy render
+            self._activate_ana_panel("Trajectory", auto_select=False)
 
     def _format_past_result(self, data: dict, result_dir: Optional[Path] = None) -> str:
         import base64 as _b64

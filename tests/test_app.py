@@ -1088,6 +1088,112 @@ class TestAnalysisTab:
 
 
 # ---------------------------------------------------------------------------
+# M-ANA — Panel switcher (M-ANA)
+# ---------------------------------------------------------------------------
+
+
+class TestAnaSwitcher:
+    """Panel switcher strip: buttons, state, activation, and deactivation."""
+
+    def test_six_buttons_exist(self):
+        app = QuantUIApp()
+        assert len(app._ana_btns) == 6
+
+    def test_panel_names(self):
+        app = QuantUIApp()
+        assert app._ana_panel_names == [
+            "Orbitals",
+            "Trajectory",
+            "Vibrational",
+            "IR Spectrum",
+            "PES Scan",
+            "Isosurface",
+        ]
+
+    def test_buttons_initially_dimmed(self):
+        app = QuantUIApp()
+        for btn in app._ana_btns:
+            assert btn.layout.opacity == "0.35"
+
+    def test_no_panels_available_initially(self):
+        app = QuantUIApp()
+        assert len(app._ana_available) == 0
+
+    def test_all_accordions_hidden_initially(self):
+        app = QuantUIApp()
+        for acc in app._ana_accordions:
+            assert acc.layout.display == "none"
+
+    def test_switcher_box_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app._ana_switcher_box in app.analysis_tab_panel.children
+
+    def test_activate_panel_marks_available(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        assert "Orbitals" in app._ana_available
+
+    def test_activate_panel_sets_opacity(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        orb_btn = app._ana_btns[0]
+        assert orb_btn.layout.opacity == "1.0"
+
+    def test_activate_panel_auto_selects(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        assert app._orb_accordion.layout.display == ""
+        assert app._orb_accordion.selected_index == 0
+
+    def test_activate_panel_no_auto_select(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals", auto_select=False)
+        assert app._orb_accordion.layout.display == "none"
+
+    def test_activate_hides_other_accordions(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        # All other accordions should be hidden
+        for name, acc in zip(app._ana_panel_names, app._ana_accordions):
+            if name != "Orbitals":
+                assert acc.layout.display == "none"
+
+    def test_deactivate_all_clears_available(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        app._activate_ana_panel("IR Spectrum", auto_select=False)
+        app._deactivate_all_ana_panels()
+        assert len(app._ana_available) == 0
+
+    def test_deactivate_all_hides_accordions(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        app._deactivate_all_ana_panels()
+        for acc in app._ana_accordions:
+            assert acc.layout.display == "none"
+
+    def test_deactivate_all_dims_buttons(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Orbitals")
+        app._deactivate_all_ana_panels()
+        for btn in app._ana_btns:
+            assert btn.layout.opacity == "0.35"
+
+    def test_click_unavailable_shows_warning(self):
+        app = QuantUIApp()
+        app._on_ana_panel_click("Orbitals")
+        assert app._ana_unavail_html.layout.display == ""
+        assert "Orbitals" in app._ana_unavail_html.value
+
+    def test_click_available_selects_panel(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("IR Spectrum", auto_select=False)
+        app._on_ana_panel_click("IR Spectrum")
+        assert app._ir_accordion.layout.display == ""
+        assert app._ana_active == "IR Spectrum"
+
+
+# ---------------------------------------------------------------------------
 # M-UI — Completion banner (M-UI.8)
 # ---------------------------------------------------------------------------
 
