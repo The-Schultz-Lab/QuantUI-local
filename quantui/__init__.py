@@ -111,6 +111,12 @@ try:
 except ImportError:
     pass
 
+# 1D PES scan (optional — requires ase>=3.22 + pyscf, Linux/WSL)
+try:
+    from .pes_scan import PESScanResult, run_pes_scan  # noqa: F401
+except ImportError:
+    pass
+
 # PubChem integration (optional — requires internet)
 try:
     from .pubchem import (

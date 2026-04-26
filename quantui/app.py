@@ -540,6 +540,7 @@ class QuantUIApp:
                 "Frequency",
                 "UV-Vis (TD-DFT)",
                 "NMR Shielding",
+                "PES Scan",
             ],
             value="Single Point",
             description="Calc. Type:",
@@ -593,6 +594,82 @@ class QuantUIApp:
             layout=widgets.Layout(width="100%"),
         )
         self._freq_seed_note = widgets.HTML("")
+
+        # ── PES scan extra widgets ────────────────────────────────────────────
+        self._scan_type_dd = widgets.Dropdown(
+            options=["Bond", "Angle", "Dihedral"],
+            value="Bond",
+            description="Scan type:",
+            style={"description_width": "80px"},
+            layout=widgets.Layout(width="220px"),
+        )
+        _atom_idx_layout = widgets.Layout(width="95px")
+        _atom_idx_style = {"description_width": "50px"}
+        self._scan_atom1 = widgets.BoundedIntText(
+            value=1,
+            min=1,
+            max=999,
+            description="Atom 1:",
+            style=_atom_idx_style,
+            layout=_atom_idx_layout,
+        )
+        self._scan_atom2 = widgets.BoundedIntText(
+            value=2,
+            min=1,
+            max=999,
+            description="Atom 2:",
+            style=_atom_idx_style,
+            layout=_atom_idx_layout,
+        )
+        self._scan_atom3 = widgets.BoundedIntText(
+            value=3,
+            min=1,
+            max=999,
+            description="Atom 3:",
+            style=_atom_idx_style,
+            layout=_atom_idx_layout,
+        )
+        self._scan_atom4 = widgets.BoundedIntText(
+            value=4,
+            min=1,
+            max=999,
+            description="Atom 4:",
+            style=_atom_idx_style,
+            layout=_atom_idx_layout,
+        )
+        self._scan_atom34_box = widgets.HBox(
+            [self._scan_atom3, self._scan_atom4],
+            layout=widgets.Layout(gap="4px"),
+        )
+        self._scan_start = widgets.BoundedFloatText(
+            value=0.5,
+            min=0.01,
+            max=1000.0,
+            step=0.1,
+            description="Start:",
+            style={"description_width": "40px"},
+            layout=widgets.Layout(width="140px"),
+        )
+        self._scan_stop = widgets.BoundedFloatText(
+            value=2.0,
+            min=0.01,
+            max=1000.0,
+            step=0.1,
+            description="Stop:",
+            style={"description_width": "40px"},
+            layout=widgets.Layout(width="140px"),
+        )
+        self._scan_steps = widgets.BoundedIntText(
+            value=10,
+            min=2,
+            max=100,
+            description="Points:",
+            style={"description_width": "50px"},
+            layout=widgets.Layout(width="120px"),
+        )
+        self._scan_unit_lbl = widgets.HTML(
+            '<span style="font-size:12px;color:#555">Å</span>'
+        )
 
         self.calc_extra_opts = widgets.VBox([])
 
@@ -866,7 +943,23 @@ class QuantUIApp:
     # ── Results panel (Cell 7) ────────────────────────────────────────────
 
     def _build_results_section(self) -> None:
-        # Trajectory accordion (Geo Opt only — hidden until a Geo Opt completes)
+        # PES scan energy plot accordion (hidden until a PES Scan completes)
+        self._pes_plot_html = widgets.HTML(
+            value="", layout=widgets.Layout(width="100%")
+        )
+        self._pes_scan_accordion = widgets.Accordion(
+            children=[
+                widgets.VBox(
+                    [self._pes_plot_html],
+                    layout=widgets.Layout(padding="8px"),
+                )
+            ],
+            layout=widgets.Layout(display="none", margin="8px 0"),
+        )
+        self._pes_scan_accordion.set_title(0, "PES Energy Profile")
+        self._pes_scan_accordion.selected_index = None
+
+        # Trajectory accordion (Geo Opt / PES Scan — hidden until result completes)
         self.traj_output = widgets.Output()
         self.traj_accordion = widgets.Accordion(
             children=[self.traj_output],
@@ -1173,6 +1266,7 @@ class QuantUIApp:
                 self._analysis_mol_output,
                 self._analysis_empty_html,
                 self._orb_accordion,
+                self._pes_scan_accordion,
                 self.traj_accordion,
                 self.vib_accordion,
                 self._ir_accordion,
@@ -1586,6 +1680,7 @@ class QuantUIApp:
         # Calc type
         self.calc_type_dd.observe(self._on_calc_type_changed, names="value")
         self._freq_seed_dd.observe(self._on_freq_seed_changed, names="value")
+        self._scan_type_dd.observe(self._update_scan_widgets, names="value")
         self._freq_seed_refresh_btn.on_click(
             lambda _btn: self._refresh_freq_seed_options()
         )
@@ -1822,8 +1917,53 @@ class QuantUIApp:
                     "Start from an optimised geometry for best accuracy.</span>"
                 ),
             ]
+        elif ct == "PES Scan":
+            self._update_scan_widgets()
+            self.calc_extra_opts.children = [
+                widgets.HBox(
+                    [self._scan_type_dd],
+                    layout=widgets.Layout(margin="0 0 4px 0"),
+                ),
+                widgets.HBox(
+                    [self._scan_atom1, self._scan_atom2],
+                    layout=widgets.Layout(gap="4px"),
+                ),
+                self._scan_atom34_box,
+                widgets.HBox(
+                    [
+                        self._scan_start,
+                        self._scan_stop,
+                        self._scan_steps,
+                        self._scan_unit_lbl,
+                    ],
+                    layout=widgets.Layout(gap="4px", align_items="center"),
+                ),
+            ]
         else:
             self.calc_extra_opts.children = []
+
+    def _update_scan_widgets(self, _change=None) -> None:
+        """Show/hide atom3/4 inputs and update unit label based on scan type."""
+        st = self._scan_type_dd.value
+        if st == "Bond":
+            self._scan_atom34_box.layout.display = "none"
+            self._scan_unit_lbl.value = (
+                '<span style="font-size:12px;color:#555">Å</span>'
+            )
+        elif st == "Angle":
+            self._scan_atom4.layout.display = "none"
+            self._scan_atom3.layout.display = ""
+            self._scan_atom34_box.layout.display = ""
+            self._scan_unit_lbl.value = (
+                '<span style="font-size:12px;color:#555">°</span>'
+            )
+        else:  # Dihedral
+            self._scan_atom3.layout.display = ""
+            self._scan_atom4.layout.display = ""
+            self._scan_atom34_box.layout.display = ""
+            self._scan_unit_lbl.value = (
+                '<span style="font-size:12px;color:#555">°</span>'
+            )
 
     def _refresh_freq_seed_options(self) -> None:
         """Populate _freq_seed_dd with saved geometry-opt results."""
@@ -1884,6 +2024,8 @@ class QuantUIApp:
         self.vib_accordion.layout.display = "none"
         self._ir_accordion.layout.display = "none"
         self._orb_accordion.layout.display = "none"
+        self._pes_scan_accordion.layout.display = "none"
+        self._pes_plot_html.value = ""
         self._result_dir_label.value = ""
         self._result_dir_label.layout.display = "none"
         self._result_log_accordion.layout.display = "none"
@@ -2816,7 +2958,10 @@ class QuantUIApp:
 
         from IPython.display import display as _ipy_display
 
-        traj = opt_result.trajectory
+        # Support both OptimizationResult (.trajectory) and PESScanResult (.coordinates_list)
+        traj = getattr(opt_result, "trajectory", None) or getattr(
+            opt_result, "coordinates_list", []
+        )
         energies = opt_result.energies_hartree
         n = len(traj)
         if n < 2:
@@ -3672,6 +3817,7 @@ class QuantUIApp:
                 "Frequency": "frequency",
                 "UV-Vis (TD-DFT)": "tddft",
                 "NMR Shielding": "nmr",
+                "PES Scan": "pes_scan",
             }.get(self.calc_type_dd.value, "single_point")
             log.write(
                 _fmt_log_hdr(
@@ -3826,6 +3972,33 @@ class QuantUIApp:
                 )
                 result_html = self._format_nmr_result(result)
                 save_spectra, save_type = {}, "nmr"
+            elif ct == "PES Scan":
+                self.run_status.value = "Running PES scan…"
+                from quantui.pes_scan import run_pes_scan
+
+                _st = self._scan_type_dd.value.lower()
+                _atom_idx: list = [
+                    self._scan_atom1.value - 1,
+                    self._scan_atom2.value - 1,
+                ]
+                if _st in ("angle", "dihedral"):
+                    _atom_idx.append(self._scan_atom3.value - 1)
+                if _st == "dihedral":
+                    _atom_idx.append(self._scan_atom4.value - 1)
+
+                result = run_pes_scan(
+                    molecule=calc_mol,
+                    method=self.method_dd.value,
+                    basis=self.basis_dd.value,
+                    scan_type=_st,
+                    atom_indices=_atom_idx,
+                    start=self._scan_start.value,
+                    stop=self._scan_stop.value,
+                    steps=self._scan_steps.value,
+                    progress_stream=log,  # type: ignore[arg-type]
+                )
+                result_html = self._format_pes_scan_result(result)
+                save_spectra, save_type = {}, "pes_scan"
             else:  # Single Point
                 self.run_status.value = "Calculating..."
                 from quantui import run_in_session
@@ -3882,6 +4055,8 @@ class QuantUIApp:
             elif ct == "Frequency":
                 self._show_vib_animation(result, calc_mol)
                 self._show_ir_spectrum(result)
+            elif ct == "PES Scan":
+                self._show_pes_scan_result(result)
             elif ct == "Single Point":
                 self._show_orbital_diagram(result)
 
@@ -3901,7 +4076,12 @@ class QuantUIApp:
                 f'<p style="color:#555;font-size:13px;margin:4px 0 12px">'
                 f"Analysing: {_mol_label}</p>"
             )
-            _has_analysis = ct in ("Single Point", "Geometry Opt", "Frequency")
+            _has_analysis = ct in (
+                "Single Point",
+                "Geometry Opt",
+                "Frequency",
+                "PES Scan",
+            )
             self._to_analysis_btn.layout.display = "" if _has_analysis else "none"
             self._analysis_empty_html.layout.display = "none" if _has_analysis else ""
 
@@ -3939,8 +4119,12 @@ class QuantUIApp:
                 self._last_result_dir = _saved_dir
                 save_thumbnail(_saved_dir, load_result(_saved_dir))
                 # Persist trajectory so history viewer can replay it.
-                if ct == "Geometry Opt":
-                    _traj = getattr(result, "trajectory", None)
+                if ct in ("Geometry Opt", "PES Scan"):
+                    _traj = getattr(
+                        result,
+                        "trajectory" if ct == "Geometry Opt" else "coordinates_list",
+                        None,
+                    )
                     _e_list = getattr(result, "energies_hartree", [])
                     if _traj:
                         save_trajectory(_saved_dir, _traj, _e_list or [])
@@ -4642,6 +4826,94 @@ class QuantUIApp:
             f"{header_rows}{h_table}{c_table}{_empty}{_basis_warn}</table></div>"
         )
 
+    def _format_pes_scan_result(self, r) -> str:
+        """Format a PESScanResult as an HTML result card."""
+        _conv = "Yes" if r.converged_all else "No (some points did not converge)"
+        _cc = "green" if r.converged_all else "#c00"
+        if r.energies_hartree:
+            e_min = min(r.energies_hartree)
+            e_max = max(r.energies_hartree)
+            barrier_kcal = (e_max - e_min) * 627.509474
+            _e_row = (
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">Min energy</td>'
+                f'<td style="color:#000">{e_min:.8f} Ha</td></tr>'
+                f'<tr><td style="padding:3px 18px 3px 0;color:#444">Energy range</td>'
+                f'<td style="color:#000">{barrier_kcal:.2f} kcal/mol</td></tr>'
+            )
+        else:
+            _e_row = ""
+        _idx_str = "–".join(str(i + 1) for i in r.atom_indices)
+        return (
+            f'<div style="background:#f0fff0;border-left:4px solid #4CAF50;'
+            f'padding:10px 14px;border-radius:4px;margin:6px 0">'
+            f"<b>PES Scan &mdash; {r.formula} ({r.method}/{r.basis})</b>"
+            f'<table style="margin-top:8px;font-size:14px;border-collapse:collapse">'
+            f'<tr><td style="padding:3px 18px 3px 0;color:#444">Scan type</td>'
+            f'<td style="color:#000">{r.scan_type.capitalize()} ({_idx_str})</td></tr>'
+            f'<tr><td style="padding:3px 18px 3px 0;color:#444">Range</td>'
+            f'<td style="color:#000">{r.scan_parameter_values[0]:.3f} → '
+            f"{r.scan_parameter_values[-1]:.3f} {r.scan_unit} "
+            f"({r.n_steps} points)</td></tr>"
+            f"{_e_row}"
+            f'<tr><td style="padding:3px 18px 3px 0;color:#444">All converged</td>'
+            f'<td style="color:{_cc}">{_conv}</td></tr>'
+            f"</table></div>"
+        )
+
+    def _show_pes_scan_result(self, result) -> None:
+        """Render the PES energy profile chart and trajectory for a PES scan result."""
+        try:
+            import plotly.graph_objects as go
+            import plotly.io as pio
+
+            e_rel = result.energies_relative_kcal
+            x_vals = result.scan_parameter_values
+
+            hover_text = [
+                f"{result.scan_coordinate_label}: {x:.4f}<br>"
+                f"ΔE = {de:.3f} kcal/mol<br>"
+                f"E = {e:.8f} Ha"
+                for x, de, e in zip(x_vals, e_rel, result.energies_hartree)
+            ]
+
+            fig = go.Figure(
+                go.Scatter(
+                    x=x_vals,
+                    y=e_rel,
+                    mode="lines+markers",
+                    line=dict(color="#2563eb", width=2),
+                    marker=dict(size=8, color="#2563eb"),
+                    hovertext=hover_text,
+                    hoverinfo="text",
+                )
+            )
+            fig.update_layout(
+                xaxis_title=result.scan_coordinate_label,
+                yaxis_title="Relative energy / kcal mol⁻¹",
+                height=380,
+                margin=dict(l=60, r=20, t=30, b=50),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                xaxis=dict(showgrid=True, gridcolor="#e5e7eb"),
+                yaxis=dict(showgrid=True, gridcolor="#e5e7eb"),
+                hovermode="closest",
+            )
+            self._pes_plot_html.value = pio.to_html(
+                fig, include_plotlyjs="cdn", full_html=False
+            )
+        except Exception:
+            pass
+
+        self._pes_scan_accordion.layout.display = ""
+        self._pes_scan_accordion.selected_index = 0
+
+        # Reuse trajectory accordion for the scan geometry sequence
+        if result.coordinates_list:
+            self._pending_traj_result = result
+            self.traj_accordion.set_title(0, "Geometry at Each Scan Point")
+            self.traj_accordion.layout.display = ""
+            self.traj_accordion.selected_index = 0  # triggers lazy render
+
     def _format_past_result(self, data: dict, result_dir: Optional[Path] = None) -> str:
         import base64 as _b64
 
@@ -4651,6 +4923,7 @@ class QuantUIApp:
             "frequency": ("Frequency Analysis", "#15803d", "#dcfce7"),
             "tddft": ("TD-DFT", "#b45309", "#fef3c7"),
             "nmr": ("NMR", "#0d9488", "#ccfbf1"),
+            "pes_scan": ("PES Scan", "#c2410c", "#ffedd5"),
         }
         ct = data.get("calc_type", "")
         _ct_label, _ct_fg, _ct_bg = _ct_labels.get(

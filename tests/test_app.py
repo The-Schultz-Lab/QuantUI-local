@@ -755,9 +755,9 @@ class TestNMRWidgets:
         app = QuantUIApp()
         assert "NMR Shielding" in app.calc_type_dd.options
 
-    def test_calc_type_dd_has_five_options(self):
+    def test_calc_type_dd_has_six_options(self):
         app = QuantUIApp()
-        assert len(app.calc_type_dd.options) == 5
+        assert len(app.calc_type_dd.options) == 6
 
     def test_nmr_calc_type_shows_note(self):
         app = QuantUIApp()
