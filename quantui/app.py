@@ -295,13 +295,14 @@ class QuantUIApp:
             widgets.VBox(
                 [
                     widgets.HBox(
-                        [self.theme_btn],
+                        [self.theme_btn, self._help_btn],
                         layout=widgets.Layout(
                             justify_content="flex-end", margin="0 0 4px"
                         ),
                     ),
                     self._theme_style,
                     self._status_html,
+                    self.help_tab_panel,
                     self.root_tab,
                 ]
             )
@@ -1100,42 +1101,107 @@ class QuantUIApp:
         self._iso_accordion.set_title(0, "Orbital Isosurface")
         self._iso_accordion.selected_index = None
 
-        self.post_calc_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
-                    "Heavy analyses that run on demand after a calculation completes. "
-                    "Run a Single Point or Geometry Optimization (or load one from History "
-                    "and click <b>View log</b>), then use the tools below.</p>"
-                ),
-                self._iso_accordion,
-            ],
-            layout=widgets.Layout(padding="8px 0"),
-        )
-
-        # Result directory path label (hidden until a calculation saves)
+        # ── Result directory path label (hidden until a calculation saves) ──
         self._result_dir_label = widgets.HTML(
             value="",
             layout=widgets.Layout(display="none", margin="4px 0 0 0"),
         )
 
-        # Full output log accordion (hidden until a calculation saves)
+        # ── Full output log accordion (hidden until a calculation saves) ────
         self._result_log_output = widgets.Output()
         self._result_log_accordion = widgets.Accordion(
             children=[self._result_log_output],
             layout=widgets.Layout(display="none", margin="8px 0 0 0"),
         )
         self._result_log_accordion.set_title(0, "Full output log (pyscf.log)")
-        self._result_log_accordion.selected_index = None  # collapsed by default
+        self._result_log_accordion.selected_index = None
 
-        self.results_panel = widgets.VBox(
+        # ── Completion banner (Calculate tab — hidden until run finishes) ───
+        self._go_results_btn = widgets.Button(
+            description="→ View Results",
+            button_style="success",
+            layout=widgets.Layout(width="130px"),
+        )
+        self._go_analysis_btn = widgets.Button(
+            description="→ View Analysis",
+            button_style="info",
+            layout=widgets.Layout(width="140px"),
+        )
+        self._completion_mol_lbl = widgets.HTML(value="")
+        self._completion_banner = widgets.HBox(
+            [
+                widgets.HTML(
+                    '<span style="color:#22c55e;font-weight:600;font-size:13px">'
+                    "✓ Calculation complete — </span>"
+                ),
+                self._completion_mol_lbl,
+                self._go_results_btn,
+                self._go_analysis_btn,
+            ],
+            layout=widgets.Layout(
+                display="none",
+                align_items="center",
+                gap="8px",
+                padding="10px 12px",
+                border="1px solid #bbf7d0",
+                border_radius="6px",
+                background_color="#f0fdf4",
+                margin="8px 0",
+            ),
+        )
+
+        # ── Results tab panel (Tab 1) ─────────────────────────────────────
+        self._to_analysis_btn = widgets.Button(
+            description="→ View Analysis",
+            button_style="",
+            icon="bar-chart",
+            layout=widgets.Layout(display="none", width="160px", margin="8px 0 0 0"),
+        )
+        self.results_tab_panel = widgets.VBox(
             [
                 widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
                 self.result_output,
                 self.result_viz_output,
                 self._result_dir_label,
-            ]
+                # advanced_accordion appended in _assemble_tabs (built later in
+                # _build_compare_section — must run before it can be referenced here)
+                self._to_analysis_btn,
+            ],
+            layout=widgets.Layout(padding="8px 0"),
         )
+        # Backward-compat alias — existing methods that reference results_panel still work
+        self.results_panel = self.results_tab_panel
+
+        # ── Analysis tab panel (Tab 2) ────────────────────────────────────
+        self._analysis_context_lbl = widgets.HTML(
+            value=(
+                '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+                "No result loaded yet. Run a calculation or load one from History.</p>"
+            )
+        )
+        self._analysis_empty_html = widgets.HTML(
+            value=(
+                '<p style="color:#888;font-size:13px;font-style:italic;margin:8px 0">'
+                "No interactive analysis is available for this calculation type.<br>"
+                "Run a Single Point, Geo Opt, or Frequency calculation to see "
+                "orbital diagrams, trajectory animations, and spectra here.</p>"
+            ),
+            layout=widgets.Layout(display="none"),
+        )
+        self.analysis_tab_panel = widgets.VBox(
+            [
+                self._analysis_context_lbl,
+                self._analysis_empty_html,
+                self._orb_accordion,
+                self.traj_accordion,
+                self.vib_accordion,
+                self._ir_accordion,
+                self._iso_accordion,
+            ],
+            layout=widgets.Layout(padding="8px 0"),
+        )
+        # Backward-compat alias for post_calc_panel references in tests
+        self.post_calc_panel = self.analysis_tab_panel
 
     # ── History panel (Cell 8) ────────────────────────────────────────────
 
@@ -1424,8 +1490,10 @@ class QuantUIApp:
             [
                 widgets.HTML(
                     '<p style="color:#555;font-size:13px;margin:4px 0 8px">'
-                    "Full PySCF output for the most recent calculation. "
-                    "Use <b>View log</b> in the History tab to load a saved result's log.</p>"
+                    "Raw PySCF output for the most recent calculation. "
+                    "Use <b>View log</b> in the History tab to load a saved result's log. "
+                    "Orbital diagrams, trajectories, and spectra are in the "
+                    "<b>Analysis</b> tab.</p>"
                 ),
                 widgets.HBox(
                     [self._log_clear_btn],
@@ -1433,10 +1501,6 @@ class QuantUIApp:
                 ),
                 self._log_source_lbl,
                 self._log_output_html,
-                self._orb_accordion,
-                self.traj_accordion,
-                self.vib_accordion,
-                self._ir_accordion,
                 self._result_log_accordion,
             ],
             layout=widgets.Layout(padding="8px 0"),
@@ -1456,6 +1520,14 @@ class QuantUIApp:
         self.help_content_html = widgets.HTML()
         self._render_help_topic()  # render first topic immediately
 
+        # [?] toggle button shown in the top bar
+        self._help_btn = widgets.Button(
+            description="?",
+            button_style="",
+            tooltip="Help topics",
+            layout=widgets.Layout(width="34px", margin="0 0 0 8px"),
+        )
+
         self.help_tab_panel = widgets.VBox(
             [
                 widgets.HTML(
@@ -1466,7 +1538,14 @@ class QuantUIApp:
                 self.help_topic_dd,
                 self.help_content_html,
             ],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=widgets.Layout(
+                display="none",
+                padding="8px 0",
+                border="1px solid #e2e8f0",
+                border_radius="6px",
+                padding_left="12px",
+                margin="0 0 8px",
+            ),
         )
 
     # ── Tab assembly (Cell 10) ────────────────────────────────────────────
@@ -1478,28 +1557,34 @@ class QuantUIApp:
                 self.mol_input_container,
                 self.calc_setup_panel,
                 self.run_panel,
-                self.results_panel,
-                self.advanced_accordion,
+                self._completion_banner,
             ],
             layout=widgets.Layout(padding="8px 0"),
         )
 
+        # Splice advanced_accordion into results_tab_panel before _to_analysis_btn.
+        # It cannot be referenced in _build_results_section because it is built later
+        # in _build_compare_section.
+        _rtp = list(self.results_tab_panel.children)
+        _rtp.insert(_rtp.index(self._to_analysis_btn), self.advanced_accordion)
+        self.results_tab_panel.children = tuple(_rtp)
+
         self.root_tab = widgets.Tab(
             children=[
                 _calculate_content,
+                self.results_tab_panel,
+                self.analysis_tab_panel,
                 self.history_panel,
                 self.compare_panel,
                 self.log_tab_panel,
-                self.post_calc_panel,
-                self.help_tab_panel,
             ]
         )
         self.root_tab.set_title(0, "Calculate")
-        self.root_tab.set_title(1, "History")
-        self.root_tab.set_title(2, "Compare")
-        self.root_tab.set_title(3, "Output")
-        self.root_tab.set_title(4, "Post-calculate")
-        self.root_tab.set_title(5, "Help")
+        self.root_tab.set_title(1, "Results")
+        self.root_tab.set_title(2, "Analysis")
+        self.root_tab.set_title(3, "History")
+        self.root_tab.set_title(4, "Compare")
+        self.root_tab.set_title(5, "Log")
 
     # ══ CALLBACK WIRING ══════════════════════════════════════════════════════
 
@@ -1560,8 +1645,19 @@ class QuantUIApp:
         self.compare_clear_btn.on_click(self._on_compare_clear)
         # Output log
         self._log_clear_btn.on_click(self._on_log_clear)
-        # Help
+        # Help [?] toggle
+        self._help_btn.on_click(self._on_help_toggle)
         self.help_topic_dd.observe(self._on_help_topic_changed, names="value")
+        # Tab navigation buttons
+        self._go_results_btn.on_click(
+            lambda _: setattr(self.root_tab, "selected_index", 1)
+        )
+        self._go_analysis_btn.on_click(
+            lambda _: setattr(self.root_tab, "selected_index", 2)
+        )
+        self._to_analysis_btn.on_click(
+            lambda _: setattr(self.root_tab, "selected_index", 2)
+        )
         # Vibrational mode selector
         self.vib_mode_dd.observe(self._on_vib_mode_changed, names="value")
         # Orbital diagram axis controls
@@ -1810,6 +1906,9 @@ class QuantUIApp:
         self._result_log_accordion.layout.display = "none"
         self._result_log_accordion.selected_index = None
         self._result_log_output.clear_output()
+        self._completion_banner.layout.display = "none"
+        self._to_analysis_btn.layout.display = "none"
+        self._analysis_empty_html.layout.display = "none"
         threading.Thread(target=self._do_run, daemon=True).start()
 
     def _on_solvent_cb_changed(self, change) -> None:
@@ -1987,12 +2086,14 @@ class QuantUIApp:
         from quantui.results_storage import load_result
 
         summaries = []
+        valid_dirs: list = []
         for path_str in selected:
             if not path_str:
                 continue
             try:
                 data = load_result(Path(path_str))
                 summaries.append(summary_from_saved_result(data))
+                valid_dirs.append(Path(path_str))
             except Exception as exc:
                 with self.compare_output:
                     display(
@@ -2013,6 +2114,26 @@ class QuantUIApp:
                     plt.close(fig)
                 except Exception:
                     pass
+            # Per-row → Analyse buttons
+            if valid_dirs:
+                _btns = []
+                for s, rdir in zip(summaries, valid_dirs):
+                    _short = f"{s.formula} {s.method}/{s.basis}"
+                    _btn = widgets.Button(
+                        description=f"→ Analyse  {_short}"[:48],
+                        button_style="info",
+                        layout=widgets.Layout(width="auto", max_width="340px"),
+                        tooltip=f"Load {_short} into the Analysis tab",
+                    )
+                    _btn.on_click(lambda _, rd=rdir: self._history_load_analysis(rd))
+                    _btns.append(_btn)
+                display(
+                    widgets.HTML(
+                        '<p style="margin:12px 0 4px;color:#475569;'
+                        'font-size:13px;font-weight:600">Analyse a result:</p>'
+                    )
+                )
+                display(widgets.VBox(_btns, layout=widgets.Layout(gap="4px")))
 
     def _on_compare_clear(self, btn) -> None:
         self.compare_select.value = ()
@@ -2039,8 +2160,33 @@ class QuantUIApp:
             try:
                 from quantui import load_result
 
-                data = load_result(Path(path_str))
-                display(HTML(self._format_past_result(data)))
+                _result_dir = Path(path_str)
+                data = load_result(_result_dir)
+                display(HTML(self._format_past_result(data, result_dir=_result_dir)))
+                _btn_res = widgets.Button(
+                    description="→ View Results",
+                    button_style="success",
+                    layout=widgets.Layout(width="130px"),
+                    tooltip="Show this result in the Results tab",
+                )
+                _btn_ana = widgets.Button(
+                    description="→ View Analysis",
+                    button_style="info",
+                    layout=widgets.Layout(width="140px"),
+                    tooltip="Load analysis panels and navigate to the Analysis tab",
+                )
+                _btn_res.on_click(
+                    lambda _, d=data, rd=_result_dir: self._history_load_results(d, rd)
+                )
+                _btn_ana.on_click(
+                    lambda _, rd=_result_dir: self._history_load_analysis(rd)
+                )
+                display(
+                    widgets.HBox(
+                        [_btn_res, _btn_ana],
+                        layout=widgets.Layout(gap="8px", margin="6px 0 0"),
+                    )
+                )
             except Exception as exc:
                 print(f"Could not load result: {exc}")
 
@@ -2156,7 +2302,134 @@ class QuantUIApp:
         except Exception:
             pass
 
+        # Update Analysis tab context for the loaded result
+        try:
+            _hist_formula = data.get("formula", result_dir.name)  # type: ignore[possibly-undefined]
+            _hist_method = data.get("method", "")
+            _hist_basis = data.get("basis", "")
+            _hist_ct = data.get("calc_type", "")
+            _hist_label = (
+                f"{_hist_formula}  {_hist_method}/{_hist_basis}"
+                if _hist_method
+                else _hist_formula
+            )
+            self._analysis_context_lbl.value = (
+                f'<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+                f"Analysing: {_hist_label} (from History)</p>"
+            )
+            _hist_has_analysis = _hist_ct in (
+                "single_point",
+                "geometry_opt",
+                "frequency",
+            )
+            self._to_analysis_btn.layout.display = "" if _hist_has_analysis else "none"
+            self._analysis_empty_html.layout.display = (
+                "none" if _hist_has_analysis else ""
+            )
+        except Exception:
+            pass
+
         self._goto_output_tab()
+
+    def _history_load_results(self, data: dict, result_dir: Path) -> None:
+        """Display a history result card in the Results tab and navigate there."""
+        self.result_output.clear_output()
+        with self.result_output:
+            display(HTML(self._format_past_result(data, result_dir=result_dir)))
+        self._result_dir_label.layout.display = "none"
+        self.root_tab.selected_index = 1
+
+    def _history_load_analysis(self, result_dir: Path) -> None:
+        """Load analysis panels for a history result and navigate to Analysis tab."""
+        # Reuse _on_view_log machinery but navigate to Analysis instead of Log.
+        import types
+
+        log_path = result_dir / "pyscf.log"
+        text = (
+            log_path.read_text(encoding="utf-8", errors="replace")
+            if log_path.exists()
+            else "(No pyscf.log found for this result.)"
+        )
+        label = result_dir.name if log_path.exists() else ""
+
+        self.traj_accordion.layout.display = "none"
+        self._pending_traj_result = None
+        self._ir_accordion.layout.display = "none"
+        self._update_log_panel(text, label)
+        self._show_result_log(result_dir, text)
+
+        try:
+            from quantui import load_result
+            from quantui.results_storage import load_orbitals, load_trajectory
+
+            data = load_result(result_dir)
+            calc_type = data.get("calc_type", "")
+            formula = data.get("formula", "")
+
+            if calc_type in ("single_point", "geometry_opt"):
+                try:
+                    orb = load_orbitals(result_dir)
+                    orb.formula = formula
+                    self._show_orbital_diagram(orb)
+                except Exception:
+                    pass
+
+            if calc_type == "geometry_opt":
+                traj_file = result_dir / "trajectory.json"
+                if traj_file.exists():
+                    try:
+                        traj, energies = load_trajectory(result_dir)
+                        if len(traj) >= 2:
+                            stub = types.SimpleNamespace(
+                                trajectory=traj,
+                                energies_hartree=energies,
+                                formula=formula,
+                            )
+                            self._pending_traj_result = stub
+                            self.traj_accordion.layout.display = ""
+                    except Exception:
+                        pass
+
+            elif calc_type == "frequency":
+                ir = data.get("spectra", {}).get("ir", {})
+                mol_data = data.get("spectra", {}).get("molecule", {})
+                freqs = ir.get("frequencies_cm1")
+                ints = ir.get("ir_intensities")
+                displacements = ir.get("displacements")
+                if freqs and ints:
+                    freq_stub = types.SimpleNamespace(
+                        frequencies_cm1=freqs,
+                        ir_intensities=ints,
+                        displacements=displacements,
+                    )
+                    self._show_ir_spectrum(freq_stub)
+                    if displacements and mol_data.get("atoms"):
+                        from quantui.molecule import Molecule as _Mol
+
+                        hist_mol = _Mol(
+                            atoms=mol_data["atoms"],
+                            coordinates=mol_data["coords"],
+                            charge=mol_data.get("charge", 0),
+                            multiplicity=mol_data.get("multiplicity", 1),
+                        )
+                        self._show_vib_animation(freq_stub, hist_mol)
+
+            _has = calc_type in ("single_point", "geometry_opt", "frequency")
+            _label = (
+                f'{formula}  {data.get("method","")}/{data.get("basis","")}'
+                if data.get("method")
+                else formula
+            )
+            self._analysis_context_lbl.value = (
+                f'<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+                f"Analysing: {_label} (from History)</p>"
+            )
+            self._to_analysis_btn.layout.display = "" if _has else "none"
+            self._analysis_empty_html.layout.display = "none" if _has else ""
+        except Exception:
+            pass
+
+        self.root_tab.selected_index = 2
 
     # ── Perf stats reset ──────────────────────────────────────────────────
 
@@ -2266,6 +2539,10 @@ class QuantUIApp:
         self._log_source_lbl.value = ""
 
     # ── Help ──────────────────────────────────────────────────────────────
+
+    def _on_help_toggle(self, _=None) -> None:
+        visible = self.help_tab_panel.layout.display != "none"
+        self.help_tab_panel.layout.display = "none" if visible else ""
 
     def _on_help_topic_changed(self, change=None) -> None:
         self._render_help_topic()
@@ -3483,6 +3760,23 @@ class QuantUIApp:
             self.step_progress.complete(2)
             self.step_progress.complete(3)
 
+            # Update completion banner and Analysis tab context
+            _mol_label = (
+                f"{result.formula}  {self.method_dd.value}/{self.basis_dd.value}"
+            )
+            self._completion_mol_lbl.value = (
+                f'<span style="color:#1e293b;font-size:13px;font-weight:500">'
+                f"{_mol_label}</span>"
+            )
+            self._completion_banner.layout.display = ""
+            self._analysis_context_lbl.value = (
+                f'<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+                f"Analysing: {_mol_label}</p>"
+            )
+            _has_analysis = ct in ("Single Point", "Geometry Opt", "Frequency")
+            self._to_analysis_btn.layout.display = "" if _has_analysis else "none"
+            self._analysis_empty_html.layout.display = "none" if _has_analysis else ""
+
             # Write structured log footer
             try:
                 from quantui.log_utils import format_log_footer as _fmt_log_ftr
@@ -3501,8 +3795,12 @@ class QuantUIApp:
 
             # Persist to disk
             try:
-                from quantui import save_result
-                from quantui.results_storage import save_orbitals, save_trajectory
+                from quantui import load_result, save_result
+                from quantui.results_storage import (
+                    save_orbitals,
+                    save_thumbnail,
+                    save_trajectory,
+                )
 
                 _saved_dir = save_result(
                     result,
@@ -3511,6 +3809,7 @@ class QuantUIApp:
                     spectra=save_spectra,
                 )
                 self._last_result_dir = _saved_dir
+                save_thumbnail(_saved_dir, load_result(_saved_dir))
                 # Persist trajectory so history viewer can replay it.
                 if ct == "Geometry Opt":
                     _traj = getattr(result, "trajectory", None)
@@ -3758,13 +4057,13 @@ class QuantUIApp:
     def _show_help_topic(self, topic: str) -> None:
         if topic in HELP_TOPICS:
             self.help_topic_dd.value = topic
-        self.root_tab.selected_index = 4
+        self.help_tab_panel.layout.display = ""
 
     def _update_log_panel(self, log_text: str, label: str = "") -> None:
         self._render_log(log_text, label)
 
     def _goto_output_tab(self) -> None:
-        self.root_tab.selected_index = 3
+        self.root_tab.selected_index = 5
 
     def _render_log(self, text: str, source_label: str = "") -> None:
         import html as _html_mod
@@ -4215,7 +4514,9 @@ class QuantUIApp:
             f"{header_rows}{h_table}{c_table}{_empty}{_basis_warn}</table></div>"
         )
 
-    def _format_past_result(self, data: dict) -> str:
+    def _format_past_result(self, data: dict, result_dir: Optional[Path] = None) -> str:
+        import base64 as _b64
+
         _ct_labels = {
             "single_point": ("Single Point", "#2563eb", "#dbeafe"),
             "geometry_opt": ("Geometry Optimization", "#7c3aed", "#ede9fe"),
@@ -4256,9 +4557,23 @@ class QuantUIApp:
             ]
         )
         ts = data.get("timestamp", "")
+
+        # Embed thumbnail if saved
+        _thumb_html = ""
+        if result_dir is not None:
+            _thumb_path = Path(result_dir) / "thumbnail.png"
+            if _thumb_path.exists():
+                _img_b64 = _b64.b64encode(_thumb_path.read_bytes()).decode()
+                _thumb_html = (
+                    f'<img src="data:image/png;base64,{_img_b64}" '
+                    f'style="float:right;margin:0 0 6px 14px;border-radius:4px;'
+                    f'border:1px solid #e2e8f0" width="173" height="108" />'
+                )
+
         return (
             f'<div style="background:#f0fff0;border-left:4px solid #4CAF50;'
-            f'padding:10px 14px;border-radius:4px;margin:6px 0">'
+            f'padding:10px 14px;border-radius:4px;margin:6px 0;overflow:hidden">'
+            f"{_thumb_html}"
             f"{_ct_badge}<br>"
             f'<b>{data["formula"]} &mdash; {data["method"]}/{data["basis"]}</b>'
             f'&ensp;<small style="color:#777">{ts}</small>'

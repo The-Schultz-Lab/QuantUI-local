@@ -284,3 +284,122 @@ def load_trajectory(result_dir: Path):
     if all(e is None for e in energies):
         energies = []
     return trajectory, energies
+
+
+def save_thumbnail(result_dir: Path, data: dict) -> None:
+    """Generate a compact PNG thumbnail card for the saved result.
+
+    Silently skips if matplotlib is unavailable or any error occurs.
+    """
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return
+
+    _colors: dict = {
+        "single_point": ("#2563eb", "#dbeafe"),
+        "geometry_opt": ("#7c3aed", "#ede9fe"),
+        "frequency": ("#15803d", "#dcfce7"),
+        "tddft": ("#b45309", "#fef3c7"),
+        "nmr": ("#0d9488", "#ccfbf1"),
+    }
+    _ct_labels: dict = {
+        "single_point": "Single Point",
+        "geometry_opt": "Geometry Opt",
+        "frequency": "Frequency",
+        "tddft": "TD-DFT",
+        "nmr": "NMR",
+    }
+    ct = data.get("calc_type", "")
+    fg, bg = _colors.get(ct, ("#555555", "#f3f4f6"))
+    ct_label = _ct_labels.get(ct, ct.replace("_", " ").title())
+
+    fig = plt.figure(figsize=(2.4, 1.5), facecolor=bg)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_facecolor(bg)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+
+    # Colored header strip
+    ax.axhspan(0.80, 1.0, color=fg)
+    ax.text(
+        0.5,
+        0.90,
+        ct_label,
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontweight="bold",
+        color="white",
+        transform=ax.transAxes,
+    )
+
+    # Formula
+    ax.text(
+        0.5,
+        0.65,
+        data.get("formula", "?"),
+        ha="center",
+        va="center",
+        fontsize=13,
+        fontweight="bold",
+        color=fg,
+        transform=ax.transAxes,
+    )
+
+    # Method / basis
+    ax.text(
+        0.5,
+        0.50,
+        f'{data.get("method", "?")} / {data.get("basis", "?")}',
+        ha="center",
+        va="center",
+        fontsize=8,
+        color="#444444",
+        transform=ax.transAxes,
+    )
+
+    # Energy
+    e_ha = data.get("energy_hartree")
+    if e_ha is not None and e_ha == e_ha:  # skip NaN
+        ax.text(
+            0.5,
+            0.34,
+            f"E = {e_ha:.5f} Ha",
+            ha="center",
+            va="center",
+            fontsize=7,
+            color="#333333",
+            transform=ax.transAxes,
+            family="monospace",
+        )
+
+    # Converged indicator
+    conv = data.get("converged")
+    if conv is not None:
+        ax.text(
+            0.5,
+            0.16,
+            "✓ Converged" if conv else "✗ Not converged",
+            ha="center",
+            va="center",
+            fontsize=7.5,
+            fontweight="bold",
+            color="#15803d" if conv else "#c00000",
+            transform=ax.transAxes,
+        )
+
+    try:
+        fig.savefig(
+            str(result_dir / "thumbnail.png"),
+            dpi=72,
+            bbox_inches="tight",
+            facecolor=bg,
+            pad_inches=0.05,
+        )
+    finally:
+        plt.close(fig)

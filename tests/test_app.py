@@ -125,11 +125,11 @@ class TestTabStructure:
         app = QuantUIApp()
         expected = [
             "Calculate",
+            "Results",
+            "Analysis",
             "History",
             "Compare",
-            "Output",
-            "Post-calculate",
-            "Help",
+            "Log",
         ]
         for i, title in enumerate(expected):
             assert app.root_tab.get_title(i) == title
@@ -1015,3 +1015,119 @@ class TestShowOrbitalDiagram:
         app._show_orbital_diagram(self._make_result_with_mo())
         # mo_coeff is None in mock → iso controls stay hidden
         assert app._orb_iso_controls.layout.display == "none"
+
+
+# ---------------------------------------------------------------------------
+# M-UI — Results tab widgets (M-UI.8)
+# ---------------------------------------------------------------------------
+
+
+class TestResultsTab:
+    """Results tab panel contains the expected widgets and backward-compat alias."""
+
+    def test_results_tab_panel_is_vbox(self):
+        app = QuantUIApp()
+        import ipywidgets as widgets
+
+        assert isinstance(app.results_tab_panel, widgets.VBox)
+
+    def test_results_panel_alias_points_to_same_object(self):
+        app = QuantUIApp()
+        assert app.results_panel is app.results_tab_panel
+
+    def test_results_tab_contains_result_output(self):
+        app = QuantUIApp()
+        assert app.result_output in app.results_tab_panel.children
+
+    def test_to_analysis_btn_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._to_analysis_btn.layout.display == "none"
+
+    def test_advanced_accordion_in_results_tab(self):
+        app = QuantUIApp()
+        assert app.advanced_accordion in app.results_tab_panel.children
+
+
+# ---------------------------------------------------------------------------
+# M-UI — Analysis tab widgets (M-UI.8)
+# ---------------------------------------------------------------------------
+
+
+class TestAnalysisTab:
+    """Analysis tab panel contains the expected widgets and backward-compat alias."""
+
+    def test_analysis_tab_panel_is_vbox(self):
+        app = QuantUIApp()
+        import ipywidgets as widgets
+
+        assert isinstance(app.analysis_tab_panel, widgets.VBox)
+
+    def test_post_calc_panel_alias_points_to_same_object(self):
+        app = QuantUIApp()
+        assert app.post_calc_panel is app.analysis_tab_panel
+
+    def test_analysis_context_label_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_analysis_context_lbl")
+        import ipywidgets as widgets
+
+        assert isinstance(app._analysis_context_lbl, widgets.HTML)
+
+    def test_analysis_empty_html_initially_hidden(self):
+        """Empty-state message starts hidden; it appears only when a non-analysis calc completes."""
+        app = QuantUIApp()
+        assert app._analysis_empty_html.layout.display == "none"
+
+    def test_orb_accordion_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app._orb_accordion in app.analysis_tab_panel.children
+
+    def test_vib_accordion_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app.vib_accordion in app.analysis_tab_panel.children
+
+    def test_ir_accordion_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app._ir_accordion in app.analysis_tab_panel.children
+
+
+# ---------------------------------------------------------------------------
+# M-UI — Completion banner (M-UI.8)
+# ---------------------------------------------------------------------------
+
+
+class TestCompletionBanner:
+    """Completion banner widget exists and is initially hidden."""
+
+    def test_completion_banner_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_completion_banner")
+        import ipywidgets as widgets
+
+        assert isinstance(app._completion_banner, widgets.HBox)
+
+    def test_completion_banner_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._completion_banner.layout.display == "none"
+
+    def test_go_results_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_go_results_btn")
+        import ipywidgets as widgets
+
+        assert isinstance(app._go_results_btn, widgets.Button)
+
+    def test_go_analysis_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_go_analysis_btn")
+
+    def test_help_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_help_btn")
+        import ipywidgets as widgets
+
+        assert isinstance(app._help_btn, widgets.Button)
+
+    def test_help_panel_initially_hidden(self):
+        app = QuantUIApp()
+        assert app.help_tab_panel.layout.display == "none"
