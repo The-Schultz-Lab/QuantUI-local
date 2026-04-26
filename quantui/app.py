@@ -294,6 +294,7 @@ class QuantUIApp:
         display(
             widgets.VBox(
                 [
+                    self._welcome_html,
                     widgets.HBox(
                         [self.theme_btn, self._help_btn],
                         layout=widgets.Layout(
@@ -301,7 +302,6 @@ class QuantUIApp:
                         ),
                     ),
                     self._theme_style,
-                    self._status_html,
                     self.help_tab_panel,
                     self.root_tab,
                 ]
@@ -318,6 +318,7 @@ class QuantUIApp:
     def _build_widgets(self) -> None:
         self._build_theme_selector()
         self._build_status_panel()
+        self._build_welcome_header()
         self._build_shared_widgets()
         self._build_molecule_section()
         self._build_calc_setup()
@@ -397,6 +398,77 @@ class QuantUIApp:
             f'<table style="margin-top:8px;border-collapse:collapse">{_rows}</table>'
             f"</div>"
         )
+        self._status_tab_panel = widgets.VBox(
+            [
+                widgets.HTML(
+                    '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+                    "System capabilities and resource availability for this session.</p>"
+                ),
+                self._status_html,
+            ],
+            layout=widgets.Layout(padding="8px 0"),
+        )
+
+    # ── Welcome header ────────────────────────────────────────────────────
+
+    def _build_welcome_header(self) -> None:
+        _logo_svg = (
+            '<svg width="72" height="72" viewBox="0 0 280 280"'
+            ' xmlns="http://www.w3.org/2000/svg">'
+            "<defs>"
+            '<filter id="q-glow" x="-50%" y="-50%" width="200%" height="200%">'
+            '<feGaussianBlur stdDeviation="7" result="blur"/>'
+            "<feMerge>"
+            '<feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/>'
+            "</feMerge></filter>"
+            '<filter id="q-halo" x="-80%" y="-80%" width="260%" height="260%">'
+            '<feGaussianBlur stdDeviation="22" result="blur"/>'
+            "<feMerge>"
+            '<feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/>'
+            "</feMerge></filter>"
+            "</defs>"
+            '<circle cx="140" cy="140" r="48"'
+            ' fill="rgba(37,99,235,0.20)" filter="url(#q-halo)"/>'
+            '<g transform="rotate(0,140,140)">'
+            '<ellipse cx="140" cy="140" rx="115" ry="33" fill="none"'
+            ' stroke="#0891b2" stroke-width="1.4" opacity="0.70"/>'
+            '<circle cx="255" cy="140" r="5.5" fill="#67e8f9"/>'
+            "</g>"
+            '<g transform="rotate(60,140,140)">'
+            '<ellipse cx="140" cy="140" rx="115" ry="33" fill="none"'
+            ' stroke="#0891b2" stroke-width="1.4" opacity="0.55"/>'
+            '<circle cx="255" cy="140" r="4.5" fill="#93c5fd"/>'
+            "</g>"
+            '<g transform="rotate(120,140,140)">'
+            '<ellipse cx="140" cy="140" rx="115" ry="33" fill="none"'
+            ' stroke="#3b82f6" stroke-width="1.4" opacity="0.42"/>'
+            '<circle cx="255" cy="140" r="4" fill="#60a5fa"/>'
+            "</g>"
+            '<circle cx="140" cy="140" r="20"'
+            ' fill="rgba(37,99,235,0.25)" filter="url(#q-glow)"/>'
+            '<circle cx="140" cy="140" r="14"'
+            ' fill="#2563eb" filter="url(#q-glow)"/>'
+            '<circle cx="140" cy="140" r="8" fill="#60a5fa"/>'
+            '<circle cx="137" cy="137" r="3" fill="rgba(255,255,255,0.45)"/>'
+            "</svg>"
+        )
+        _html = (
+            f'<div style="display:flex;align-items:center;gap:20px;'
+            f"padding:18px 4px 14px;margin-bottom:4px;"
+            f'border-bottom:1px solid #e2e8f0">'
+            f"{_logo_svg}"
+            f"<div>"
+            f'<div style="font-size:30px;font-weight:700;letter-spacing:-0.4px;'
+            f'color:#0f172a;line-height:1.1">QuantUI (local)</div>'
+            f'<div style="font-size:15px;color:#475569;margin-top:5px">'
+            f"Quantum chemistry right on your device</div>"
+            f'<div style="font-size:12px;color:#94a3b8;margin-top:3px">'
+            f"v{quantui.__version__} &nbsp;&middot;&nbsp; "
+            f"open the <b>Help</b> tab for instructions</div>"
+            f"</div>"
+            f"</div>"
+        )
+        self._welcome_html = widgets.HTML(value=_html)
 
     # ── Shared widgets (Cell 3) ───────────────────────────────────────────
 
@@ -1632,6 +1704,7 @@ class QuantUIApp:
                 self.history_panel,
                 self.compare_panel,
                 self.log_tab_panel,
+                self._status_tab_panel,
             ]
         )
         self.root_tab.set_title(0, "Calculate")
@@ -1640,6 +1713,7 @@ class QuantUIApp:
         self.root_tab.set_title(3, "History")
         self.root_tab.set_title(4, "Compare")
         self.root_tab.set_title(5, "Log")
+        self.root_tab.set_title(6, "Status")
 
     # ══ CALLBACK WIRING ══════════════════════════════════════════════════════
 
