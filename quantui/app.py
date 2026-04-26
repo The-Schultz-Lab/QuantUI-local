@@ -1005,32 +1005,13 @@ class QuantUIApp:
             style={"description_width": "80px"},
             layout=widgets.Layout(width="260px", display="none"),
         )
-        try:
-            import plotly.graph_objects as _go
-
-            self._ir_fig = _go.FigureWidget(
-                layout=dict(
-                    xaxis=dict(title="Wavenumber (cm⁻¹)", range=[4000, 400]),
-                    yaxis=dict(title="IR Intensity (km/mol)", rangemode="tozero"),
-                    template="plotly_white",
-                    showlegend=False,
-                    margin=dict(l=60, r=20, t=20, b=55),
-                    height=300,
-                    plot_bgcolor="#fafafa",
-                )
-            )
-            _ir_plotly_available = True
-        except ImportError:
-            self._ir_fig = None
-            _ir_plotly_available = False
+        self._ir_fig = widgets.HTML(value="", layout=widgets.Layout(width="100%"))
 
         _ir_controls = widgets.HBox(
             [self._ir_mode_toggle, self._ir_fwhm_slider],
             layout=widgets.Layout(align_items="center", margin="0 0 6px 0"),
         )
-        _ir_body_children = [_ir_controls]
-        if _ir_plotly_available and self._ir_fig is not None:
-            _ir_body_children.append(self._ir_fig)
+        _ir_body_children = [_ir_controls, self._ir_fig]
         self._ir_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
@@ -1752,6 +1733,46 @@ class QuantUIApp:
         if css:
             with self._theme_style:
                 display(HTML(css))
+        self._rerender_plotly_theme()
+
+    def _plotly_theme_colors(self) -> dict:
+        """Return plot background, text, and grid colors for the current theme."""
+        if self.theme_btn.value == "Dark":
+            return {
+                "plot_bgcolor": "#1e1e1e",
+                "paper_bgcolor": "#1e1e1e",
+                "font_color": "#e4e4e7",
+                "grid_color": "#3f3f46",
+            }
+        return {
+            "plot_bgcolor": "white",
+            "paper_bgcolor": "white",
+            "font_color": "#111827",
+            "grid_color": "#e5e7eb",
+        }
+
+    def _apply_plotly_theme(self, fig) -> None:
+        """Apply current theme colors to a plotly Figure in-place."""
+        tc = self._plotly_theme_colors()
+        fig.update_layout(
+            plot_bgcolor=tc["plot_bgcolor"],
+            paper_bgcolor=tc["paper_bgcolor"],
+            font=dict(color=tc["font_color"]),
+            xaxis=dict(gridcolor=tc["grid_color"]),
+            yaxis=dict(gridcolor=tc["grid_color"]),
+        )
+
+    def _rerender_plotly_theme(self) -> None:
+        """Re-render all visible Plotly charts in the updated theme."""
+        if getattr(self, "_last_orb_info", None) is not None:
+            self._on_orb_range_changed()
+        if getattr(self, "_last_ir_freqs", None) is not None:
+            self._update_ir_figure(
+                self._ir_mode_toggle.value,
+                self._ir_fwhm_slider.value,
+            )
+        if getattr(self, "_last_pes_result", None) is not None:
+            self._show_pes_scan_result(self._last_pes_result)
 
     def _on_viz_backend_changed(self, change) -> None:
         self._viz_backend = change["new"]  # type: ignore[assignment]
@@ -3048,11 +3069,12 @@ class QuantUIApp:
             _draw_3D_mol(fig, rw.GetMol(), _FRAME_RES, "ball+stick")
             fig = _fmt_fig(fig)
             fig = _fmt_light(fig, **_LP.get("soft", _LP["soft"]))
+            _bg = self._plotly_theme_colors()["paper_bgcolor"]
             fig.update_layout(
                 width=_FRAME_W,
                 height=_FRAME_H,
-                paper_bgcolor="white",
-                scene=dict(bgcolor="white"),
+                paper_bgcolor=_bg,
+                scene=dict(bgcolor=_bg),
                 margin=dict(l=0, r=0, t=0, b=0),
             )
             return fig
@@ -3077,6 +3099,8 @@ class QuantUIApp:
                     width=_FRAME_W,
                     height=_FRAME_H,
                 )
+                _bg = self._plotly_theme_colors()["paper_bgcolor"]
+                fig.update_layout(paper_bgcolor=_bg, scene=dict(bgcolor=_bg))
                 return ("plotly", fig)
             except ImportError:
                 pass
@@ -3087,7 +3111,9 @@ class QuantUIApp:
                 view = _p3d.view(width=_FRAME_W, height=_FRAME_H)
                 view.addModel(_xyzblocks[idx], "xyz")
                 view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
-                view.setBackgroundColor("white")
+                view.setBackgroundColor(
+                    "white" if self.theme_btn.value == "Light" else "#1e1e1e"
+                )
                 view.zoomTo()
                 return ("py3dmol", view)
             except Exception as exc:
@@ -3292,6 +3318,8 @@ class QuantUIApp:
             fig = visualize_molecule_plotlymol(
                 molecule, mode="ball+stick", resolution=8, width=460, height=340
             )
+            _bg = self._plotly_theme_colors()["paper_bgcolor"]
+            fig.update_layout(paper_bgcolor=_bg, scene=dict(bgcolor=_bg))
             output_widget.clear_output()
             with output_widget:
                 display(fig)
@@ -3464,9 +3492,6 @@ class QuantUIApp:
 
     def _show_ir_spectrum(self, freq_result) -> None:
         """Populate and reveal the IR Spectrum accordion after a Frequency result."""
-        if self._ir_fig is None:
-            return
-
         freqs = list(freq_result.frequencies_cm1 or [])
         ints = list(freq_result.ir_intensities or [])
         if not freqs or not ints:
@@ -3503,22 +3528,24 @@ class QuantUIApp:
         self._ir_accordion.layout.display = ""
 
     def _update_ir_figure(self, mode: str, fwhm: float) -> None:
-        """Re-render the IR FigureWidget for the given mode and FWHM."""
-        if self._ir_fig is None:
-            return
-        from quantui.ir_plot import plot_ir_spectrum
+        """Re-render the IR spectrum chart for the given mode and FWHM."""
+        try:
+            import plotly.io as _pio
 
-        new_fig = plot_ir_spectrum(
-            self._last_ir_freqs,
-            self._last_ir_ints,
-            mode=mode.lower(),
-            fwhm=fwhm,
-        )
-        with self._ir_fig.batch_update():
-            self._ir_fig.data = ()
-            for trace in new_fig.data:
-                self._ir_fig.add_trace(trace)
-            self._ir_fig.update_layout(new_fig.layout)
+            from quantui.ir_plot import plot_ir_spectrum
+
+            fig = plot_ir_spectrum(
+                self._last_ir_freqs,
+                self._last_ir_ints,
+                mode=mode.lower(),
+                fwhm=fwhm,
+            )
+            self._apply_plotly_theme(fig)
+            self._ir_fig.value = _pio.to_html(
+                fig, include_plotlyjs="cdn", full_html=False
+            )
+        except Exception:
+            pass
 
     def _show_orbital_diagram(self, result) -> None:
         """Build and reveal the interactive orbital diagram accordion."""
@@ -3553,6 +3580,7 @@ class QuantUIApp:
             if yr is not None:
                 self._orb_ymin_input.value = round(float(yr[0]), 2)
                 self._orb_ymax_input.value = round(float(yr[1]), 2)
+            self._apply_plotly_theme(fig)
             html_str = _pio.to_html(fig, include_plotlyjs="cdn", full_html=False)
             self._orb_diagram_html.value = html_str
             _plotly_rendered = True
@@ -3643,6 +3671,7 @@ class QuantUIApp:
                 max_orbitals=self._orb_n_orb_input.value,
                 yrange=(ymin, ymax),
             )
+            self._apply_plotly_theme(fig)
             self._orb_diagram_html.value = _pio.to_html(
                 fig, include_plotlyjs="cdn", full_html=False
             )
@@ -4862,6 +4891,7 @@ class QuantUIApp:
 
     def _show_pes_scan_result(self, result) -> None:
         """Render the PES energy profile chart and trajectory for a PES scan result."""
+        self._last_pes_result = result
         try:
             import plotly.graph_objects as go
             import plotly.io as pio
@@ -4887,15 +4917,17 @@ class QuantUIApp:
                     hoverinfo="text",
                 )
             )
+            tc = self._plotly_theme_colors()
             fig.update_layout(
                 xaxis_title=result.scan_coordinate_label,
                 yaxis_title="Relative energy / kcal mol⁻¹",
                 height=380,
                 margin=dict(l=60, r=20, t=30, b=50),
-                plot_bgcolor="white",
-                paper_bgcolor="white",
-                xaxis=dict(showgrid=True, gridcolor="#e5e7eb"),
-                yaxis=dict(showgrid=True, gridcolor="#e5e7eb"),
+                plot_bgcolor=tc["plot_bgcolor"],
+                paper_bgcolor=tc["paper_bgcolor"],
+                font=dict(color=tc["font_color"]),
+                xaxis=dict(showgrid=True, gridcolor=tc["grid_color"]),
+                yaxis=dict(showgrid=True, gridcolor=tc["grid_color"]),
                 hovermode="closest",
             )
             self._pes_plot_html.value = pio.to_html(

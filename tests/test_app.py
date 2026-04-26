@@ -908,8 +908,6 @@ class TestShowIRSpectrum:
 
     def test_accordion_revealed_after_show(self):
         app = QuantUIApp()
-        if app._ir_fig is None:
-            pytest.skip("plotly FigureWidget not available")
         app._last_ir_freqs = []
         app._last_ir_ints = []
         app._show_ir_spectrum(self._make_freq_result())
@@ -917,16 +915,12 @@ class TestShowIRSpectrum:
 
     def test_fwhm_slider_shown_when_broadened(self):
         app = QuantUIApp()
-        if app._ir_fig is None:
-            pytest.skip("plotly FigureWidget not available")
         app._show_ir_spectrum(self._make_freq_result())
         app._ir_mode_toggle.value = "Broadened"
         assert app._ir_fwhm_slider.layout.display == ""
 
     def test_fwhm_slider_hidden_when_stick(self):
         app = QuantUIApp()
-        if app._ir_fig is None:
-            pytest.skip("plotly FigureWidget not available")
         app._show_ir_spectrum(self._make_freq_result())
         app._ir_mode_toggle.value = "Broadened"
         app._ir_mode_toggle.value = "Stick"
