@@ -1004,11 +1004,12 @@ class TestShowOrbitalDiagram:
         app._show_orbital_diagram(r)
         assert app._orb_accordion.layout.display == "none"
 
-    def test_diagram_html_populated_with_img(self):
+    def test_diagram_html_populated(self):
         app = QuantUIApp()
         app._show_orbital_diagram(self._make_result_with_mo())
-        # matplotlib is a base dep — the img tag must be present
-        assert "<img" in app._orb_diagram_html.value
+        # plotly renders an interactive <div>; matplotlib fallback renders <img>
+        val = app._orb_diagram_html.value
+        assert "<div" in val or "<img" in val
 
     def test_isosurface_controls_hidden_when_no_mo_coeff(self):
         app = QuantUIApp()

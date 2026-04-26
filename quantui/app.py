@@ -951,34 +951,7 @@ class QuantUIApp:
         self._ir_accordion.selected_index = None
 
         # Orbital energy diagram + isosurface accordion (Single Point / Geo Opt)
-        try:
-            import plotly.graph_objects as _go
-
-            self._orb_fig_widget = _go.FigureWidget(
-                layout=dict(
-                    height=460,
-                    margin=dict(l=60, r=110, t=50, b=30),
-                    xaxis=dict(
-                        showticklabels=False,
-                        showgrid=False,
-                        zeroline=False,
-                        fixedrange=True,
-                    ),
-                    yaxis=dict(
-                        title="Energy (eV)",
-                        showgrid=True,
-                        gridcolor="#e5e7eb",
-                        tickformat=".1f",
-                    ),
-                    plot_bgcolor="white",
-                    paper_bgcolor="white",
-                    hovermode="closest",
-                )
-            )
-            _orb_plotly_available = True
-        except ImportError:
-            self._orb_fig_widget = None
-            _orb_plotly_available = False
+        # Use plotly.io.to_html so FigureWidget / anywidget dependency is not needed.
 
         self._orb_ymin_input = widgets.BoundedFloatText(
             value=-30.0,
@@ -1027,14 +1000,10 @@ class QuantUIApp:
                 margin="0 0 6px 0",
             ),
         )
-        _orb_diagram_content: list = [_orb_controls_row]
-        if _orb_plotly_available and self._orb_fig_widget is not None:
-            _orb_diagram_content.append(self._orb_fig_widget)
-        else:
-            self._orb_diagram_html = widgets.HTML(
-                value="", layout=widgets.Layout(width="100%")
-            )
-            _orb_diagram_content.append(self._orb_diagram_html)
+        self._orb_diagram_html = widgets.HTML(
+            value="", layout=widgets.Layout(width="100%")
+        )
+        _orb_diagram_content: list = [_orb_controls_row, self._orb_diagram_html]
         self._orb_diagram_box = widgets.VBox(
             _orb_diagram_content,
             layout=widgets.Layout(width="100%"),
@@ -3425,25 +3394,27 @@ class QuantUIApp:
         self._last_orb_mol_atom = getattr(result, "pyscf_mol_atom", None)
         self._last_orb_mol_basis = getattr(result, "pyscf_mol_basis", None)
 
-        if self._orb_fig_widget is not None:
-            try:
-                from quantui.orbital_visualization import plot_orbital_diagram_plotly
+        _plotly_rendered = False
+        try:
+            import plotly.io as _pio
 
-                fig = plot_orbital_diagram_plotly(
-                    info, max_orbitals=self._orb_n_orb_input.value
-                )
-                # Sync axis limit controls to auto-computed range
-                yr = fig.layout.yaxis.range
-                if yr is not None:
-                    self._orb_ymin_input.value = round(float(yr[0]), 2)
-                    self._orb_ymax_input.value = round(float(yr[1]), 2)
-                self._orb_fig_widget.data = []
-                for trace in fig.data:
-                    self._orb_fig_widget.add_trace(trace)
-                self._orb_fig_widget.update_layout(fig.layout)
-            except Exception:
-                pass
-        else:
+            from quantui.orbital_visualization import plot_orbital_diagram_plotly
+
+            fig = plot_orbital_diagram_plotly(
+                info, max_orbitals=self._orb_n_orb_input.value
+            )
+            # Sync axis limit controls to auto-computed range
+            yr = fig.layout.yaxis.range
+            if yr is not None:
+                self._orb_ymin_input.value = round(float(yr[0]), 2)
+                self._orb_ymax_input.value = round(float(yr[1]), 2)
+            html_str = _pio.to_html(fig, include_plotlyjs="cdn", full_html=False)
+            self._orb_diagram_html.value = html_str
+            _plotly_rendered = True
+        except Exception:
+            pass
+
+        if not _plotly_rendered:
             # Fallback: static matplotlib PNG (plotly not installed)
             import base64
             import io as _io
@@ -3511,13 +3482,15 @@ class QuantUIApp:
     def _on_orb_range_changed(self, _change=None) -> None:
         """Live-update the orbital diagram when axis limits or orbital count changes."""
         info = getattr(self, "_last_orb_info", None)
-        if info is None or self._orb_fig_widget is None:
+        if info is None:
             return
         ymin = self._orb_ymin_input.value
         ymax = self._orb_ymax_input.value
         if ymin >= ymax:
             return
         try:
+            import plotly.io as _pio
+
             from quantui.orbital_visualization import plot_orbital_diagram_plotly
 
             fig = plot_orbital_diagram_plotly(
@@ -3525,10 +3498,9 @@ class QuantUIApp:
                 max_orbitals=self._orb_n_orb_input.value,
                 yrange=(ymin, ymax),
             )
-            self._orb_fig_widget.data = []
-            for trace in fig.data:
-                self._orb_fig_widget.add_trace(trace)
-            self._orb_fig_widget.update_layout(fig.layout)
+            self._orb_diagram_html.value = _pio.to_html(
+                fig, include_plotlyjs="cdn", full_html=False
+            )
         except Exception:
             pass
 
