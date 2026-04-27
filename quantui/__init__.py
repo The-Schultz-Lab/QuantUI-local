@@ -9,6 +9,10 @@ PySCF requires Linux/macOS/WSL. Windows users should use the Apptainer container
 
 __version__ = "0.1.0"
 
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 from .calculator import PySCFCalculation, create_calculation
 
 # Calculation comparison

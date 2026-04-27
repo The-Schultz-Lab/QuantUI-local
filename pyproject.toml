@@ -104,6 +104,10 @@ ignore = [
     "E722",   # bare except — cosmetic, verbatim copies
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# __init__.py sets up a NullHandler before deferred optional imports — E402 is intentional
+"quantui/__init__.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["quantui"]
 

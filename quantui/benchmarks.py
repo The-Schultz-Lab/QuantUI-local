@@ -143,6 +143,155 @@ BENCHMARK_SUITE: list[tuple] = [
     ),
 ]
 
+#: Extended suite for a full calibration run (~3–6 min on a modern laptop).
+#: Includes the short suite plus larger molecules and more expensive methods
+#: to anchor the efficiency model across the student-relevant size range.
+BENCHMARK_SUITE_LONG: list[tuple] = [
+    *BENCHMARK_SUITE,
+    # ── Additional entries ─────────────────────────────────────────────────
+    (
+        "H₂O  RHF/cc-pVDZ",
+        ["O", "H", "H"],
+        [[0.0, 0.0, 0.0], [0.757, 0.587, 0.0], [-0.757, 0.587, 0.0]],
+        0,
+        1,
+        "RHF",
+        "cc-pVDZ",
+    ),
+    (
+        "C₂H₆O (ethanol)  RHF/6-31G*",
+        ["C", "C", "O", "H", "H", "H", "H", "H", "H"],
+        [
+            [-1.232, 0.026, 0.000],
+            [0.281, 0.026, 0.000],
+            [0.829, 1.310, 0.000],
+            [-1.566, 1.059, 0.000],
+            [-1.609, -0.506, 0.880],
+            [-1.609, -0.506, -0.880],
+            [0.668, -0.497, 0.890],
+            [0.668, -0.497, -0.890],
+            [1.802, 1.311, 0.000],
+        ],
+        0,
+        1,
+        "RHF",
+        "6-31G*",
+    ),
+    (
+        "C₆H₆ (benzene)  RHF/STO-3G",
+        ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H"],
+        [
+            [1.395, 0.000, 0.000],
+            [0.698, 1.209, 0.000],
+            [-0.698, 1.209, 0.000],
+            [-1.395, 0.000, 0.000],
+            [-0.698, -1.209, 0.000],
+            [0.698, -1.209, 0.000],
+            [2.479, 0.000, 0.000],
+            [1.240, 2.147, 0.000],
+            [-1.240, 2.147, 0.000],
+            [-2.479, 0.000, 0.000],
+            [-1.240, -2.147, 0.000],
+            [1.240, -2.147, 0.000],
+        ],
+        0,
+        1,
+        "RHF",
+        "STO-3G",
+    ),
+    (
+        "C₆H₆ (benzene)  RHF/6-31G*",
+        ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H"],
+        [
+            [1.395, 0.000, 0.000],
+            [0.698, 1.209, 0.000],
+            [-0.698, 1.209, 0.000],
+            [-1.395, 0.000, 0.000],
+            [-0.698, -1.209, 0.000],
+            [0.698, -1.209, 0.000],
+            [2.479, 0.000, 0.000],
+            [1.240, 2.147, 0.000],
+            [-1.240, 2.147, 0.000],
+            [-2.479, 0.000, 0.000],
+            [-1.240, -2.147, 0.000],
+            [1.240, -2.147, 0.000],
+        ],
+        0,
+        1,
+        "RHF",
+        "6-31G*",
+    ),
+    (
+        "C₆H₆ (benzene)  B3LYP/6-31G*",
+        ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H"],
+        [
+            [1.395, 0.000, 0.000],
+            [0.698, 1.209, 0.000],
+            [-0.698, 1.209, 0.000],
+            [-1.395, 0.000, 0.000],
+            [-0.698, -1.209, 0.000],
+            [0.698, -1.209, 0.000],
+            [2.479, 0.000, 0.000],
+            [1.240, 2.147, 0.000],
+            [-1.240, 2.147, 0.000],
+            [-2.479, 0.000, 0.000],
+            [-1.240, -2.147, 0.000],
+            [1.240, -2.147, 0.000],
+        ],
+        0,
+        1,
+        "B3LYP",
+        "6-31G*",
+    ),
+    (
+        "C₁₀H₈ (naphthalene)  RHF/STO-3G",
+        [
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+        ],
+        [
+            [1.243, 1.400, 0.000],
+            [2.440, 0.725, 0.000],
+            [2.440, -0.725, 0.000],
+            [1.243, -1.400, 0.000],
+            [0.000, -0.720, 0.000],
+            [0.000, 0.720, 0.000],
+            [-1.243, 1.400, 0.000],
+            [-2.440, 0.725, 0.000],
+            [-2.440, -0.725, 0.000],
+            [-1.243, -1.400, 0.000],
+            [1.237, 2.488, 0.000],
+            [3.377, 1.244, 0.000],
+            [3.377, -1.244, 0.000],
+            [1.237, -2.488, 0.000],
+            [-1.237, -2.488, 0.000],
+            [-3.377, -1.244, 0.000],
+            [-3.377, 1.244, 0.000],
+            [-1.237, 2.488, 0.000],
+        ],
+        0,
+        1,
+        "RHF",
+        "STO-3G",
+    ),
+]
+
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
@@ -165,6 +314,7 @@ class BenchmarkStep:
     status: str  # "ok" | "timed_out" | "stopped" | "error"
     elapsed_s: float = 0.0
     error_msg: str = ""
+    n_basis: Optional[int] = None
 
 
 @dataclass
@@ -174,6 +324,7 @@ class CalibrationResult:
     timestamp: str
     steps: List[BenchmarkStep] = field(default_factory=list)
     stopped_early: bool = False
+    mode: str = "short"
 
     @property
     def n_completed(self) -> int:
@@ -181,7 +332,7 @@ class CalibrationResult:
 
     @property
     def n_total(self) -> int:
-        return len(BENCHMARK_SUITE)
+        return len(BENCHMARK_SUITE if self.mode == "short" else BENCHMARK_SUITE_LONG)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +372,7 @@ def run_calibration(
     progress_cb: Optional[ProgressCallback] = None,
     stop_event=None,
     timeout_per_step: float = 120.0,
+    mode: str = "short",
 ) -> CalibrationResult:
     """Run the benchmark suite and populate ``perf_log.jsonl``.
 
@@ -231,6 +383,8 @@ def run_calibration(
             Set it to abort the suite cleanly.
         timeout_per_step: Wall-clock seconds allowed per step.  Steps that
             exceed this are marked ``"timed_out"`` and skipped.
+        mode: ``"short"`` (default, ~10 s) runs :data:`BENCHMARK_SUITE`;
+            ``"long"`` (~3–6 min) runs :data:`BENCHMARK_SUITE_LONG`.
 
     Returns:
         :class:`CalibrationResult` with per-step outcomes.
@@ -249,11 +403,12 @@ def run_calibration(
     except ImportError:
         pass
 
+    suite = BENCHMARK_SUITE if mode == "short" else BENCHMARK_SUITE_LONG
     timestamp = datetime.now(timezone.utc).isoformat()
-    result = CalibrationResult(timestamp=timestamp)
-    total = len(BENCHMARK_SUITE)
+    result = CalibrationResult(timestamp=timestamp, mode=mode)
+    total = len(suite)
 
-    for step_n, entry in enumerate(BENCHMARK_SUITE, start=1):
+    for step_n, entry in enumerate(suite, start=1):
         label, atoms, coords, charge, mult, method, basis = entry
 
         # --- honour stop request ---
@@ -261,6 +416,7 @@ def run_calibration(
             result.stopped_early = True
             break
 
+        nb = _calc_log.count_basis_functions(atoms, basis)
         step = BenchmarkStep(
             label=label,
             method=method,
@@ -268,6 +424,7 @@ def run_calibration(
             n_atoms=len(atoms),
             n_electrons=_count_electrons(atoms, charge),
             status=_STATUS_ERROR,
+            n_basis=nb,
         )
 
         if not _pyscf_available:
@@ -311,6 +468,8 @@ def run_calibration(
                         n_iterations=res.n_iterations,
                         elapsed_s=elapsed,
                         converged=res.converged,
+                        n_basis=step.n_basis,
+                        n_cores=1,
                     )
                 except concurrent.futures.TimeoutError:
                     step.status = _STATUS_TIMEOUT
@@ -332,6 +491,7 @@ def run_calibration(
             json.dumps(
                 {
                     "timestamp": result.timestamp,
+                    "mode": result.mode,
                     "stopped_early": result.stopped_early,
                     "steps": [
                         {
@@ -340,6 +500,7 @@ def run_calibration(
                             "basis": s.basis,
                             "n_atoms": s.n_atoms,
                             "n_electrons": s.n_electrons,
+                            "n_basis": s.n_basis,
                             "status": s.status,
                             "elapsed_s": round(s.elapsed_s, 3),
                             "error_msg": s.error_msg,

@@ -375,6 +375,7 @@ def display_molecule(
     show_info: bool = True,
     width: int = 600,
     height: int = 500,
+    bgcolor: str = "#ffffff",
     lighting: str = "soft",
 ):
     """
@@ -442,6 +443,7 @@ def display_molecule(
             style=style,
             width=width,
             height=height,
+            bgcolor=bgcolor,
             lighting=lighting,
         )
 

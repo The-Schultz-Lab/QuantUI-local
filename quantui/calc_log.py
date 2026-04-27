@@ -46,6 +46,210 @@ _METHOD_COST: dict[str, float] = {
     "MP2": 8.0,
 }
 
+# Contracted basis function counts per element per basis set (spherical harmonics,
+# PySCF default).  Used by count_basis_functions() and estimate_time().
+_BASIS_FUNCTIONS: dict[str, dict[str, int]] = {
+    "STO-3G": {
+        "H": 1,
+        "He": 1,
+        "Li": 5,
+        "Be": 5,
+        "B": 5,
+        "C": 5,
+        "N": 5,
+        "O": 5,
+        "F": 5,
+        "Ne": 5,
+        "Na": 9,
+        "Mg": 9,
+        "Al": 9,
+        "Si": 9,
+        "P": 9,
+        "S": 9,
+        "Cl": 9,
+        "Ar": 9,
+    },
+    "3-21G": {
+        "H": 2,
+        "He": 2,
+        "Li": 9,
+        "Be": 9,
+        "B": 9,
+        "C": 9,
+        "N": 9,
+        "O": 9,
+        "F": 9,
+        "Ne": 9,
+        "Na": 13,
+        "Mg": 13,
+        "Al": 15,
+        "Si": 15,
+        "P": 15,
+        "S": 15,
+        "Cl": 15,
+        "Ar": 15,
+    },
+    "6-31G": {
+        "H": 2,
+        "He": 2,
+        "Li": 9,
+        "Be": 9,
+        "B": 9,
+        "C": 9,
+        "N": 9,
+        "O": 9,
+        "F": 9,
+        "Ne": 9,
+        "Na": 13,
+        "Mg": 13,
+        "Al": 15,
+        "Si": 15,
+        "P": 15,
+        "S": 15,
+        "Cl": 15,
+        "Ar": 15,
+    },
+    "6-31G*": {
+        "H": 2,
+        "He": 2,
+        "Li": 9,
+        "Be": 9,
+        "B": 14,
+        "C": 14,
+        "N": 14,
+        "O": 14,
+        "F": 14,
+        "Ne": 14,
+        "Na": 13,
+        "Mg": 13,
+        "Al": 20,
+        "Si": 20,
+        "P": 20,
+        "S": 20,
+        "Cl": 20,
+        "Ar": 20,
+    },
+    "6-31G**": {
+        "H": 5,
+        "He": 2,
+        "Li": 9,
+        "Be": 9,
+        "B": 14,
+        "C": 14,
+        "N": 14,
+        "O": 14,
+        "F": 14,
+        "Ne": 14,
+        "Na": 13,
+        "Mg": 13,
+        "Al": 20,
+        "Si": 20,
+        "P": 20,
+        "S": 20,
+        "Cl": 20,
+        "Ar": 20,
+    },
+    "cc-pVDZ": {
+        "H": 5,
+        "He": 5,
+        "Li": 9,
+        "Be": 9,
+        "B": 14,
+        "C": 14,
+        "N": 14,
+        "O": 14,
+        "F": 14,
+        "Ne": 14,
+        "Na": 18,
+        "Mg": 18,
+        "Al": 23,
+        "Si": 23,
+        "P": 23,
+        "S": 23,
+        "Cl": 23,
+        "Ar": 23,
+    },
+    "cc-pVTZ": {
+        "H": 14,
+        "He": 14,
+        "Li": 20,
+        "Be": 20,
+        "B": 30,
+        "C": 30,
+        "N": 30,
+        "O": 30,
+        "F": 30,
+        "Ne": 30,
+        "Na": 35,
+        "Mg": 35,
+        "Al": 43,
+        "Si": 43,
+        "P": 43,
+        "S": 43,
+        "Cl": 43,
+        "Ar": 43,
+    },
+    "def2-SVP": {
+        "H": 5,
+        "He": 5,
+        "Li": 9,
+        "Be": 9,
+        "B": 14,
+        "C": 14,
+        "N": 14,
+        "O": 14,
+        "F": 14,
+        "Ne": 14,
+        "Na": 18,
+        "Mg": 18,
+        "Al": 23,
+        "Si": 23,
+        "P": 23,
+        "S": 23,
+        "Cl": 23,
+        "Ar": 23,
+    },
+    "def2-TZVP": {
+        "H": 14,
+        "He": 14,
+        "Li": 20,
+        "Be": 20,
+        "B": 30,
+        "C": 30,
+        "N": 30,
+        "O": 30,
+        "F": 30,
+        "Ne": 30,
+        "Na": 35,
+        "Mg": 35,
+        "Al": 43,
+        "Si": 43,
+        "P": 43,
+        "S": 43,
+        "Cl": 43,
+        "Ar": 43,
+    },
+}
+
+# Formal scaling exponents in N_basis.  HF/DFT: formally O(N³–N⁴), empirically
+# ~3.5 in the student size range.  Correlated methods scale more steeply.
+_METHOD_SCALE_EXP: dict[str, float] = {
+    "RHF": 3.5,
+    "UHF": 3.5,
+    "B3LYP": 3.5,
+    "PBE": 3.5,
+    "PBE0": 3.5,
+    "M06-2X": 3.5,
+    "wB97X-D": 3.5,
+    "CAM-B3LYP": 3.5,
+    "M06-L": 3.5,
+    "HSE06": 3.5,
+    "PBE-D3": 3.5,
+    "MP2": 5.0,
+    "CCSD": 6.0,
+    "CCSD(T)": 7.0,
+}
+
 
 def _log_dir() -> Path:
     env = os.environ.get("QUANTUI_LOG_DIR")
@@ -85,6 +289,35 @@ def _read_all(path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Basis function utilities
+# ---------------------------------------------------------------------------
+
+
+def count_basis_functions(atoms: list[str], basis: str) -> Optional[int]:
+    """
+    Return the total number of contracted basis functions for a molecule.
+
+    Args:
+        atoms: Element symbols (e.g. ``["O", "H", "H"]``).
+        basis: Basis set name (e.g. ``"STO-3G"``).
+
+    Returns:
+        Total basis function count, or ``None`` if the basis set or any
+        element is not in the lookup table.
+    """
+    table = _BASIS_FUNCTIONS.get(basis)
+    if table is None:
+        return None
+    total = 0
+    for atom in atoms:
+        n = table.get(atom)
+        if n is None:
+            return None
+        total += n
+    return total
+
+
+# ---------------------------------------------------------------------------
 # Performance log
 # ---------------------------------------------------------------------------
 
@@ -98,22 +331,26 @@ def log_calculation(
     n_iterations: int,
     elapsed_s: float,
     converged: bool,
+    n_basis: Optional[int] = None,
+    n_cores: Optional[int] = None,
 ) -> None:
     """Append one performance record to ``perf_log.jsonl``."""
-    _append(
-        _perf_path(),
-        {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "formula": formula,
-            "n_atoms": n_atoms,
-            "n_electrons": n_electrons,
-            "method": method,
-            "basis": basis,
-            "n_iterations": n_iterations,
-            "elapsed_s": round(elapsed_s, 3),
-            "converged": converged,
-        },
-    )
+    record: dict = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "formula": formula,
+        "n_atoms": n_atoms,
+        "n_electrons": n_electrons,
+        "method": method,
+        "basis": basis,
+        "n_iterations": n_iterations,
+        "elapsed_s": round(elapsed_s, 3),
+        "converged": converged,
+    }
+    if n_basis is not None:
+        record["n_basis"] = n_basis
+    if n_cores is not None:
+        record["n_cores"] = n_cores
+    _append(_perf_path(), record)
 
 
 def estimate_time(
@@ -121,6 +358,8 @@ def estimate_time(
     n_electrons: int,
     method: str,
     basis: str,
+    n_basis: Optional[int] = None,
+    n_cores: Optional[int] = None,
 ) -> Optional[dict]:
     """
     Return a time estimate dict, or ``None`` if there is insufficient data.
@@ -133,25 +372,66 @@ def estimate_time(
 
     Prediction strategy (in priority order):
 
-    1. **Exact match** (same method + basis, ≥ 2 converged runs):
-       Median elapsed time scaled by ``(n_electrons / median_n_electrons)^2.7``.
-       HF/DFT formal scaling is O(N³–N⁴); 2.7 is a practical empirical exponent
-       for the sizes typical in a teaching context.
+    1. **Exact method + basis, basis-function efficiency** (≥ 2 records with
+       ``n_basis``): Computes a normalised efficiency
+       ``eff = elapsed_s × n_cores_hist / n_basis_hist^β`` for each record,
+       then predicts ``median(eff) × n_basis_new^β / n_cores_current``.
+       β is method-specific (RHF/DFT ≈ 3.5, MP2 = 5.0, CCSD = 6.0, …).
        Confidence: high (≥ 5 samples) or medium (2–4 samples).
 
-    2. **Same basis, any method** (≥ 2 converged runs):
-       Same electron-count scaling plus a relative method-cost factor from
-       ``_METHOD_COST``.  Confidence: low.
+    2. **Exact method + basis, electron-count fallback** (≥ 2 records):
+       Median elapsed time scaled by ``(n_electrons / median_n_e)^2.7``.
+       Used when older records lack ``n_basis``.
+       Confidence: high / medium.
+
+    3. **Same basis, any method, basis-function efficiency** (≥ 2 records with
+       ``n_basis``): Like strategy 1, plus a method-cost correction factor.
+       Confidence: low.
+
+    4. **Same basis, any method, electron-count fallback** (≥ 2 records):
+       Same as the original strategy 2.  Confidence: low.
 
     Returns ``None`` when fewer than 2 converged records are available for
-    either strategy.
+    any strategy.
     """
     records = _read_all(_perf_path())
     converged = [r for r in records if r.get("converged")]
     if not converged:
         return None
 
-    # ── Strategy 1: exact method + basis ────────────────────────────────────
+    beta_new = _METHOD_SCALE_EXP.get(method, 3.5)
+    n_cores_current = n_cores if n_cores is not None else 1
+
+    def _eff(r: dict) -> Optional[float]:
+        """Normalised efficiency: elapsed_s × n_cores / n_basis^β."""
+        nb: float = float(r.get("n_basis") or 0)
+        if not nb:
+            return None
+        rc: float = float(r.get("n_cores") or 1)
+        r_method: str = str(r.get("method") or method)
+        beta: float = _METHOD_SCALE_EXP.get(r_method, 3.5)
+        elapsed: float = float(r["elapsed_s"])
+        return float(elapsed * rc / (nb**beta))
+
+    # ── Strategy 1: exact method + basis, basis-function efficiency ──────────
+    if n_basis is not None:
+        exact_nb = [
+            r
+            for r in converged
+            if r.get("method") == method
+            and r.get("basis") == basis
+            and r.get("n_basis") is not None
+        ]
+        effs = [e for r in exact_nb for e in [_eff(r)] if e is not None]
+        if len(effs) >= 2:
+            predicted = statistics.median(effs) * (n_basis**beta_new) / n_cores_current
+            return {
+                "seconds": predicted,
+                "confidence": "high" if len(effs) >= 5 else "medium",
+                "n_samples": len(effs),
+            }
+
+    # ── Strategy 2: exact method + basis, electron-count fallback ────────────
     exact = [
         r for r in converged if r.get("method") == method and r.get("basis") == basis
     ]
@@ -165,7 +445,33 @@ def estimate_time(
             "n_samples": len(exact),
         }
 
-    # ── Strategy 2: same basis, any method ──────────────────────────────────
+    # ── Strategy 3: same basis, any method, basis-function efficiency ─────────
+    if n_basis is not None:
+        same_basis_nb = [
+            r
+            for r in converged
+            if r.get("basis") == basis and r.get("n_basis") is not None
+        ]
+        effs = [e for r in same_basis_nb for e in [_eff(r)] if e is not None]
+        if len(effs) >= 2:
+            ref_cost = statistics.median(
+                _METHOD_COST.get(r.get("method", "RHF"), 1.0) for r in same_basis_nb
+            )
+            tgt_cost = _METHOD_COST.get(method, 1.0)
+            cost_factor = tgt_cost / ref_cost if ref_cost > 0 else 1.0
+            predicted = (
+                statistics.median(effs)
+                * (n_basis**beta_new)
+                * cost_factor
+                / n_cores_current
+            )
+            return {
+                "seconds": predicted,
+                "confidence": "low",
+                "n_samples": len(effs),
+            }
+
+    # ── Strategy 4: same basis, any method, electron-count fallback ───────────
     same_basis = [r for r in converged if r.get("basis") == basis]
     if len(same_basis) >= 2:
         median_ne = statistics.median(r["n_electrons"] for r in same_basis)

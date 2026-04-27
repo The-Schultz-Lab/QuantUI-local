@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -137,6 +139,9 @@ from quantui.benchmarks import (  # noqa: E402
     BENCHMARK_SUITE as _BENCHMARK_SUITE,
 )
 from quantui.benchmarks import (  # noqa: E402
+    BENCHMARK_SUITE_LONG as _BENCHMARK_SUITE_LONG,
+)
+from quantui.benchmarks import (  # noqa: E402
     load_last_calibration as _load_last_calibration_raw,
 )
 
@@ -198,6 +203,11 @@ h3 {
 }
 .widget-dropdown select { border-radius: 5px !important; }
 .widget-button, .widget-toggle-button { border-radius: 5px !important; }
+
+/* Suppress Jupyter stderr pink — invert+hue-rotate turns it dark red in Dark mode */
+.jp-OutputArea-stderr, .output_stderr {
+    background: transparent !important;
+}
 </style>"""
 
 
@@ -297,11 +307,12 @@ class QuantUIApp:
                 [
                     self._welcome_html,
                     widgets.HBox(
-                        [self.theme_btn, self._help_btn],
+                        [self.theme_btn, self._help_btn, self._exit_btn],
                         layout=widgets.Layout(
                             justify_content="flex-end", margin="0 0 4px"
                         ),
                     ),
+                    self._exit_output,
                     self._theme_style,
                     self.help_tab_panel,
                     self.root_tab,
@@ -367,6 +378,11 @@ class QuantUIApp:
     def _build_status_panel(self) -> None:
         _cores, _mem_gb = get_session_resources()
         _mem = f"{_mem_gb} GB" if _mem_gb is not None else "unknown"
+        _py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        _env = os.environ.get("CONDA_DEFAULT_ENV", "") or os.path.basename(
+            os.environ.get("VIRTUAL_ENV", "")
+        )
+        _cal_label = _load_last_calibration_label()
 
         def _ok(flag: bool, extra: str = "") -> str:
             tick = '<span style="color:#22c55e">&#10003;</span>'
@@ -391,22 +407,55 @@ class QuantUIApp:
             f'<td style="font-size:13px">{v}</td></tr>'
             for k, v in _items
         )
+
+        _env_badge = (
+            f'&nbsp;&nbsp;<code style="font-size:11px;background:#e0e7ef;'
+            f'padding:1px 5px;border-radius:3px;color:#334155">{_env}</code>'
+            if _env and _env not in ("base", "")
+            else ""
+        )
+        _cal_line = (
+            f'<div style="margin-top:6px;font-size:12px;color:#94a3b8">'
+            f"Timing calibration: {_cal_label}</div>"
+            if _cal_label
+            else '<div style="margin-top:6px;font-size:12px;color:#94a3b8">'
+            "Timing calibration: not yet run &mdash; use the Calibrate panel in History</div>"
+        )
+
         self._status_html = widgets.HTML(
             f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;'
             f'padding:12px 16px;border-radius:6px;margin:4px 0 8px">'
-            f'<span style="font-weight:600;font-size:14px;color:#1e293b">'
-            f"QuantUI-local {quantui.__version__}</span>"
-            f'<table style="margin-top:8px;border-collapse:collapse">{_rows}</table>'
+            f'<div style="font-weight:600;font-size:14px;color:#1e293b">'
+            f"QuantUI-local {quantui.__version__}"
+            f'<span style="font-weight:400;font-size:12px;color:#94a3b8;margin-left:10px">'
+            f"Python {_py_ver}{_env_badge}</span></div>"
+            f'<table style="margin-top:10px;border-collapse:collapse">{_rows}</table>'
+            f"{_cal_line}"
             f"</div>"
         )
+
+        _steps = [
+            "Select a molecule &mdash; library dropdown, XYZ paste, or PubChem search",
+            "Choose a <b>method</b> (RHF / DFT / MP2) and <b>basis set</b> in the Calculate tab",
+            "Click <b>Run Calculation</b> &mdash; SCF progress appears in real time",
+            "Explore results in the <b>Results</b> and <b>Analysis</b> tabs",
+            "Browse past calculations in <b>History</b>; compare them in <b>Compare</b>",
+        ]
+        _steps_html = "".join(
+            f'<li style="margin:5px 0;font-size:13px;color:#475569">{s}</li>'
+            for s in _steps
+        )
+        _guide_html = widgets.HTML(
+            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;'
+            f'padding:12px 16px;border-radius:6px;margin:8px 0">'
+            f'<div style="font-weight:600;font-size:13px;color:#1e293b;margin-bottom:8px">'
+            f"Quick start</div>"
+            f'<ol style="margin:0;padding-left:20px">{_steps_html}</ol>'
+            f"</div>"
+        )
+
         self._status_tab_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
-                    "System capabilities and resource availability for this session.</p>"
-                ),
-                self._status_html,
-            ],
+            [self._status_html, _guide_html],
             layout=widgets.Layout(padding="8px 0"),
         )
 
@@ -414,7 +463,7 @@ class QuantUIApp:
 
     def _build_welcome_header(self) -> None:
         _logo_svg = (
-            '<svg width="72" height="72" viewBox="0 0 280 280"'
+            '<svg width="120" height="120" viewBox="0 0 280 280"'
             ' xmlns="http://www.w3.org/2000/svg">'
             "<defs>"
             '<filter id="q-glow" x="-50%" y="-50%" width="200%" height="200%">'
@@ -454,18 +503,19 @@ class QuantUIApp:
             "</svg>"
         )
         _html = (
-            f'<div style="display:flex;align-items:center;gap:20px;'
-            f"padding:18px 4px 14px;margin-bottom:4px;"
+            f'<div style="display:flex;align-items:center;gap:28px;'
+            f"padding:22px 4px 18px;margin-bottom:4px;"
             f'border-bottom:1px solid #e2e8f0">'
             f"{_logo_svg}"
             f"<div>"
-            f'<div style="font-size:30px;font-weight:700;letter-spacing:-0.4px;'
-            f'color:#0f172a;line-height:1.1">QuantUI (local)</div>'
-            f'<div style="font-size:15px;color:#475569;margin-top:5px">'
-            f"Quantum chemistry right on your device</div>"
-            f'<div style="font-size:12px;color:#94a3b8;margin-top:3px">'
+            f'<div style="font-size:44px;font-weight:700;letter-spacing:-0.8px;'
+            f'color:#0f172a;line-height:1.05">QuantUI (local)</div>'
+            f'<div style="font-size:20px;color:#475569;margin-top:7px">'
+            f"Quantum chemistry calculations, right on your device</div>"
+            f'<div style="font-size:13px;color:#94a3b8;margin-top:5px">'
             f"v{quantui.__version__} &nbsp;&middot;&nbsp; "
-            f"open the <b>Help</b> tab for instructions</div>"
+            f"<b>Help</b> tab for instructions &nbsp;&middot;&nbsp; "
+            f"<b>Status</b> tab for system info</div>"
             f"</div>"
             f"</div>"
         )
@@ -1481,13 +1531,21 @@ class QuantUIApp:
         )
 
         # Calibration widgets
+        self._cal_mode_toggle = widgets.ToggleButtons(
+            options=[("Quick (~10 s)", "short"), ("Full (~5 min)", "long")],
+            value="short",
+            description="",
+            button_style="",
+            style={"description_width": "0px", "button_width": "140px"},
+            layout=widgets.Layout(margin="0 0 8px"),
+        )
         self._cal_run_btn = widgets.Button(
             description="Run Calibration",
             button_style="primary",
             icon="play",
             disabled=not _PYSCF_AVAILABLE,
             tooltip=(
-                "Run a short benchmark suite to calibrate time estimates"
+                "Run the benchmark suite to calibrate time estimates"
                 if _PYSCF_AVAILABLE
                 else "PySCF required (Linux / macOS / WSL)"
             ),
@@ -1587,10 +1645,13 @@ class QuantUIApp:
             [
                 widgets.HTML(
                     f'<p style="color:#555;font-size:13px;margin:0 0 6px">'
-                    f"Run a short benchmark suite ({len(_BENCHMARK_SUITE)} calculations) "
-                    f"to give the time estimator a real baseline for this machine.</p>"
-                    + _cal_note
+                    f"Benchmark this machine so the time estimator uses basis-function "
+                    f"scaling (N<sup>β</sup>) rather than generic defaults. "
+                    f"<b>Quick</b> runs {len(_BENCHMARK_SUITE)} small calculations (~10 s). "
+                    f"<b>Full</b> runs {len(_BENCHMARK_SUITE_LONG)} calculations spanning "
+                    f"all common molecule sizes and methods (~5 min).</p>" + _cal_note
                 ),
+                self._cal_mode_toggle,
                 widgets.HBox(
                     [self._cal_run_btn, self._cal_stop_btn],
                     layout=widgets.Layout(gap="6px", align_items="center"),
@@ -1772,6 +1833,17 @@ class QuantUIApp:
             layout=widgets.Layout(width="34px", margin="0 0 0 8px"),
         )
 
+        # Exit button shown in the top bar
+        self._exit_btn = widgets.Button(
+            description="Exit",
+            button_style="danger",
+            tooltip="Shut down the QuantUI server and close this session",
+            layout=widgets.Layout(width="64px", margin="0 0 0 8px"),
+        )
+        self._exit_output = widgets.Output(
+            layout=widgets.Layout(height="0px", overflow="hidden")
+        )
+
         self.help_tab_panel = widgets.VBox(
             [
                 widgets.HTML(
@@ -1894,6 +1966,8 @@ class QuantUIApp:
         self._log_clear_btn.on_click(self._on_log_clear)
         # Help [?] toggle
         self._help_btn.on_click(self._on_help_toggle)
+        # Exit
+        self._exit_btn.on_click(self._on_exit_clicked)
         self.help_topic_dd.observe(self._on_help_topic_changed, names="value")
         # Tab navigation buttons
         self._go_results_btn.on_click(
@@ -1927,19 +2001,21 @@ class QuantUIApp:
         self._rerender_plotly_theme()
 
     def _plotly_theme_colors(self) -> dict:
-        """Return plot background, text, and grid colors for the current theme."""
-        if self.theme_btn.value == "Dark":
-            return {
-                "plot_bgcolor": "#1e1e1e",
-                "paper_bgcolor": "#1e1e1e",
-                "font_color": "#e4e4e7",
-                "grid_color": "#3f3f46",
-            }
+        """Return plot colors tuned for the current theme.
+
+        The dark theme is a CSS invert+hue-rotate filter on the whole page.
+        For SVG/div elements (2D charts): html filter already inverts, so we
+        use light values and let the filter make them dark.
+        For WebGL canvas (3D scenes): canvas has a counter-filter that cancels
+        the html filter, so the color appears as-is — use scene_bgcolor.
+        """
+        is_dark = self.theme_btn.value == "Dark"
         return {
-            "plot_bgcolor": "white",
-            "paper_bgcolor": "white",
-            "font_color": "#111827",
-            "grid_color": "#e5e7eb",
+            "plot_bgcolor": "white",  # html filter darkens this in dark mode
+            "paper_bgcolor": "white",  # html filter darkens this in dark mode
+            "font_color": "#111827",  # html filter lightens → white text in dark
+            "grid_color": "#e5e7eb",  # html filter darkens → subtle grid in dark
+            "scene_bgcolor": "#000000" if is_dark else "#ffffff",
         }
 
     def _apply_plotly_theme(self, fig) -> None:
@@ -1964,6 +2040,17 @@ class QuantUIApp:
             )
         if getattr(self, "_last_pes_result", None) is not None:
             self._show_pes_scan_result(self._last_pes_result)
+        # Re-render 3D molecule viewer so scene_bgcolor updates immediately.
+        if self._molecule is not None and _display_molecule is not None:
+            self.viz_output.clear_output()
+            with self.viz_output:
+                _display_molecule(
+                    self._molecule,
+                    backend=self._viz_backend,
+                    style=self._viz_style,
+                    lighting=self._viz_lighting,
+                    bgcolor=self._plotly_theme_colors()["scene_bgcolor"],
+                )
 
     def _on_viz_backend_changed(self, change) -> None:
         self._viz_backend = change["new"]  # type: ignore[assignment]
@@ -1981,6 +2068,7 @@ class QuantUIApp:
                     backend=self._viz_backend,
                     style=self._viz_style,
                     lighting=self._viz_lighting,
+                    bgcolor=self._plotly_theme_colors()["scene_bgcolor"],
                 )
 
     def _on_viz_style_changed(self, change) -> None:
@@ -1993,6 +2081,7 @@ class QuantUIApp:
                     backend=self._viz_backend,
                     style=self._viz_style,
                     lighting=self._viz_lighting,
+                    bgcolor=self._plotly_theme_colors()["scene_bgcolor"],
                 )
 
     def _on_viz_lighting_changed(self, change) -> None:
@@ -2005,6 +2094,7 @@ class QuantUIApp:
                     backend=self._viz_backend,
                     style=self._viz_style,
                     lighting=self._viz_lighting,
+                    bgcolor=self._plotly_theme_colors()["scene_bgcolor"],
                 )
 
     # ── Molecule input ────────────────────────────────────────────────────
@@ -2859,9 +2949,13 @@ class QuantUIApp:
     def _on_cal_run(self, btn) -> None:
         import threading as _threading
 
+        mode = self._cal_mode_toggle.value
+        suite = _BENCHMARK_SUITE if mode == "short" else _BENCHMARK_SUITE_LONG
         self._cal_stop_event = _threading.Event()
         self._cal_run_btn.disabled = True
+        self._cal_mode_toggle.disabled = True
         self._cal_stop_btn.layout.display = ""
+        self._cal_progress.max = len(suite)
         self._cal_progress.value = 0
         self._cal_progress.layout.display = ""
         self._cal_step_label.layout.display = ""
@@ -2879,6 +2973,8 @@ class QuantUIApp:
     def _do_calibration(self) -> None:
         from quantui.benchmarks import run_calibration
 
+        mode = self._cal_mode_toggle.value
+
         def _progress(
             step_n: int, total: int, label: str, status: str, elapsed: float
         ) -> None:
@@ -2895,16 +2991,19 @@ class QuantUIApp:
         result = run_calibration(
             progress_cb=_progress,
             stop_event=self._cal_stop_event,
-            timeout_per_step=120.0,
+            timeout_per_step=300.0 if mode == "long" else 120.0,
+            mode=mode,
         )
 
         # Render results table
         _rows = "".join(
             f"<tr>"
             f'<td style="padding:2px 12px 2px 0;font-size:12px">{s.label}</td>'
-            f'<td style="padding:2px 12px 2px 0;font-size:12px;text-align:right">'
+            f'<td style="padding:2px 8px 2px 0;font-size:12px;text-align:right">'
             f"{s.n_electrons}</td>"
-            f'<td style="padding:2px 12px 2px 0;font-size:12px;text-align:right">'
+            f'<td style="padding:2px 8px 2px 0;font-size:12px;text-align:right">'
+            f"{s.n_basis if s.n_basis is not None else '—'}</td>"
+            f'<td style="padding:2px 8px 2px 0;font-size:12px;text-align:right">'
             f"{s.elapsed_s:.2f} s</td>"
             f'<td style="padding:2px 0;font-size:12px">'
             f'{"✓" if s.status == "ok" else ("⏱ timed out" if s.status == "timed_out" else ("⛔ stopped" if s.status == "stopped" else "✗ error"))}'
@@ -2921,8 +3020,9 @@ class QuantUIApp:
             f'<table style="border-collapse:collapse">'
             f"<tr>"
             f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:left">Calculation</th>'
-            f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:right">Electrons</th>'
-            f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:right">Wall time</th>'
+            f'<th style="padding:2px 8px 2px 0;font-size:12px;text-align:right">e⁻</th>'
+            f'<th style="padding:2px 8px 2px 0;font-size:12px;text-align:right">Basis fns</th>'
+            f'<th style="padding:2px 8px 2px 0;font-size:12px;text-align:right">Wall time</th>'
             f'<th style="padding:2px 0;font-size:12px">Status</th>'
             f"</tr>"
             f"{_rows}</table></div>"
@@ -2936,6 +3036,7 @@ class QuantUIApp:
         )
         self._cal_stop_btn.layout.display = "none"
         self._cal_run_btn.disabled = not _PYSCF_AVAILABLE
+        self._cal_mode_toggle.disabled = False
         self._refresh_perf_stats()
 
     # ── Output log ────────────────────────────────────────────────────────
@@ -2945,6 +3046,39 @@ class QuantUIApp:
             '<span style="color:#94a3b8;font-size:13px">Log cleared.</span>'
         )
         self._log_source_lbl.value = ""
+
+    # ── Exit ──────────────────────────────────────────────────────────────
+
+    def _on_exit_clicked(self, _=None) -> None:
+        self._exit_btn.description = "Exiting…"
+        self._exit_btn.disabled = True
+        self._welcome_html.value = (
+            '<div style="display:flex;align-items:center;justify-content:center;'
+            'padding:32px;gap:16px">'
+            '<svg width="40" height="40" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">'
+            '<circle cx="140" cy="140" r="48" fill="rgba(37,99,235,0.15)"/>'
+            '<circle cx="140" cy="140" r="14" fill="#2563eb"/>'
+            '<circle cx="140" cy="140" r="8" fill="#60a5fa"/>'
+            "</svg>"
+            '<div style="font-size:20px;color:#475569">'
+            "QuantUI has shut down. You may close this tab.</div>"
+            "</div>"
+        )
+
+        def _do_exit() -> None:
+            import signal
+            import time
+
+            time.sleep(0.6)
+            try:
+                # Signal the Voilà/Jupyter server process (our parent) to exit cleanly.
+                os.kill(os.getppid(), signal.SIGTERM)
+            except Exception:
+                pass
+            # Terminate the kernel process regardless.
+            os._exit(0)
+
+        threading.Thread(target=_do_exit, daemon=True).start()
 
     # ── Help ──────────────────────────────────────────────────────────────
 
@@ -3001,6 +3135,7 @@ class QuantUIApp:
                     backend=self._viz_backend,
                     style=self._viz_style,
                     lighting=self._viz_lighting,
+                    bgcolor=self._plotly_theme_colors()["scene_bgcolor"],
                 )
 
         self._update_notes()
@@ -3071,6 +3206,7 @@ class QuantUIApp:
                     backend=self._viz_backend,
                     style=self._viz_style,
                     lighting=self._viz_lighting,
+                    bgcolor=self._plotly_theme_colors()["scene_bgcolor"],
                 )
 
     def _show_result_log(self, saved_dir: Path, log_text: str) -> None:
@@ -3251,12 +3387,12 @@ class QuantUIApp:
             _draw_3D_mol(fig, rw.GetMol(), _FRAME_RES, "ball+stick")
             fig = _fmt_fig(fig)
             fig = _fmt_light(fig, **_LP.get("soft", _LP["soft"]))
-            _bg = self._plotly_theme_colors()["paper_bgcolor"]
+            _scene_bg = self._plotly_theme_colors()["scene_bgcolor"]
             fig.update_layout(
                 width=_FRAME_W,
                 height=_FRAME_H,
-                paper_bgcolor=_bg,
-                scene=dict(bgcolor=_bg),
+                paper_bgcolor="white",
+                scene=dict(bgcolor=_scene_bg),
                 margin=dict(l=0, r=0, t=0, b=0),
             )
             return fig
@@ -3281,8 +3417,8 @@ class QuantUIApp:
                     width=_FRAME_W,
                     height=_FRAME_H,
                 )
-                _bg = self._plotly_theme_colors()["paper_bgcolor"]
-                fig.update_layout(paper_bgcolor=_bg, scene=dict(bgcolor=_bg))
+                _scene_bg = self._plotly_theme_colors()["scene_bgcolor"]
+                fig.update_layout(paper_bgcolor="white", scene=dict(bgcolor=_scene_bg))
                 return ("plotly", fig)
             except ImportError:
                 pass
@@ -3500,8 +3636,8 @@ class QuantUIApp:
             fig = visualize_molecule_plotlymol(
                 molecule, mode="ball+stick", resolution=8, width=460, height=340
             )
-            _bg = self._plotly_theme_colors()["paper_bgcolor"]
-            fig.update_layout(paper_bgcolor=_bg, scene=dict(bgcolor=_bg))
+            _scene_bg = self._plotly_theme_colors()["scene_bgcolor"]
+            fig.update_layout(paper_bgcolor="white", scene=dict(bgcolor=_scene_bg))
             output_widget.clear_output()
             with output_widget:
                 display(fig)
@@ -4361,6 +4497,10 @@ class QuantUIApp:
                     n_iterations=getattr(result, "n_iterations", -1),
                     elapsed_s=_elapsed,
                     converged=result.converged,
+                    n_basis=_calc_log.count_basis_functions(
+                        calc_mol.atoms, result.basis
+                    ),
+                    n_cores=1,
                 )
                 _calc_log.log_event(
                     "calc_done",
@@ -4501,11 +4641,15 @@ class QuantUIApp:
             self.perf_estimate_html.value = ""
             return
         try:
+            n_basis = _calc_log.count_basis_functions(
+                self._molecule.atoms, self.basis_dd.value
+            )
             est = _calc_log.estimate_time(
                 n_atoms=len(self._molecule.atoms),
                 n_electrons=self._molecule.get_electron_count(),
                 method=self.method_dd.value,
                 basis=self.basis_dd.value,
+                n_basis=n_basis,
             )
             self.perf_estimate_html.value = _calc_log.format_estimate(est)
         except Exception:
