@@ -328,7 +328,7 @@ def log_calculation(
     n_electrons: int,
     method: str,
     basis: str,
-    n_iterations: int,
+    n_iterations: Optional[int],
     elapsed_s: float,
     converged: bool,
     n_basis: Optional[int] = None,

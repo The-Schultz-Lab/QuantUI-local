@@ -1389,7 +1389,7 @@ class QuantUIApp:
     def _build_ana_switcher(self) -> None:
         """Build the always-visible panel switcher strip for the Analysis tab."""
         _PANEL_META = [
-            ("Orbitals", self._orb_accordion, "Single Point / UV-Vis"),
+            ("Energies", self._orb_accordion, "Single Point / UV-Vis"),
             ("Trajectory", self.traj_accordion, "Geometry Opt / PES Scan"),
             ("Vibrational", self.vib_accordion, "Frequency"),
             ("IR Spectrum", self._ir_accordion, "Frequency"),
@@ -3304,6 +3304,14 @@ class QuantUIApp:
         energies = opt_result.energies_hartree
         n = len(traj)
         if n < 2:
+            self.traj_output.clear_output()
+            with self.traj_output:
+                _ipy_display(
+                    HTML(
+                        '<p style="color:#666;padding:8px">'
+                        "No trajectory data available (single-frame result).</p>"
+                    )
+                )
             return
 
         _HARTREE_TO_KCAL = 627.5094740631
@@ -3941,7 +3949,7 @@ class QuantUIApp:
             self._orb_iso_controls.layout.display = "none"
             self._iso_generate_btn.disabled = True
 
-        self._activate_ana_panel("Orbitals")
+        self._activate_ana_panel("Energies")
         if not self._iso_generate_btn.disabled:
             self._activate_ana_panel("Isosurface", auto_select=False)
 
@@ -4400,6 +4408,11 @@ class QuantUIApp:
             elif ct == "Frequency":
                 self._show_vib_animation(result, calc_mol)
                 self._show_ir_spectrum(result)
+                # Guarantee activation even when helpers early-return
+                # (e.g. displacements=None, or IR intensities unavailable).
+                if result.frequencies_cm1:
+                    self._activate_ana_panel("Vibrational")
+                    self._activate_ana_panel("IR Spectrum", auto_select=False)
             elif ct == "PES Scan":
                 self._show_pes_scan_result(result)
             elif ct == "Single Point":
@@ -4494,7 +4507,7 @@ class QuantUIApp:
                     n_electrons=calc_mol.get_electron_count(),
                     method=result.method,
                     basis=result.basis,
-                    n_iterations=getattr(result, "n_iterations", -1),
+                    n_iterations=getattr(result, "n_iterations", None),
                     elapsed_s=_elapsed,
                     converged=result.converged,
                     n_basis=_calc_log.count_basis_functions(
@@ -4947,7 +4960,15 @@ class QuantUIApp:
                 ),
                 ("HOMO-LUMO gap", _gap, "#000"),
                 ("SCF converged", _conv, _cc),
-                ("SCF iterations", str(r.n_iterations), "#000"),
+                (
+                    "SCF iterations",
+                    (
+                        "—"
+                        if getattr(r, "n_iterations", None) in (None, -1)
+                        else str(r.n_iterations)
+                    ),
+                    "#000",
+                ),
             ]
         )
         _extra = ""
@@ -5308,7 +5329,15 @@ class QuantUIApp:
                 ),
                 ("HOMO-LUMO gap", _gap, "#000"),
                 ("SCF converged", _conv, _cc),
-                ("SCF iterations", str(data.get("n_iterations", "?")), "#000"),
+                (
+                    "SCF iterations",
+                    (
+                        "—"
+                        if data.get("n_iterations") in (None, -1)
+                        else str(data.get("n_iterations"))
+                    ),
+                    "#000",
+                ),
             ]
         )
         ts = data.get("timestamp", "")
