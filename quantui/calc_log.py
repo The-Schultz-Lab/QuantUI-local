@@ -539,6 +539,19 @@ def reset_perf_log() -> None:
             path.unlink()
 
 
+def clear_event_log() -> None:
+    """Delete the session event log (``event_log.jsonl``).
+
+    Removes the file entirely.  A fresh file is created automatically on the
+    next :func:`log_event` call.  ``perf_log.jsonl`` and ``issues.db`` are
+    **not** affected.
+    """
+    path = _event_path()
+    with _LOCK:
+        if path.exists():
+            path.unlink()
+
+
 # ---------------------------------------------------------------------------
 # Event log (7-day TTL)
 # ---------------------------------------------------------------------------

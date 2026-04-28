@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import types as _types_mod
+import uuid as _uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, List, Literal, Optional
@@ -31,6 +32,7 @@ from IPython.display import HTML, Javascript, display
 
 import quantui
 import quantui.calc_log as _calc_log
+import quantui.issue_tracker as _issue_tracker
 
 # Import directly from submodules to avoid circular-import issues.
 # quantui/__init__.py imports this module (app.py), so using
@@ -313,6 +315,7 @@ class QuantUIApp:
         self._results: List = []
         self._pending_traj_result: Any = None
         self.root_tab: widgets.Tab
+        self._session_id: str = _uuid.uuid4().hex[:12]
 
         # Availability (copied from module-level flags)
         self._pyscf_available: bool = _PYSCF_AVAILABLE
@@ -339,11 +342,17 @@ class QuantUIApp:
                 [
                     self._welcome_html,
                     widgets.HBox(
-                        [self.theme_btn, self._help_btn, self._exit_btn],
+                        [
+                            self.theme_btn,
+                            self._help_btn,
+                            self._issue_btn,
+                            self._exit_btn,
+                        ],
                         layout=widgets.Layout(
                             justify_content="flex-end", margin="0 0 4px"
                         ),
                     ),
+                    self._issue_overlay,
                     self._exit_output,
                     self._theme_style,
                     self.help_tab_panel,
@@ -372,6 +381,7 @@ class QuantUIApp:
         self._build_compare_section()
         self._build_output_tab()
         self._build_help_section()
+        self._build_issue_widgets()
 
     # ── Theme selector ────────────────────────────────────────────────────
 
@@ -2197,6 +2207,21 @@ class QuantUIApp:
             icon="times",
             layout=widgets.Layout(width="80px"),
         )
+        self._clear_log_cache_btn = widgets.Button(
+            description="Clear Log Cache",
+            button_style="",
+            icon="trash",
+            tooltip=(
+                "Delete the session event log (event_log.jsonl). "
+                "Calculation performance data is preserved."
+            ),
+            layout=widgets.Layout(width="160px"),
+        )
+        self._clear_log_cache_confirm_btn = widgets.Button(
+            description="Confirm clear?",
+            button_style="danger",
+            layout=widgets.Layout(width="140px", display="none"),
+        )
         self.log_tab_panel = widgets.VBox(
             [
                 widgets.HTML(
@@ -2213,6 +2238,16 @@ class QuantUIApp:
                 self._log_source_lbl,
                 self._log_output_html,
                 self._result_log_accordion,
+                widgets.HTML(
+                    '<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0 10px"/>'
+                    '<p style="color:#94a3b8;font-size:12px;margin:0 0 6px">'
+                    "Session event log — records molecule loads, calculations, "
+                    "and issue reports across this session.</p>"
+                ),
+                widgets.HBox(
+                    [self._clear_log_cache_btn, self._clear_log_cache_confirm_btn],
+                    layout=widgets.Layout(align_items="center", gap="8px"),
+                ),
             ],
             layout=widgets.Layout(padding="8px 0"),
         )
@@ -2267,6 +2302,61 @@ class QuantUIApp:
                 border_radius="6px",
                 padding_left="12px",
                 margin="0 0 8px",
+            ),
+        )
+
+    def _build_issue_widgets(self) -> None:
+        """Build the Issue report button, overlay, and related widgets."""
+        # ── Issue button (shown in the top bar) ───────────────────────────
+        self._issue_btn = widgets.Button(
+            description="Report Issue",
+            button_style="warning",
+            icon="flag",
+            tooltip="Report a bug or unexpected behaviour observed in this session",
+            layout=widgets.Layout(width="140px", margin="0 0 0 8px"),
+        )
+        # ── Issue overlay (hidden until button is clicked) ────────────────
+        self._issue_textarea = widgets.Textarea(
+            placeholder=(
+                "Describe what you observed — what you did, what you expected, "
+                "and what actually happened."
+            ),
+            layout=widgets.Layout(width="100%", height="90px"),
+        )
+        self._issue_submit_btn = widgets.Button(
+            description="Submit",
+            button_style="success",
+            layout=widgets.Layout(width="90px"),
+        )
+        self._issue_cancel_btn = widgets.Button(
+            description="Cancel",
+            button_style="",
+            layout=widgets.Layout(width="80px"),
+        )
+        self._issue_status_html = widgets.HTML()
+        self._issue_overlay = widgets.VBox(
+            [
+                widgets.HTML(
+                    '<p style="font-size:13px;font-weight:600;margin:0 0 6px;color:#92400e">'
+                    "&#9872; Report Issue</p>"
+                    '<p style="font-size:12px;color:#78350f;margin:0 0 8px">'
+                    "Your report (and a snapshot of the current session state) will be "
+                    "saved to <code>issues.db</code> and the session event log.</p>"
+                ),
+                self._issue_textarea,
+                widgets.HBox(
+                    [self._issue_submit_btn, self._issue_cancel_btn],
+                    layout=widgets.Layout(margin="6px 0 0", gap="8px"),
+                ),
+                self._issue_status_html,
+            ],
+            layout=widgets.Layout(
+                display="none",
+                border="1px solid #f59e0b",
+                border_radius="6px",
+                padding="12px 14px",
+                margin="0 0 6px",
+                background_color="#fffbeb",
             ),
         )
 
@@ -2370,6 +2460,13 @@ class QuantUIApp:
         self.compare_clear_btn.on_click(self._on_compare_clear)
         # Output log
         self._log_clear_btn.on_click(self._on_log_clear)
+        # Clear log cache (event_log.jsonl)
+        self._clear_log_cache_btn.on_click(self._on_clear_log_cache)
+        self._clear_log_cache_confirm_btn.on_click(self._on_clear_log_cache_confirm)
+        # Issue reporting
+        self._issue_btn.on_click(self._on_issue_btn)
+        self._issue_submit_btn.on_click(self._on_issue_submit)
+        self._issue_cancel_btn.on_click(self._on_issue_cancel)
         # Help [?] toggle
         self._help_btn.on_click(self._on_help_toggle)
         # Exit
@@ -2540,6 +2637,16 @@ class QuantUIApp:
             self.pubchem_msg.value = f"Loaded {mol.get_formula()} from PubChem."
         else:
             self.pubchem_msg.value = f"Not found: {error}"
+            try:
+                _calc_log.log_event(
+                    "pubchem_search_failed",
+                    f"PubChem query not found: '{query}'",
+                    query=query,
+                    error=str(error)[:200],
+                    session_id=self._session_id,
+                )
+            except Exception:
+                pass
         self.pubchem_btn.disabled = False
 
     def _on_search_pubchem(self, btn) -> None:
@@ -3042,6 +3149,15 @@ class QuantUIApp:
         if not path_str:
             return
         result_dir = Path(path_str)
+        try:
+            _calc_log.log_event(
+                "history_view",
+                result_dir.name,
+                result_dir=result_dir.name,
+                session_id=self._session_id,
+            )
+        except Exception:
+            pass
 
         # Read log text and populate log panel
         log_path = result_dir / "pyscf.log"
@@ -3305,6 +3421,105 @@ class QuantUIApp:
         )
         self._log_source_lbl.value = ""
 
+    # ── Issue reporting ───────────────────────────────────────────────────
+
+    def _on_issue_btn(self, _=None) -> None:
+        """Show the issue report overlay."""
+        self._issue_textarea.value = ""
+        self._issue_status_html.value = ""
+        self._issue_overlay.layout.display = ""
+
+    def _on_issue_cancel(self, _=None) -> None:
+        self._issue_overlay.layout.display = "none"
+
+    def _on_issue_submit(self, _=None) -> None:
+        text = self._issue_textarea.value.strip()
+        if not text:
+            self._issue_status_html.value = (
+                '<span style="color:#b91c1c;font-size:12px">'
+                "Please describe the issue before submitting.</span>"
+            )
+            return
+        self._issue_submit_btn.disabled = True
+        try:
+            issue_id = _issue_tracker.log_issue(
+                description=text,
+                context=self._build_issue_context(),
+                session_id=self._session_id,
+            )
+            self._issue_status_html.value = (
+                f'<span style="color:#16a34a;font-size:12px">'
+                f"&#10003; Issue #{issue_id} saved. Thank you!</span>"
+            )
+            self._issue_overlay.layout.display = "none"
+        except Exception as exc:
+            self._issue_status_html.value = (
+                f'<span style="color:#b91c1c;font-size:12px">Save failed: {exc}</span>'
+            )
+        finally:
+            self._issue_submit_btn.disabled = False
+
+    def _build_issue_context(self) -> dict:
+        """Snapshot the current app state to attach to an issue report."""
+        ctx: dict = {}
+        if self._molecule is not None:
+            try:
+                ctx["molecule"] = {
+                    "formula": self._molecule.get_formula(),
+                    "n_atoms": len(self._molecule.atoms),
+                    "charge": self._molecule.charge,
+                    "multiplicity": self._molecule.multiplicity,
+                }
+            except Exception:
+                pass
+        try:
+            ctx["settings"] = {
+                "method": self.method_dd.value,
+                "basis": self.basis_dd.value,
+                "calc_type": self.calc_type_dd.value,
+            }
+        except Exception:
+            pass
+        if self._last_result is not None:
+            try:
+                ctx["last_result"] = {
+                    "formula": getattr(self._last_result, "formula", None),
+                    "method": getattr(self._last_result, "method", None),
+                    "basis": getattr(self._last_result, "basis", None),
+                    "converged": getattr(self._last_result, "converged", None),
+                    "energy_hartree": getattr(
+                        self._last_result, "energy_hartree", None
+                    ),
+                }
+            except Exception:
+                pass
+        try:
+            ctx["recent_events"] = _calc_log.get_recent_events(15)
+        except Exception:
+            pass
+        return ctx
+
+    # ── Clear log cache ───────────────────────────────────────────────────
+
+    def _on_clear_log_cache(self, _=None) -> None:
+        """First click: reveal the confirmation button."""
+        self._clear_log_cache_confirm_btn.layout.display = ""
+        self._clear_log_cache_btn.disabled = True
+
+    def _on_clear_log_cache_confirm(self, _=None) -> None:
+        """Second click: clear event_log.jsonl and reset the UI."""
+        try:
+            _calc_log.log_event(
+                "log_cleared",
+                "Session event log cleared by user",
+                session_id=self._session_id,
+            )
+            _calc_log.clear_event_log()
+        except Exception:
+            pass
+        self._clear_log_cache_confirm_btn.layout.display = "none"
+        self._clear_log_cache_btn.disabled = False
+
     # ── Exit ──────────────────────────────────────────────────────────────
 
     def _on_exit_clicked(self, _=None) -> None:
@@ -3357,6 +3572,20 @@ class QuantUIApp:
         self.export_xyz_btn.disabled = False
         self.export_mol_btn.disabled = not _RDKIT_AVAILABLE
         self.export_pdb_btn.disabled = not _RDKIT_AVAILABLE
+
+        try:
+            _calc_log.log_event(
+                "molecule_load",
+                f"{mol.get_formula()} — {label or 'unknown source'}",
+                formula=mol.get_formula(),
+                n_atoms=len(mol.atoms),
+                charge=mol.charge,
+                multiplicity=mol.multiplicity,
+                source=label or "unknown",
+                session_id=self._session_id,
+            )
+        except Exception:
+            pass
 
         try:
             n_e = mol.get_electron_count()
