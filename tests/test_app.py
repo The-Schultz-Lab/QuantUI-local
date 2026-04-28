@@ -907,11 +907,19 @@ class TestShowIRSpectrum:
         r.ir_intensities = [10.0, 50.0, 5.0]
         return r
 
-    def test_accordion_revealed_after_show(self):
+    def test_show_ir_spectrum_returns_true_with_data(self):
         app = QuantUIApp()
         app._last_ir_freqs = []
         app._last_ir_ints = []
+        ok = app._show_ir_spectrum(self._make_freq_result())
+        assert ok is True
+
+    def test_accordion_revealed_via_activate(self):
+        # _show_ir_spectrum populates widget; _activate_ana_panel reveals it.
+        app = QuantUIApp()
         app._show_ir_spectrum(self._make_freq_result())
+        assert app._ir_accordion.layout.display == "none"  # still hidden
+        app._activate_ana_panel("IR Spectrum")
         assert app._ir_accordion.layout.display == ""
 
     def test_fwhm_slider_shown_when_broadened(self):
@@ -984,9 +992,17 @@ class TestShowOrbitalDiagram:
         r.pyscf_mol_basis = None
         return r
 
-    def test_accordion_revealed_with_mo_data(self):
+    def test_show_orbital_diagram_returns_true_with_mo_data(self):
+        app = QuantUIApp()
+        ok = app._show_orbital_diagram(self._make_result_with_mo())
+        assert ok is True
+
+    def test_accordion_revealed_via_activate(self):
+        # _show_orbital_diagram populates widget; _activate_ana_panel reveals it.
         app = QuantUIApp()
         app._show_orbital_diagram(self._make_result_with_mo())
+        assert app._orb_accordion.layout.display == "none"  # still hidden
+        app._activate_ana_panel("Energies")
         assert app._orb_accordion.layout.display == ""
 
     def test_accordion_stays_hidden_when_no_mo_data(self):
@@ -1095,9 +1111,9 @@ class TestAnalysisTab:
 class TestAnaSwitcher:
     """Panel switcher strip: buttons, state, activation, and deactivation."""
 
-    def test_six_buttons_exist(self):
+    def test_eight_buttons_exist(self):
         app = QuantUIApp()
-        assert len(app._ana_btns) == 6
+        assert len(app._ana_btns) == 8
 
     def test_panel_names(self):
         app = QuantUIApp()
@@ -1108,6 +1124,8 @@ class TestAnaSwitcher:
             "IR Spectrum",
             "PES Scan",
             "Isosurface",
+            "UV-Vis",
+            "NMR",
         ]
 
     def test_buttons_initially_dimmed(self):
