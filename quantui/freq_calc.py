@@ -101,6 +101,10 @@ class FreqResult:
     ``None`` if the Hessian calculation failed or PySCF version does not
     provide ``norm_mode``.
     """
+    mo_energy_hartree: Optional[List] = None
+    mo_occ: Optional[List] = None
+    pyscf_mol_atom: Optional[List] = None
+    pyscf_mol_basis: Optional[str] = None
 
     @property
     def energy_ev(self) -> float:
@@ -216,6 +220,23 @@ def run_freq_calc(
     except Exception:
         pass
 
+    # ── MO data for orbital energy diagram (best-effort) ─────────────────────
+    mo_energy_hartree: Optional[List] = None
+    mo_occ_list: Optional[List] = None
+    pyscf_mol_atom: Optional[List] = None
+    try:
+        import numpy as _np_mo
+
+        _moe = mf.mo_energy
+        _moo = mf.mo_occ
+        if isinstance(_moe, (list, _np_mo.ndarray)) and hasattr(_moe[0], "__len__"):
+            _moe, _moo = _moe[0], _moo[0]
+        mo_energy_hartree = _np_mo.asarray(_moe, dtype=float).tolist()
+        mo_occ_list = _np_mo.asarray(_moo, dtype=float).tolist()
+        pyscf_mol_atom = [(str(s), list(map(float, c))) for s, c in mol._atom]
+    except Exception:
+        pass
+
     # ── Hessian + frequency analysis ─────────────────────────────────────────
     frequencies_cm1: List[float] = []
     ir_intensities: List[float] = []
@@ -313,4 +334,8 @@ def run_freq_calc(
         zpve_hartree=zpve_hartree,
         thermo=thermo_data,
         displacements=displacements,
+        mo_energy_hartree=mo_energy_hartree,
+        mo_occ=mo_occ_list,
+        pyscf_mol_atom=pyscf_mol_atom,
+        pyscf_mol_basis=basis,
     )

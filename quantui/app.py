@@ -551,7 +551,7 @@ class QuantUIApp:
             f"{_logo_svg}"
             f"<div>"
             f'<div style="font-size:44px;font-weight:700;letter-spacing:-0.8px;'
-            f'color:#0f172a;line-height:1.05">QuantUI (local)</div>'
+            f'color:#0f172a;line-height:1.05">QuantUI</div>'
             f'<div style="font-size:20px;color:#475569;margin-top:7px">'
             f"Quantum chemistry calculations, right on your device</div>"
             f'<div style="font-size:13px;color:#94a3b8;margin-top:5px">'
@@ -1601,9 +1601,10 @@ class QuantUIApp:
             ("Isosurface", "_pop_isosurface", False),
         ],
         "frequency": [
-            ("Trajectory", "_pop_preopt_trajectory", False),
             ("Vibrational", "_pop_vibrational", True),
-            ("IR Spectrum", "_pop_ir_spectrum", False),
+            ("IR Spectrum", "_pop_ir_spectrum", True),
+            ("Trajectory", "_pop_preopt_trajectory", False),
+            ("Energies", "_pop_energies", True),
         ],
         "tddft": [
             ("UV-Vis", "_pop_uv_vis", True),
@@ -1636,8 +1637,19 @@ class QuantUIApp:
         ):
             try:
                 ok = bool(getattr(self, method_name)(ctx))
-            except Exception:
+            except Exception as _panel_exc:
                 ok = False
+                try:
+                    from quantui import calc_log as _clog
+
+                    _clog.log_event(
+                        "ana_panel_error",
+                        f"{method_name}: {type(_panel_exc).__name__}: {_panel_exc}"[
+                            :300
+                        ],
+                    )
+                except Exception:
+                    pass
             if ok:
                 do_auto = want_auto and not first_auto_selected
                 self._activate_ana_panel(panel_name, auto_select=do_auto)
@@ -1756,12 +1768,11 @@ class QuantUIApp:
         else:
             ir = ctx.spectra_data.get("ir", {})
             freqs = ir.get("frequencies_cm1")
-            ints = ir.get("ir_intensities")
-            if not (freqs and ints):
+            if not freqs:
                 return False
             freq_stub = _types_mod.SimpleNamespace(
                 frequencies_cm1=freqs,
-                ir_intensities=ints,
+                ir_intensities=ir.get("ir_intensities") or [],
             )
         return self._show_ir_spectrum(freq_stub)
 
@@ -4305,13 +4316,29 @@ class QuantUIApp:
     def _show_ir_spectrum(self, freq_result) -> bool:
         """Populate the IR Spectrum accordion after a Frequency result.
 
-        Returns True if populated, False if no frequency/intensity data.
+        Returns True if populated, False if no frequency data at all.
+        When IR intensities are unavailable, falls back to unit weights so the
+        panel still activates showing frequency positions.
         Does NOT call ``_activate_ana_panel``; that is handled by the registry.
         """
         freqs = list(freq_result.frequencies_cm1 or [])
         ints = list(getattr(freq_result, "ir_intensities", None) or [])
-        if not freqs or not ints:
+        if not freqs:
             return False
+
+        # When intensities are missing, substitute unit weights so the stick
+        # plot still shows frequency positions; accordion title reflects this.
+        self._ir_intensities_real = bool(ints)
+        if not ints:
+            ints = [1.0] * len(freqs)
+        self._ir_accordion.set_title(
+            0,
+            (
+                "IR Spectrum"
+                if self._ir_intensities_real
+                else "IR Spectrum (positions only — intensities unavailable)"
+            ),
+        )
 
         # Store for callbacks
         self._last_ir_freqs = freqs
@@ -4349,11 +4376,17 @@ class QuantUIApp:
 
             from quantui.ir_plot import plot_ir_spectrum
 
+            _ytitle = (
+                "IR Intensity (km/mol)"
+                if getattr(self, "_ir_intensities_real", True)
+                else "Relative intensity (a.u.)"
+            )
             fig = plot_ir_spectrum(
                 self._last_ir_freqs,
                 self._last_ir_ints,
                 mode=mode.lower(),
                 fwhm=fwhm,
+                yaxis_title=_ytitle,
             )
             self._apply_plotly_theme(fig)
             self._ir_fig.value = _pio.to_html(
@@ -4972,7 +5005,7 @@ class QuantUIApp:
                     if _traj:
                         save_trajectory(_saved_dir, _traj, _e_list or [])
                 # Persist MO data for orbital diagram + isosurface replay.
-                if ct in ("Single Point", "Geometry Opt"):
+                if ct in ("Single Point", "Geometry Opt", "Frequency"):
                     save_orbitals(_saved_dir, result)
                 self._refresh_results_browser()
                 self._populate_compare_list()
@@ -4981,8 +5014,16 @@ class QuantUIApp:
                     f"{result.formula}  {self.method_dd.value}/{self.basis_dd.value}",
                 )
                 self._show_result_log(_saved_dir, log.getvalue())
-            except Exception:
-                pass
+            except Exception as _save_exc:
+                try:
+                    from quantui import calc_log as _clog
+
+                    _clog.log_event(
+                        "save_error",
+                        f"{type(_save_exc).__name__}: {_save_exc}"[:300],
+                    )
+                except Exception:
+                    pass
 
             # Log performance
             try:

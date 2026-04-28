@@ -29,6 +29,7 @@ def plot_ir_spectrum(
     *,
     fwhm: float = 20.0,
     mode: str = "stick",
+    yaxis_title: str = "IR Intensity (km/mol)",
 ) -> go.Figure:
     """Return a Plotly figure for the IR absorption spectrum.
 
@@ -56,7 +57,7 @@ def plot_ir_spectrum(
             gridcolor="#e5e7eb",
         ),
         yaxis=dict(
-            title="IR Intensity (km/mol)",
+            title=yaxis_title,
             rangemode="tozero",
             showgrid=True,
             gridcolor="#e5e7eb",
