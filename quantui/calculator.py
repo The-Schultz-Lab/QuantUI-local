@@ -1,9 +1,9 @@
 """
-QuantUI-local Calculator Module
+QuantUI Calculator Module
 
 Generates standalone PySCF Python scripts that students can download and
 run independently. This is an "Export Script" feature — the primary
-calculation path in QuantUI-local is session_calc.run_in_session(), not
+calculation path in QuantUI is session_calc.run_in_session(), not
 batch script submission.
 """
 
@@ -20,7 +20,7 @@ class PySCFCalculation:
     """
     Generates standalone PySCF scripts for a given molecule and method.
 
-    The primary use in QuantUI-local is the "Export Script" button in the
+    The primary use in QuantUI is the "Export Script" button in the
     notebook, which lets students download a self-contained .py file they
     can study or run outside the notebook environment.
     """

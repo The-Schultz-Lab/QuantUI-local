@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — Build the QuantUI-local Apptainer container
+# build.sh — Build the QuantUI Apptainer container
 #
 # Usage (run from the repo root):
 #   bash apptainer/build.sh            # build to repo root
@@ -13,8 +13,8 @@
 set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DEF="apptainer/quantui-local.def"
-SIF="quantui-local.sif"
+DEF="apptainer/quantui.def"
+SIF="quantui.sif"
 APPTAINER_CMD="${APPTAINER_CMD:-apptainer}"
 
 # ── Parse flags ───────────────────────────────────────────────────────────────

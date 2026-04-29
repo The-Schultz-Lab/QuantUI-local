@@ -1,5 +1,5 @@
 """
-QuantUI-local Package
+QuantUI Package
 
 Lightweight educational quantum chemistry interface for local PySCF calculations.
 No cluster or SLURM required — calculations run directly in the Jupyter session.
@@ -8,6 +8,10 @@ PySCF requires Linux/macOS/WSL. Windows users should use the Apptainer container
 """
 
 __version__ = "0.1.0"
+
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 from .calculator import PySCFCalculation, create_calculation
 
@@ -108,6 +112,12 @@ from .results_storage import list_results, load_result, save_result
 # QM geometry optimizer (optional — requires ase>=3.22 + pyscf, Linux/WSL)
 try:
     from .optimizer import OptimizationResult, optimize_geometry
+except ImportError:
+    pass
+
+# 1D PES scan (optional — requires ase>=3.22 + pyscf, Linux/WSL)
+try:
+    from .pes_scan import PESScanResult, run_pes_scan  # noqa: F401
 except ImportError:
     pass
 

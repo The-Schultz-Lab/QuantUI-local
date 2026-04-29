@@ -7,6 +7,25 @@ Shared test fixtures for QuantUI test suite.
 import pytest
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _suppress_plotly_browser():
+    """Prevent plotly from opening browser tabs during tests.
+
+    plotly's default renderer is "browser" in this env, so any display(fig)
+    on a plotly Figure would call pio.show() → open a tab.  Setting
+    render_on_display=False makes _ipython_display_ fall through to repr().
+    """
+    try:
+        import plotly.io as pio
+
+        orig_rod = pio.renderers.render_on_display
+        pio.renderers.render_on_display = False
+        yield
+        pio.renderers.render_on_display = orig_rod
+    except ImportError:
+        yield
+
+
 @pytest.fixture
 def sample_water_xyz():
     """Simple water molecule XYZ coordinates."""

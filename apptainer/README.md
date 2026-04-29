@@ -1,4 +1,4 @@
-# QuantUI-local — Apptainer Container
+# QuantUI — Apptainer Container
 
 The Apptainer container packages Python, PySCF, ASE, py3Dmol, and Voilà
 into a single portable `.sif` file. It is the **recommended path for Windows
@@ -11,13 +11,13 @@ students copy one file and run it.
 
 | File | Purpose |
 | --- | --- |
-| `quantui-local.def` | Container definition file (the "recipe") |
+| `quantui.def` | Container definition file (the "recipe") |
 | `build.sh` | Build script with clean/test/fakeroot options |
 | `README.md` (this file) | Build, run, and distribution guide |
 
 The compiled `.sif` image is **not** committed to git — it is too large (~4–5 GB).
 Build it locally (see below) or download the latest release asset from the
-[GitHub Releases page](https://github.com/The-Schultz-Lab/QuantUI-local/releases).
+[GitHub Releases page](https://github.com/The-Schultz-Lab/QuantUI/releases).
 
 ---
 
@@ -25,8 +25,8 @@ Build it locally (see below) or download the latest release asset from the
 
 ### Option A — Download a pre-built release (easiest)
 
-1. Go to [Releases](https://github.com/The-Schultz-Lab/QuantUI-local/releases)
-2. Download `quantui-local.sif` from the latest release
+1. Go to [Releases](https://github.com/The-Schultz-Lab/QuantUI/releases)
+2. Download `quantui.sif` from the latest release
 3. Run it directly — no build step needed
 
 ### Option B — Build from source
@@ -70,7 +70,7 @@ optional clean builds, and post-build testing.
 
 ```bash
 # From the repo root:
-cd /path/to/QuantUI-local
+cd /path/to/QuantUI
 
 # Standard build
 bash apptainer/build.sh
@@ -115,7 +115,7 @@ Double-click either file. The browser opens automatically at
 Launches the notebook as a clean widget-only interface. Students see no code.
 
 ```bash
-apptainer run quantui-local.sif app
+apptainer run quantui.sif app
 ```
 
 Then open a browser at [http://localhost:8866](http://localhost:8866).
@@ -123,7 +123,7 @@ Then open a browser at [http://localhost:8866](http://localhost:8866).
 #### JupyterLab mode — for exploration or development
 
 ```bash
-apptainer run quantui-local.sif
+apptainer run quantui.sif
 ```
 
 Then open the URL printed in the terminal (contains a login token).
@@ -135,8 +135,8 @@ cell changes take effect on browser refresh — no container rebuild needed.
 Note: changes to `quantui/` Python files still require a rebuild.
 
 ```bash
-cd /path/to/QuantUI-local
-apptainer exec quantui-local.sif voila notebooks/molecule_computations.ipynb \
+cd /path/to/QuantUI
+apptainer exec quantui.sif voila notebooks/molecule_computations.ipynb \
     --no-browser --port=8866 \
     --ServerApp.disable_check_xsrf=True
 ```
@@ -159,14 +159,14 @@ container:
 ```bash
 # Work from a specific project folder
 cd ~/my-calculations
-apptainer run /path/to/quantui-local.sif app
+apptainer run /path/to/quantui.sif app
 ```
 
 #### Custom port
 
 ```bash
 # Voilà on port 9000
-apptainer run quantui-local.sif app --port=9000
+apptainer run quantui.sif app --port=9000
 ```
 
 ---
@@ -178,10 +178,10 @@ packages loaded correctly:
 
 ```bash
 # Built-in %test section
-apptainer test quantui-local.sif
+apptainer test quantui.sif
 
 # Manual import check
-apptainer exec quantui-local.sif python -c "
+apptainer exec quantui.sif python -c "
 import quantui, pyscf, ase, py3Dmol
 from quantui import Molecule, parse_xyz_input
 atoms, coords = parse_xyz_input('O 0 0 0\nH 0.757 0.587 0\nH -0.757 0.587 0')
@@ -195,7 +195,7 @@ Expected output: `OK: H2O` and package import messages.
 ### Run the full test suite
 
 ```bash
-apptainer exec --cleanenv --writable-tmpfs quantui-local.sif bash -c '
+apptainer exec --cleanenv --writable-tmpfs quantui.sif bash -c '
     pip install pytest -q 2>/dev/null
     python -m pytest tests/test_notebook_workflows.py -v --tb=short --override-ini="addopts="
 '
@@ -208,7 +208,7 @@ and thread-safety checks. Expected: **20 passed** in ~25 seconds.
 ### Quick calculation check
 
 ```bash
-apptainer exec --cleanenv quantui-local.sif python -c "
+apptainer exec --cleanenv quantui.sif python -c "
 from quantui.molecule import Molecule
 from quantui import run_in_session
 
@@ -270,13 +270,13 @@ The `.sif` is a single self-contained file — share it however is convenient:
 
 ```bash
 # Network drive / shared folder
-cp quantui-local.sif /shared/drive/
+cp quantui.sif /shared/drive/
 
 # SCP to a department server students can pull from
-scp quantui-local.sif user@server.dept.edu:/shared/tools/
+scp quantui.sif user@server.dept.edu:/shared/tools/
 
 # USB drive
-cp quantui-local.sif /media/usb/
+cp quantui.sif /media/usb/
 ```
 
 Students on Windows download the `.sif` and the `launch-app.bat` file. Then:
@@ -288,7 +288,7 @@ Students on Windows download the `.sif` and the `launch-app.bat` file. Then:
 Students on Linux/Mac run:
 
 ```bash
-apptainer run quantui-local.sif app
+apptainer run quantui.sif app
 ```
 
 No Python, no conda, no pip — everything is bundled.
@@ -316,7 +316,7 @@ Apptainer uses `/tmp` as scratch space. Redirect it to somewhere with more room:
 ```bash
 export APPTAINER_TMPDIR=~/apptainer-tmp
 mkdir -p ~/apptainer-tmp
-apptainer build quantui-local.sif apptainer/quantui-local.def
+apptainer build quantui.sif apptainer/quantui.def
 ```
 
 ### "Permission denied" or "root required"
@@ -324,7 +324,7 @@ apptainer build quantui-local.sif apptainer/quantui-local.def
 Use `--fakeroot` if your HPC or server supports it:
 
 ```bash
-apptainer build --fakeroot quantui-local.sif apptainer/quantui-local.def
+apptainer build --fakeroot quantui.sif apptainer/quantui.def
 ```
 
 On a personal machine or in WSL you typically have root access and don't
@@ -350,7 +350,7 @@ PySCF requires OpenMP. If running in a restricted environment:
 
 ```bash
 export OMP_NUM_THREADS=1
-apptainer run quantui-local.sif app
+apptainer run quantui.sif app
 ```
 
 ### XSRF 403 warning on shutdown
@@ -379,7 +379,7 @@ sudo apt-get install -y apptainer
 | Base | `continuumio/miniconda3:latest` (Debian + conda) |
 | conda-forge | jupyter, jupyterlab, ipywidgets, pyscf, numpy, scipy, matplotlib, plotly, h5py |
 | pip | voila, ase, py3dmol, requests |
-| QuantUI-local | installed from `/opt/quantui` (the repo root, copied at build time) |
+| QuantUI | installed from `/opt/quantui` (the repo root, copied at build time) |
 
 The `.git` directory and `__pycache__` folders are removed during build to
 keep the image lean.
@@ -388,7 +388,7 @@ keep the image lean.
 
 ## Updating the container version
 
-Edit `%labels` in `quantui-local.def` to bump the version string, then rebuild:
+Edit `%labels` in `quantui.def` to bump the version string, then rebuild:
 
 ```singularity
 %labels

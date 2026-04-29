@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
-from typing import IO, Optional
+from typing import IO, Any, List, Optional
 
 from .molecule import Molecule
 
@@ -64,6 +64,16 @@ class SessionResult:
     method: str
     basis: str
     formula: str
+    atom_symbols: Optional[List[str]] = None
+    mulliken_charges: Optional[List[float]] = None
+    dipole_moment_debye: Optional[float] = None
+    mp2_correlation_hartree: Optional[float] = None
+    solvent: Optional[str] = None
+    mo_energy_hartree: Optional[Any] = None  # np.ndarray (n_mo,) or (2, n_mo) UHF
+    mo_occ: Optional[Any] = None  # np.ndarray (n_mo,) or (2, n_mo) UHF
+    mo_coeff: Optional[Any] = None  # np.ndarray (n_ao, n_mo) or (2, n_ao, n_mo) UHF
+    pyscf_mol_atom: Optional[Any] = None  # list of (symbol, [x,y,z]) tuples (Angstrom)
+    pyscf_mol_basis: Optional[str] = None  # basis set string for cube generation
 
     @property
     def energy_ev(self) -> float:
@@ -101,12 +111,24 @@ class SessionResult:
 # ============================================================================
 
 
+# Maps QuantUI display names → PySCF xc strings where they differ.
+_XC_ALIAS: dict = {
+    "M06-L": "m06l",
+    "wB97X-D": "wb97x-d",
+    "CAM-B3LYP": "camb3lyp",
+    "PBE-D3": "pbe",  # base functional; D3 applied separately
+}
+# Methods that require Grimme D3 dispersion correction via pyscf.dftd3.
+_NEEDS_D3: frozenset = frozenset({"PBE-D3"})
+
+
 def run_in_session(
     molecule: Molecule,
     method: str = "RHF",
     basis: str = "6-31G",
-    verbose: int = 3,
+    verbose: int = 4,
     progress_stream: Optional[IO[str]] = None,
+    solvent: Optional[str] = None,
 ) -> SessionResult:
     """
     Run a quantum chemistry calculation in the current kernel using PySCF.
@@ -176,19 +198,54 @@ def run_in_session(
 
     # --- Select SCF method ---
     method_upper = method.upper()
+    # Normalise to the key used in _XC_ALIAS / _NEEDS_D3 (preserve original case)
+    _method_key = next((k for k in _XC_ALIAS if k.upper() == method_upper), method)
+
     if method_upper == "RHF":
         mf = scf.RHF(mol)
     elif method_upper == "UHF":
         mf = scf.UHF(mol)
+    elif method_upper == "MP2":
+        mf = scf.RHF(mol)  # MP2 runs on top of RHF
     else:
-        # DFT: auto-select RKS (closed-shell) or UKS (open-shell) based on spin
+        # DFT: resolve alias then auto-select RKS / UKS
+        xc_string = _XC_ALIAS.get(_method_key, method)
         if mol.spin == 0:
             mf = dft.RKS(mol)
         else:
             mf = dft.UKS(mol)
-        mf.xc = method  # PySCF recognises functional names directly (B3LYP, PBE, etc.)
+        mf.xc = xc_string
+        # Apply D3 dispersion correction where needed
+        if _method_key in _NEEDS_D3:
+            try:
+                from pyscf import dftd3 as _dftd3
 
-    # --- Run calculation ---
+                mf = _dftd3.dftd3(mf)
+            except ImportError:
+                if progress_stream is not None:
+                    progress_stream.write(
+                        f"\n⚠  pyscf.dftd3 not available — running {method} "
+                        "without D3 correction.\n"
+                    )
+
+    # --- Wrap with implicit solvent (PCM) if requested ---
+    if solvent is not None:
+        from . import config as _cfg
+
+        _eps = _cfg.SOLVENT_OPTIONS.get(solvent)
+        if _eps is not None:
+            try:
+                from pyscf.solvent import PCM as _PCM
+
+                mf = _PCM(mf)
+                mf.with_solvent.eps = _eps
+            except Exception:
+                if progress_stream is not None:
+                    progress_stream.write(
+                        "\n⚠  PCM solvent unavailable — running in gas phase.\n"
+                    )
+
+    # --- Run SCF ---
     try:
         energy_hartree = float(mf.kernel())
     except Exception as exc:
@@ -196,6 +253,21 @@ def run_in_session(
             f"PySCF calculation failed for {molecule.get_formula()} "
             f"({method}/{basis}): {exc}"
         ) from exc
+
+    # --- MP2 correlation energy (post-HF) ---
+    mp2_correlation_hartree: Optional[float] = None
+    if method_upper == "MP2":
+        try:
+            from pyscf import mp as _mp
+
+            _mp2 = _mp.MP2(mf)
+            _e_corr, _ = _mp2.kernel()
+            mp2_correlation_hartree = float(_e_corr)
+            energy_hartree += float(_e_corr)
+        except Exception as exc:
+            raise RuntimeError(
+                f"MP2 correction failed for {molecule.get_formula()}: {exc}"
+            ) from exc
 
     # --- Extract results from the mean-field object ---
     converged = bool(getattr(mf, "converged", False))
@@ -225,6 +297,37 @@ def run_in_session(
     except Exception:
         pass  # gap stays None — non-fatal
 
+    mulliken_charges: Optional[List[float]] = None
+    dipole_moment_debye: Optional[float] = None
+    if method_upper != "UHF":
+        try:
+            _, chg = mf.mulliken_pop(verbose=0)
+            mulliken_charges = [float(c) for c in chg]
+        except Exception:
+            pass
+        try:
+            import numpy as _np2
+
+            dip = mf.dip_moment(verbose=0)
+            dipole_moment_debye = float(_np2.linalg.norm(dip))
+        except Exception:
+            pass
+
+    # MO arrays for orbital visualization (non-fatal if extraction fails)
+    _mo_energy_ha_arr: Optional[Any] = None
+    _mo_occ_arr: Optional[Any] = None
+    _mo_coeff_arr: Optional[Any] = None
+    _pyscf_mol_atom: Optional[Any] = None
+    _pyscf_mol_basis: Optional[str] = None
+    try:
+        _mo_energy_ha_arr = _np.array(mf.mo_energy)
+        _mo_occ_arr = _np.array(mf.mo_occ)
+        _mo_coeff_arr = _np.array(mf.mo_coeff)
+        _pyscf_mol_atom = molecule.to_pyscf_format()
+        _pyscf_mol_basis = basis
+    except Exception:
+        pass
+
     formula = molecule.get_formula()
     logger.info(
         "Session calculation: %s %s/%s  E=%.8f Ha  converged=%s  iters=%d",
@@ -244,4 +347,14 @@ def run_in_session(
         method=method,
         basis=basis,
         formula=formula,
+        atom_symbols=list(molecule.atoms),
+        mulliken_charges=mulliken_charges,
+        dipole_moment_debye=dipole_moment_debye,
+        mp2_correlation_hartree=mp2_correlation_hartree,
+        solvent=solvent,
+        mo_energy_hartree=_mo_energy_ha_arr,
+        mo_occ=_mo_occ_arr,
+        mo_coeff=_mo_coeff_arr,
+        pyscf_mol_atom=_pyscf_mol_atom,
+        pyscf_mol_basis=_pyscf_mol_basis,
     )

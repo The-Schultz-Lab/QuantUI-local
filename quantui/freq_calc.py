@@ -39,10 +39,28 @@ logger = logging.getLogger(__name__)
 # 1 cm^-1 = h·c·100 / E_h  (NIST 2018 CODATA)
 _CM1_TO_HARTREE: float = 4.556335252912e-6
 
+# Exact: 1 Hartree = HARTREE_TO_EV * e * N_A joules/mol
+_HARTREE_TO_JMOL: float = 2625499.6  # J/mol per Hartree (NIST 2018 CODATA)
+
 
 # ============================================================================
 # Result dataclass
 # ============================================================================
+
+
+@dataclass
+class ThermoData:
+    """Thermochemical data from the harmonic approximation at 298.15 K / 1 atm.
+
+    All energies are in Hartrees; entropy is in J/(mol·K).
+    H and G include the SCF electronic energy.
+    """
+
+    zpve_hartree: float
+    H_hartree: float
+    S_jmol: float
+    G_hartree: float
+    temperature_k: float = 298.15
 
 
 @dataclass
@@ -75,6 +93,18 @@ class FreqResult:
     frequencies_cm1: List[float] = field(default_factory=list)
     ir_intensities: List[float] = field(default_factory=list)
     zpve_hartree: float = 0.0
+    thermo: Optional[ThermoData] = None
+    displacements: Optional[List] = None
+    """Normalized displacement vectors from PySCF harmonic analysis.
+
+    Shape: ``(n_modes, n_atoms, 3)`` stored as a nested Python list.
+    ``None`` if the Hessian calculation failed or PySCF version does not
+    provide ``norm_mode``.
+    """
+    mo_energy_hartree: Optional[List] = None
+    mo_occ: Optional[List] = None
+    pyscf_mol_atom: Optional[List] = None
+    pyscf_mol_basis: Optional[str] = None
 
     @property
     def energy_ev(self) -> float:
@@ -145,7 +175,7 @@ def run_freq_calc(
     mol.basis = basis
     mol.charge = molecule.charge
     mol.spin = molecule.multiplicity - 1
-    mol.verbose = 3
+    mol.verbose = 4
     mol.stdout = stream
     mol.build()
 
@@ -190,13 +220,34 @@ def run_freq_calc(
     except Exception:
         pass
 
+    # ── MO data for orbital energy diagram (best-effort) ─────────────────────
+    mo_energy_hartree: Optional[List] = None
+    mo_occ_list: Optional[List] = None
+    pyscf_mol_atom: Optional[List] = None
+    try:
+        import numpy as _np_mo
+
+        _moe = mf.mo_energy
+        _moo = mf.mo_occ
+        if isinstance(_moe, (list, _np_mo.ndarray)) and hasattr(_moe[0], "__len__"):
+            _moe, _moo = _moe[0], _moo[0]
+        mo_energy_hartree = _np_mo.asarray(_moe, dtype=float).tolist()
+        mo_occ_list = _np_mo.asarray(_moo, dtype=float).tolist()
+        pyscf_mol_atom = [(str(s), list(map(float, c))) for s, c in mol._atom]
+    except Exception:
+        pass
+
     # ── Hessian + frequency analysis ─────────────────────────────────────────
     frequencies_cm1: List[float] = []
     ir_intensities: List[float] = []
     zpve_hartree: float = 0.0
+    displacements: Optional[List] = None
+    thermo_data: Optional[ThermoData] = None
 
     try:
         hess_obj = mf.Hessian()
+        hess_obj.verbose = mol.verbose
+        hess_obj.stdout = stream
         h = hess_obj.kernel()
 
         freq_info = pyscf_thermo.harmonic_analysis(mol, h)
@@ -215,12 +266,91 @@ def run_freq_calc(
         # ZPVE = ½ · Σ ν_i (positive modes only), converted cm⁻¹ → Hartree
         zpve_hartree = sum(0.5 * f * _CM1_TO_HARTREE for f in frequencies_cm1 if f > 0)
 
+        # Normalized displacement vectors: shape (n_modes, n_atoms, 3).
+        # Stored as a nested Python list for JSON-friendliness and to avoid
+        # a hard numpy dependency in the dataclass.
+        try:
+            import numpy as _np
+
+            norm_mode = freq_info.get("norm_mode")
+            if norm_mode is not None:
+                # norm_mode has shape (n_modes, n_atoms*3) or (n_modes, n_atoms, 3);
+                # reshape to (n_modes, n_atoms, 3) if needed.
+                nm = _np.array(norm_mode, dtype=float)
+                n_modes_out = nm.shape[0]
+                n_atoms = len(molecule.atoms)
+                if nm.ndim == 2:
+                    nm = nm.reshape(n_modes_out, n_atoms, 3)
+                displacements = nm.tolist()
+        except Exception:
+            displacements = None
+
         # IR intensities — best-effort; silently omitted if unavailable
         try:
             ir_info = pyscf_thermo.ir_spectrum(mf, h)
             ir_intensities = [float(x) for x in ir_info["ir_inten"]]
         except Exception:
             ir_intensities = []
+
+        # Thermochemistry at 298.15 K / 1 atm — best-effort
+        try:
+            import numpy as _np
+
+            _freq_au = freq_info.get("freq_au")
+            if _freq_au is None:
+                _freq_au = _np.array(frequencies_cm1) * _CM1_TO_HARTREE
+            else:
+                # PySCF may return complex freq_au for imaginary modes; take real parts.
+                _freq_au = _np.array(
+                    [f.real if hasattr(f, "real") else f for f in _freq_au],
+                    dtype=float,
+                )
+
+            # PySCF 2.x thermo() may or may not accept the pressure argument.
+            try:
+                _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15, 101325)
+            except TypeError:
+                _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15)
+
+            # PySCF 2.x returns (value, unit_string) tuples; earlier versions
+            # return plain floats.  _tv() extracts the numeric value either way.
+            def _tv(v):
+                if isinstance(v, (tuple, list)):
+                    return float(v[0])
+                if hasattr(v, "item"):
+                    return float(v.item())
+                return float(v)
+
+            # PySCF 2.x (>=2.6) uses "H_tot"/"S_tot"; earlier versions used "H"/"S".
+            _H_raw, _S_raw, _Z_raw = None, None, None
+            for _k in ("H_tot", "H", "Htot", "H_0K"):
+                if _tout.get(_k) is not None:
+                    _H_raw = _tout[_k]
+                    break
+            for _k in ("S_tot", "S", "Stot"):
+                if _tout.get(_k) is not None:
+                    _S_raw = _tout[_k]
+                    break
+            for _k in ("ZPE", "zpve", "ZPE_vib"):
+                if _tout.get(_k) is not None:
+                    _Z_raw = _tout[_k]
+                    break
+            if _H_raw is None or _S_raw is None:
+                raise KeyError(
+                    f"Missing H or S in thermo dict (keys: {sorted(_tout.keys())})"
+                )
+            _H = _tv(_H_raw)
+            _S = _tv(_S_raw)  # J/(mol·K)
+            _zpve = _tv(_Z_raw) if _Z_raw is not None else zpve_hartree
+            _G = _H - 298.15 * _S / _HARTREE_TO_JMOL
+            thermo_data = ThermoData(
+                zpve_hartree=_zpve,
+                H_hartree=_H,
+                S_jmol=_S,
+                G_hartree=_G,
+            )
+        except Exception as _exc:
+            logger.warning("Thermochemistry failed: %s", _exc)
 
     except Exception as exc:
         logger.warning("Hessian/frequency computation failed: %s", exc)
@@ -241,4 +371,10 @@ def run_freq_calc(
         frequencies_cm1=frequencies_cm1,
         ir_intensities=ir_intensities,
         zpve_hartree=zpve_hartree,
+        thermo=thermo_data,
+        displacements=displacements,
+        mo_energy_hartree=mo_energy_hartree,
+        mo_occ=mo_occ_list,
+        pyscf_mol_atom=pyscf_mol_atom,
+        pyscf_mol_basis=basis,
     )

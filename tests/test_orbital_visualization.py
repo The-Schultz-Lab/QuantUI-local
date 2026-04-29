@@ -2,8 +2,8 @@
 Tests for quantui.orbital_visualization
 
 Covers OrbitalInfo construction, load helpers, the matplotlib energy-level
-diagram, and the summary HTML.  Cube-file functions are tested with a
-synthetic minimal cube string.
+diagram, the summary HTML, cube-file parsing, and orbital isosurface plotting.
+Cube-file functions are tested with a synthetic minimal cube string.
 """
 
 import textwrap
@@ -17,8 +17,18 @@ from quantui.orbital_visualization import (
     orbital_info_from_arrays,
     orbital_summary_html,
     parse_cube_file,
+    plot_cube_isosurface,
     plot_orbital_diagram,
 )
+
+try:
+    import pyscf  # noqa: F401
+
+    _PYSCF_AVAILABLE = True
+except ImportError:
+    _PYSCF_AVAILABLE = False
+
+_pyscf_only = pytest.mark.skipif(not _PYSCF_AVAILABLE, reason="PySCF not available")
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -266,3 +276,124 @@ class TestParseCubeFile:
         cube = parse_cube_file(minimal_cube_file)
         flat = cube["data"].flatten()
         np.testing.assert_allclose(flat, [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
+
+
+# ---------------------------------------------------------------------------
+# Cube-file isosurface (plotly) — M6.2 acceptance criteria
+# ---------------------------------------------------------------------------
+
+
+class TestPlotCubeIsosurface:
+
+    def test_returns_figure(self, minimal_cube_file):
+        import plotly.graph_objects as go
+
+        fig = plot_cube_isosurface(minimal_cube_file)
+        assert isinstance(fig, go.Figure)
+
+    def test_has_two_traces(self, minimal_cube_file):
+        fig = plot_cube_isosurface(minimal_cube_file)
+        assert len(fig.data) == 2
+
+    def test_custom_title(self, minimal_cube_file):
+        fig = plot_cube_isosurface(minimal_cube_file, title="HOMO Isosurface")
+        assert fig.layout.title.text == "HOMO Isosurface"
+
+    def test_scene_has_axis_labels(self, minimal_cube_file):
+        fig = plot_cube_isosurface(minimal_cube_file)
+        assert "Bohr" in fig.layout.scene.xaxis.title.text
+
+
+# ---------------------------------------------------------------------------
+# generate_cube_from_arrays — M6.2 acceptance criteria
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateCubeFromArrays:
+    def test_raises_importerror_without_pyscf(self, tmp_path, monkeypatch):
+        import sys
+
+        from quantui.orbital_visualization import generate_cube_from_arrays
+
+        monkeypatch.setitem(sys.modules, "pyscf", None)
+        monkeypatch.setitem(sys.modules, "pyscf.tools", None)
+        with pytest.raises(ImportError):
+            generate_cube_from_arrays(
+                [], "sto-3g", np.zeros((2, 2)), 0, tmp_path / "x.cube"
+            )
+
+    @_pyscf_only
+    def test_returns_path(self, tmp_path):
+        from pyscf import gto, scf
+
+        from quantui.orbital_visualization import generate_cube_from_arrays
+
+        mol = gto.M(atom="H 0 0 0; H 0 0 1.4", basis="sto-3g", verbose=0)
+        mf = scf.RHF(mol)
+        mf.verbose = 0
+        mf.kernel()
+        out_path = tmp_path / "homo.cube"
+        result = generate_cube_from_arrays(
+            mol_atom=[["H", [0.0, 0.0, 0.0]], ["H", [0.0, 0.0, 0.74]]],
+            mol_basis="sto-3g",
+            mo_coeff=mf.mo_coeff,
+            orbital_index=int(np.where(mf.mo_occ > 0)[0][-1]),
+            output_path=out_path,
+            nx=10,
+            ny=10,
+            nz=10,
+        )
+        assert result == out_path
+        assert out_path.exists()
+
+    @_pyscf_only
+    def test_cube_file_parseable(self, tmp_path):
+        from pyscf import gto, scf
+
+        from quantui.orbital_visualization import generate_cube_from_arrays
+
+        mol = gto.M(atom="H 0 0 0; H 0 0 1.4", basis="sto-3g", verbose=0)
+        mf = scf.RHF(mol)
+        mf.verbose = 0
+        mf.kernel()
+        out_path = tmp_path / "test.cube"
+        generate_cube_from_arrays(
+            mol_atom=[["H", [0.0, 0.0, 0.0]], ["H", [0.0, 0.0, 0.74]]],
+            mol_basis="sto-3g",
+            mo_coeff=mf.mo_coeff,
+            orbital_index=0,
+            output_path=out_path,
+            nx=10,
+            ny=10,
+            nz=10,
+        )
+        cube = parse_cube_file(out_path)
+        assert cube["data"].shape == (10, 10, 10)
+
+    @_pyscf_only
+    def test_uhf_mo_coeff_uses_alpha_spin(self, tmp_path):
+        from pyscf import gto, scf
+
+        from quantui.orbital_visualization import generate_cube_from_arrays
+
+        mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, charge=0, verbose=0)
+        mf = scf.UHF(mol)
+        mf.verbose = 0
+        mf.kernel()
+        out_path = tmp_path / "uhf.cube"
+        result = generate_cube_from_arrays(
+            mol_atom=[["H", [0.0, 0.0, 0.0]]],
+            mol_basis="sto-3g",
+            mo_coeff=mf.mo_coeff,  # shape (2, n_ao, n_mo)
+            orbital_index=0,
+            output_path=out_path,
+            nx=8,
+            ny=8,
+            nz=8,
+            spin=1,
+        )
+        assert result.exists()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

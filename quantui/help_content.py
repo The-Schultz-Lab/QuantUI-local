@@ -23,6 +23,29 @@ import ipywidgets as widgets
 # ---------------------------------------------------------------------------
 
 HELP_TOPICS: Dict[str, Dict[str, str]] = {
+    "getting_started": {
+        "title": "Getting Started",
+        "body": (
+            "<p><b>How to run a calculation:</b></p>"
+            "<ol>"
+            "<li>Select or enter a molecule in <b>Molecule Input</b> (XYZ text, "
+            "SMILES string, library preset, or PubChem search)</li>"
+            "<li>Choose a calculation type, method, and basis set in "
+            "<b>Calculation Setup</b></li>"
+            "<li>Click <b>Run Calculation</b> — results appear in the "
+            "<b>Results</b> tab immediately</li>"
+            "<li>View orbital diagrams, trajectories, and spectra in the "
+            "<b>Analysis</b> tab</li>"
+            "<li>Optionally compare results in <b>Compare</b>, or use "
+            "<b>History</b> to reload a previous run</li>"
+            "</ol>"
+            "<p><b>Platform note:</b> PySCF calculations require Linux, macOS, "
+            "or WSL. On Windows, run the pre-built container: "
+            "<code>apptainer run quantui.sif</code></p>"
+            "<p>Each dropdown in the Calculate tab has a <b>?</b> button for "
+            "context-sensitive help on that specific option.</p>"
+        ),
+    },
     "method": {
         "title": "RHF vs UHF — which method should I use?",
         "body": (
@@ -182,7 +205,7 @@ HELP_TOPICS: Dict[str, Dict[str, str]] = {
             "and G. K.-L. Chan, "
             "<i>J. Chem. Phys.</i> <b>153</b>, 024109 (2020)."
             "</blockquote>"
-            "<p>Also cite QuantUI-local (your instructor will provide the reference).</p>"
+            "<p>Also cite QuantUI (your instructor will provide the reference).</p>"
             "<p><b>BibTeX key:</b> <code>Sun2020</code> — search for "
             "'PySCF 2020' in Google Scholar or your reference manager.</p>"
         ),

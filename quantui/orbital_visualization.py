@@ -189,7 +189,7 @@ def plot_orbital_diagram(
     matplotlib.figure.Figure
     """
     import matplotlib.patches as mpatches
-    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
 
     energies = info.mo_energies_ev
     n_occ = info.n_occupied
@@ -202,7 +202,10 @@ def plot_orbital_diagram(
     subset = energies[start:end]
     subset_occ = np.arange(start, end) < n_occ
 
-    fig, ax = plt.subplots(figsize=figsize)
+    # Use Figure directly (not plt.subplots) to avoid triggering the IPython
+    # GUI event loop in interactive / test environments.
+    fig = Figure(figsize=figsize)
+    ax = fig.add_subplot(111)
 
     # Draw energy levels
     line_half_width = 0.3
@@ -282,6 +285,174 @@ def plot_orbital_diagram(
     ax.legend(handles=[occ_patch, virt_patch], loc="lower right", fontsize=9)
 
     fig.tight_layout()
+    return fig
+
+
+# ============================================================================
+# Plotly interactive energy-level diagram
+# ============================================================================
+
+
+def plot_orbital_diagram_plotly(
+    info: OrbitalInfo,
+    *,
+    max_orbitals: int = 20,
+    yrange: Optional[Tuple[float, float]] = None,
+    title: Optional[str] = None,
+    width: int = 380,
+    height: int = 460,
+):
+    """Interactive Plotly orbital energy-level diagram.
+
+    Returns a ``plotly.graph_objects.Figure`` suitable for embedding in a
+    ``go.FigureWidget``.  Each MO is drawn as a short horizontal line;
+    hover shows the MO index and energy in eV.  HOMO/LUMO are highlighted
+    with labels and a gap annotation.
+
+    Parameters
+    ----------
+    info:
+        Orbital data.
+    max_orbitals:
+        Maximum number of MOs to display, centred on the HOMO–LUMO gap.
+    yrange:
+        Explicit ``(y_min, y_max)`` in eV; auto-computed when ``None``.
+    title:
+        Custom plot title; defaults to ``"Orbital Energy Levels — {formula}"``.
+    width, height:
+        Figure dimensions in pixels.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+    """
+    import plotly.graph_objects as go
+
+    energies = info.mo_energies_ev
+    n_occ = info.n_occupied
+    n_total = len(energies)
+
+    half = max_orbitals // 2
+    start = max(0, n_occ - half)
+    end = min(n_total, n_occ + half)
+
+    LHW = 0.3  # half-width of each horizontal line in x
+
+    traces = []
+    for idx in range(start, end):
+        e = float(energies[idx])
+        is_homo = idx == n_occ - 1
+        is_lumo = idx == n_occ
+        is_occ = idx < n_occ
+
+        if is_homo:
+            color, lw = "#2171b5", 3.0
+            hover = f"MO #{idx + 1} — HOMO<br>{e:+.4f} eV"
+        elif is_lumo:
+            color, lw = "#e6550d", 3.0
+            hover = f"MO #{idx + 1} — LUMO<br>{e:+.4f} eV"
+        elif is_occ:
+            color, lw = "#2171b5", 1.5
+            hover = f"MO #{idx + 1} (occupied)<br>{e:+.4f} eV"
+        else:
+            color, lw = "#9e9e9e", 1.5
+            hover = f"MO #{idx + 1} (virtual)<br>{e:+.4f} eV"
+
+        traces.append(
+            go.Scatter(
+                x=[-LHW, LHW],
+                y=[e, e],
+                mode="lines",
+                line=dict(color=color, width=lw),
+                hovertemplate=hover + "<extra></extra>",
+                showlegend=False,
+                name="",
+            )
+        )
+
+    homo_e = info.homo_energy_ev
+    lumo_e = info.lumo_energy_ev
+    gap = info.homo_lumo_gap_ev
+    bracket_x = -LHW - 0.15
+
+    annotations = [
+        dict(
+            x=LHW + 0.04,
+            y=homo_e,
+            xref="x",
+            yref="y",
+            text="<b>HOMO</b>",
+            showarrow=False,
+            font=dict(size=11, color="#2171b5"),
+            xanchor="left",
+            yanchor="middle",
+        ),
+        dict(
+            x=LHW + 0.04,
+            y=lumo_e,
+            xref="x",
+            yref="y",
+            text="<b>LUMO</b>",
+            showarrow=False,
+            font=dict(size=11, color="#e6550d"),
+            xanchor="left",
+            yanchor="middle",
+        ),
+        dict(
+            x=bracket_x,
+            y=homo_e,
+            ax=bracket_x,
+            ay=lumo_e,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            text=f"<b>{gap:.2f} eV</b>",
+            font=dict(size=10, color="#e6550d"),
+            arrowhead=2,
+            arrowwidth=1.5,
+            arrowcolor="#e6550d",
+            xanchor="right",
+        ),
+    ]
+
+    subset = energies[start:end]
+    span = float(subset.max()) - float(subset.min())
+    margin = max(0.5, span * 0.08 + 0.5)
+    if yrange is None:
+        y_min = float(subset.min()) - margin
+        y_max = float(subset.max()) + margin
+    else:
+        y_min, y_max = yrange
+
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        width=width,
+        height=height,
+        margin=dict(l=60, r=110, t=50, b=30),
+        title=dict(
+            text=title or f"Orbital Energy Levels — {info.formula}",
+            font=dict(size=13, family="Arial"),
+        ),
+        xaxis=dict(
+            range=[-0.9, 0.9],
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            fixedrange=True,
+        ),
+        yaxis=dict(
+            title="Energy (eV)",
+            range=[y_min, y_max],
+            showgrid=True,
+            gridcolor="#e5e7eb",
+            tickformat=".1f",
+        ),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        annotations=annotations,
+        hovermode="closest",
+    )
     return fig
 
 
@@ -387,6 +558,86 @@ def generate_cube_file(
         mol,
         str(output_path),
         mo_coeff[:, orbital_index],
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        margin=margin,
+    )
+    logger.info("Wrote cube file: %s", output_path)
+    return output_path
+
+
+def generate_cube_from_arrays(
+    mol_atom: list,
+    mol_basis: str,
+    mo_coeff: np.ndarray,
+    orbital_index: int,
+    output_path: Path,
+    *,
+    nx: int = 60,
+    ny: int = 60,
+    nz: int = 60,
+    margin: float = 5.0,
+    spin: int = 0,
+) -> Path:
+    """
+    Generate a cube file from in-session MO data (no ``.npz`` file required).
+
+    Unlike :func:`generate_cube_file`, this function takes the atom list
+    and MO coefficient array directly, as stored in :class:`SessionResult`
+    or :class:`OptimizationResult`.
+
+    Parameters
+    ----------
+    mol_atom : list
+        Atom list in PySCF format — list of ``(symbol, [x, y, z])`` tuples
+        with coordinates in Angstrom.
+    mol_basis : str
+        Basis set string (e.g. ``'6-31G*'``).
+    mo_coeff : ndarray
+        MO coefficient matrix, shape ``(n_ao, n_mo)`` for RHF or
+        ``(2, n_ao, n_mo)`` for UHF.  Alpha-spin coefficients are used for UHF.
+    orbital_index : int
+        0-based MO index to visualise.
+    output_path : Path
+        Where to write the ``.cube`` file.
+    nx, ny, nz : int
+        Grid resolution along each axis.
+    margin : float
+        Extra space (Bohr) beyond atomic extents.
+
+    Returns
+    -------
+    Path
+        The written cube file path.
+
+    Raises
+    ------
+    ImportError
+        If PySCF is not available.
+    """
+    try:
+        from pyscf import gto
+        from pyscf.tools import cubegen
+    except ImportError as exc:
+        raise ImportError(
+            "PySCF is required for cube file generation (Linux/WSL only).\n"
+            "  conda install -c conda-forge pyscf"
+        ) from exc
+
+    mol = gto.M(atom=mol_atom, basis=mol_basis, unit="Angstrom", spin=spin)
+
+    coeff = np.asarray(mo_coeff)
+    if coeff.ndim == 3:
+        coeff = coeff[0]  # UHF: use alpha spin
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cubegen.orbital(
+        mol,
+        str(output_path),
+        coeff[:, orbital_index],
         nx=nx,
         ny=ny,
         nz=nz,

@@ -1,5 +1,5 @@
 """
-QuantUI-local Security Module
+QuantUI Security Module
 
 Provides a catchable SecurityError exception for the local teaching interface.
 

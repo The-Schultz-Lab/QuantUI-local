@@ -3,7 +3,7 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "quantui-local"
+name = "quantui"
 version = "0.1.0"
 description = "Educational quantum chemistry interface for local PySCF calculations"
 readme = "README.md"
@@ -31,6 +31,7 @@ dependencies = [
     "py3Dmol>=2.0.0",
     "matplotlib>=3.7.0",
     "plotly>=5.0.0",
+    "plotlymol>=0.2.1",
 ]
 
 [tool.setuptools]
@@ -38,9 +39,11 @@ packages = ["quantui"]
 
 [project.optional-dependencies]
 # PySCF requires Linux/macOS/WSL — not available on Windows natively.
-# Use the Apptainer container (apptainer/quantui-local.def) for Windows.
+# Use the Apptainer container (apptainer/quantui.def) for Windows.
+# pyscf-properties provides pyscf.prop (NMR, etc.) — moved out of core in PySCF 2.0.
 pyscf = [
     "pyscf>=2.3.0",
+    "pyscf-properties",
 ]
 
 # ASE: structure I/O, extended molecule library, geometry optimisation
@@ -103,6 +106,10 @@ ignore = [
     "E722",   # bare except — cosmetic, verbatim copies
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# __init__.py sets up a NullHandler before deferred optional imports — E402 is intentional
+"quantui/__init__.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["quantui"]
 
@@ -125,6 +132,7 @@ module = [
     "psutil",
     "ase.*",
     "rdkit.*",
+    "plotlymol3d.*",
 ]
 ignore_missing_imports = true
 

@@ -117,13 +117,21 @@ class TestDefaultWidgetValues:
 class TestTabStructure:
     """root_tab has the correct number and titles of tabs."""
 
-    def test_five_tabs(self):
+    def test_seven_tabs(self):
         app = QuantUIApp()
-        assert len(app.root_tab.children) == 5
+        assert len(app.root_tab.children) == 7
 
     def test_tab_titles(self):
         app = QuantUIApp()
-        expected = ["Calculate", "History", "Compare", "Output", "Help"]
+        expected = [
+            "Calculate",
+            "Results",
+            "Analysis",
+            "History",
+            "Compare",
+            "Log",
+            "Status",
+        ]
         for i, title in enumerate(expected):
             assert app.root_tab.get_title(i) == title
 
@@ -340,3 +348,906 @@ class TestAvailabilityFlags:
 
         app = QuantUIApp()
         assert app._preopt_available == _PREOPT_AVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# M3.3 — result log accordion and directory label
+# ---------------------------------------------------------------------------
+
+
+class TestResultLogAccordion:
+    """_result_log_accordion and _result_dir_label exist and start hidden."""
+
+    def test_log_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_result_log_accordion")
+        assert isinstance(app._result_log_accordion, widgets.Accordion)
+
+    def test_log_accordion_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._result_log_accordion.layout.display == "none"
+
+    def test_log_accordion_initially_collapsed(self):
+        app = QuantUIApp()
+        assert app._result_log_accordion.selected_index is None
+
+    def test_result_dir_label_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_result_dir_label")
+        assert isinstance(app._result_dir_label, widgets.HTML)
+
+    def test_result_dir_label_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._result_dir_label.layout.display == "none"
+
+    def test_last_result_dir_initially_none(self):
+        app = QuantUIApp()
+        assert app._last_result_dir is None
+
+    def test_on_run_clicked_clears_log(self):
+        """_on_run_clicked must hide log accordion and clear dir label."""
+        app = QuantUIApp()
+        # Simulate a previous result being present
+        app._result_log_accordion.layout.display = ""
+        app._result_dir_label.layout.display = ""
+        app._result_dir_label.value = "Saved to: /some/path"
+
+        with patch.object(app, "_do_run"):
+            app._on_run_clicked(None)
+
+        assert app._result_log_accordion.layout.display == "none"
+        assert app._result_dir_label.layout.display == "none"
+        assert app._result_dir_label.value == ""
+
+    def test_show_result_log_populates_widgets(self, tmp_path):
+        """_show_result_log() sets dir label and reveals accordion."""
+        log_text = "SCF converged in 10 cycles."
+        log_file = tmp_path / "pyscf.log"
+        log_file.write_text(log_text, encoding="utf-8")
+
+        app = QuantUIApp()
+        app._show_result_log(tmp_path, log_text)
+
+        assert str(tmp_path) in app._result_dir_label.value
+        assert app._result_dir_label.layout.display == ""
+        assert app._result_log_accordion.layout.display == ""
+
+    def test_show_result_log_falls_back_to_string(self, tmp_path):
+        """_show_result_log() uses in-memory log_text if pyscf.log absent."""
+        log_text = "fallback log content"
+        app = QuantUIApp()
+        empty_dir = tmp_path / "no_log_here"
+        empty_dir.mkdir()
+        app._show_result_log(empty_dir, log_text)
+
+        assert app._result_log_accordion.layout.display == ""
+
+
+# ---------------------------------------------------------------------------
+# M3.4 — Structure file exports (XYZ, MOL/SDF, PDB)
+# ---------------------------------------------------------------------------
+
+
+class TestStructureExportButtons:
+    """export_xyz_btn, export_mol_btn, export_pdb_btn exist and start disabled."""
+
+    def test_export_xyz_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "export_xyz_btn")
+        assert isinstance(app.export_xyz_btn, widgets.Button)
+
+    def test_export_mol_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "export_mol_btn")
+        assert isinstance(app.export_mol_btn, widgets.Button)
+
+    def test_export_pdb_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "export_pdb_btn")
+        assert isinstance(app.export_pdb_btn, widgets.Button)
+
+    def test_struct_export_status_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "struct_export_status")
+
+    def test_export_xyz_btn_disabled_initially(self):
+        app = QuantUIApp()
+        assert app.export_xyz_btn.disabled is True
+
+    def test_export_xyz_btn_enabled_after_set_molecule(self):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        assert app.export_xyz_btn.disabled is False
+
+    def test_export_accordion_title_is_export(self):
+        app = QuantUIApp()
+        assert app.advanced_accordion.get_title(0) == "Export"
+
+
+class TestExportXYZCallback:
+    """_on_export_xyz writes a valid XYZ file."""
+
+    def test_xyz_file_written_to_result_dir(self, tmp_path):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        app._last_result_dir = tmp_path
+
+        app._on_export_xyz(None)
+
+        xyz_files = list(tmp_path.glob("*.xyz"))
+        assert len(xyz_files) == 1
+
+    def test_xyz_file_contains_atom_count(self, tmp_path):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        app._last_result_dir = tmp_path
+
+        app._on_export_xyz(None)
+
+        content = list(tmp_path.glob("*.xyz"))[0].read_text()
+        first_line = content.splitlines()[0].strip()
+        assert first_line == "3"  # water has 3 atoms
+
+    def test_xyz_status_shows_saved_path(self, tmp_path):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        app._last_result_dir = tmp_path
+
+        app._on_export_xyz(None)
+
+        assert "Saved" in app.struct_export_status.value
+
+    def test_xyz_no_molecule_shows_error(self):
+        app = QuantUIApp()
+        app._on_export_xyz(None)
+        assert "molecule" in app.struct_export_status.value.lower()
+
+
+class TestExportMoleculeAndLabel:
+    """_export_molecule_and_label returns correct molecule and labels."""
+
+    def test_returns_current_molecule_when_no_result(self):
+        app = QuantUIApp()
+        water = _water()
+        app._set_molecule(water)
+        mol, method, basis = app._export_molecule_and_label()
+        assert mol is water
+
+    def test_method_falls_back_to_dropdown(self):
+        app = QuantUIApp()
+        app._set_molecule(_water())
+        _, method, _ = app._export_molecule_and_label()
+        assert method == app.method_dd.value
+
+
+class TestMoleculeToRdkit:
+    """_molecule_to_rdkit does not raise; returns RDKit mol or None."""
+
+    def test_does_not_raise_for_water(self):
+        result = QuantUIApp._molecule_to_rdkit(_water())
+        # Either succeeds or returns None — must not raise
+        assert result is None or result is not None
+
+
+# ---------------------------------------------------------------------------
+# M4.1 — Extended DFT functional list
+# ---------------------------------------------------------------------------
+
+
+class TestExtendedDFTFunctionals:
+    """New functionals appear in method_dd options."""
+
+    def test_wb97xd_in_dropdown(self):
+        app = QuantUIApp()
+        assert "wB97X-D" in app.method_dd.options
+
+    def test_cam_b3lyp_in_dropdown(self):
+        app = QuantUIApp()
+        assert "CAM-B3LYP" in app.method_dd.options
+
+    def test_m06l_in_dropdown(self):
+        app = QuantUIApp()
+        assert "M06-L" in app.method_dd.options
+
+    def test_hse06_in_dropdown(self):
+        app = QuantUIApp()
+        assert "HSE06" in app.method_dd.options
+
+    def test_pbe_d3_in_dropdown(self):
+        app = QuantUIApp()
+        assert "PBE-D3" in app.method_dd.options
+
+    def test_mp2_in_dropdown(self):
+        app = QuantUIApp()
+        assert "MP2" in app.method_dd.options
+
+
+# ---------------------------------------------------------------------------
+# M4.2 — MP2 energy
+# ---------------------------------------------------------------------------
+
+
+class TestMP2SessionResult:
+    """mp2_correlation_hartree field on SessionResult."""
+
+    def test_mp2_corr_defaults_to_none(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.0,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="MP2",
+            basis="STO-3G",
+            formula="H2O",
+        )
+        assert r.mp2_correlation_hartree is None
+
+    def test_mp2_corr_stored(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.3,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="MP2",
+            basis="STO-3G",
+            formula="H2O",
+            mp2_correlation_hartree=-0.3,
+        )
+        assert r.mp2_correlation_hartree == pytest.approx(-0.3)
+
+
+class TestMP2FormatResult:
+    """_format_result shows HF reference and MP2 correlation when present."""
+
+    def test_hf_reference_shown_when_mp2(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.3,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="MP2",
+            basis="STO-3G",
+            formula="H2O",
+            mp2_correlation_hartree=-0.3,
+        )
+        app = QuantUIApp()
+        html = app._format_result(r)
+        assert "HF reference" in html
+        assert "MP2 correlation" in html
+
+
+# ---------------------------------------------------------------------------
+# M4.3 — Implicit solvent (PCM)
+# ---------------------------------------------------------------------------
+
+
+class TestSolventWidgets:
+    """solvent_cb and solvent_dd exist and behave correctly."""
+
+    def test_solvent_cb_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "solvent_cb")
+        assert isinstance(app.solvent_cb, widgets.Checkbox)
+
+    def test_solvent_dd_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "solvent_dd")
+        assert isinstance(app.solvent_dd, widgets.Dropdown)
+
+    def test_solvent_dd_hidden_initially(self):
+        app = QuantUIApp()
+        assert app.solvent_dd.layout.display == "none"
+
+    def test_solvent_dd_revealed_when_cb_checked(self):
+        app = QuantUIApp()
+        app.solvent_cb.value = True
+        assert app.solvent_dd.layout.display == ""
+
+    def test_solvent_dd_hidden_when_cb_unchecked(self):
+        app = QuantUIApp()
+        app.solvent_cb.value = True
+        app.solvent_cb.value = False
+        assert app.solvent_dd.layout.display == "none"
+
+    def test_water_is_solvent_option(self):
+        app = QuantUIApp()
+        assert "Water" in app.solvent_dd.options
+
+    def test_solvent_field_on_session_result(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.0,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="RHF",
+            basis="STO-3G",
+            formula="H2O",
+            solvent="Water",
+        )
+        assert r.solvent == "Water"
+
+    def test_solvent_shown_in_format_result(self):
+        from quantui.session_calc import SessionResult
+
+        r = SessionResult(
+            energy_hartree=-76.0,
+            homo_lumo_gap_ev=None,
+            converged=True,
+            n_iterations=10,
+            method="RHF",
+            basis="STO-3G",
+            formula="H2O",
+            solvent="Ethanol",
+        )
+        app = QuantUIApp()
+        html = app._format_result(r)
+        assert "Ethanol" in html
+        assert "PCM" in html
+
+
+# ---------------------------------------------------------------------------
+# M-CAL — Calibration UI widgets
+# ---------------------------------------------------------------------------
+
+
+class TestCalibrationWidgets:
+    """Calibration accordion and its child widgets exist in correct initial state."""
+
+    def test_cal_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_cal_accordion")
+        assert isinstance(app._cal_accordion, widgets.Accordion)
+
+    def test_cal_run_btn_exists(self):
+        app = QuantUIApp()
+        assert isinstance(app._cal_run_btn, widgets.Button)
+
+    def test_cal_stop_btn_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._cal_stop_btn.layout.display == "none"
+
+    def test_cal_progress_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._cal_progress.layout.display == "none"
+
+    def test_cal_step_label_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._cal_step_label.layout.display == "none"
+
+    def test_cal_run_btn_disabled_when_pyscf_unavailable(self):
+        from quantui.app import _PYSCF_AVAILABLE
+
+        app = QuantUIApp()
+        # Button state must match module-level availability flag
+        assert app._cal_run_btn.disabled == (not _PYSCF_AVAILABLE)
+
+    def test_cal_progress_max_equals_suite_length(self):
+        from quantui.benchmarks import BENCHMARK_SUITE
+
+        app = QuantUIApp()
+        assert app._cal_progress.max == len(BENCHMARK_SUITE)
+
+    def test_on_cal_stop_sets_event(self):
+        import threading
+
+        app = QuantUIApp()
+        app._cal_stop_event = threading.Event()
+        app._on_cal_stop(None)
+        assert app._cal_stop_event.is_set()
+
+
+# ---------------------------------------------------------------------------
+# M5 — NMR Shielding widgets
+# ---------------------------------------------------------------------------
+
+
+class TestNMRWidgets:
+    """NMR Shielding option exists and callback wires correctly."""
+
+    def test_nmr_in_calc_type_options(self):
+        app = QuantUIApp()
+        assert "NMR Shielding" in app.calc_type_dd.options
+
+    def test_calc_type_dd_has_six_options(self):
+        app = QuantUIApp()
+        assert len(app.calc_type_dd.options) == 6
+
+    def test_nmr_calc_type_shows_note(self):
+        app = QuantUIApp()
+        app.calc_type_dd.value = "NMR Shielding"
+        # calc_extra_opts should contain an HTML note about basis recommendations
+        assert len(app.calc_extra_opts.children) == 1
+        note = app.calc_extra_opts.children[0]
+        assert isinstance(note, widgets.HTML)
+        assert "6-31G*" in note.value
+
+    def test_nmr_note_mentions_sto3g_warning(self):
+        app = QuantUIApp()
+        app.calc_type_dd.value = "NMR Shielding"
+        note = app.calc_extra_opts.children[0]
+        assert "STO-3G" in note.value
+
+    def test_switching_away_from_nmr_clears_opts(self):
+        app = QuantUIApp()
+        app.calc_type_dd.value = "NMR Shielding"
+        app.calc_type_dd.value = "Single Point"
+        assert len(app.calc_extra_opts.children) == 0
+
+
+class TestFormatNMRResult:
+    """_format_nmr_result produces correct HTML."""
+
+    def _make_nmr(self, basis="6-31G*", converged=True):
+        from quantui.nmr_calc import NMRResult
+
+        return NMRResult(
+            atom_symbols=["O", "H", "H"],
+            shielding_iso_ppm=[320.1, 28.5, 28.5],
+            chemical_shifts_ppm={1: 3.22, 2: 3.22},
+            method="B3LYP",
+            basis=basis,
+            formula="H2O",
+            converged=converged,
+        )
+
+    def test_returns_string(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert isinstance(html, str)
+
+    def test_contains_formula(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert "H2O" in html
+
+    def test_contains_method_and_basis(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert "B3LYP" in html
+        assert "6-31G*" in html
+
+    def test_h_shifts_table_present(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr())
+        assert "¹H" in html
+        assert "3.22" in html
+
+    def test_sto3g_warning_shown(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr(basis="STO-3G"))
+        assert "STO-3G" in html
+        assert "qualitative" in html
+
+    def test_no_sto3g_warning_for_631g(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr(basis="6-31G*"))
+        assert "qualitative" not in html
+
+    def test_not_converged_shows_warning(self):
+        app = QuantUIApp()
+        html = app._format_nmr_result(self._make_nmr(converged=False))
+        assert "caution" in html
+
+    def test_no_hc_atoms_shows_empty_message(self):
+
+        from quantui.nmr_calc import NMRResult
+
+        r = NMRResult(
+            atom_symbols=["N", "N"],
+            shielding_iso_ppm=[100.0, 100.0],
+            chemical_shifts_ppm={},
+            method="RHF",
+            basis="STO-3G",
+            formula="N2",
+        )
+        app = QuantUIApp()
+        html = app._format_nmr_result(r)
+        assert "No ¹H or ¹³C" in html
+
+
+# ---------------------------------------------------------------------------
+# M-IR — IR Spectrum accordion widgets
+# ---------------------------------------------------------------------------
+
+
+class TestIRSpectrumWidgets:
+    """IR Spectrum accordion and controls exist in correct initial state."""
+
+    def test_ir_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_ir_accordion")
+        assert isinstance(app._ir_accordion, widgets.Accordion)
+
+    def test_ir_accordion_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._ir_accordion.layout.display == "none"
+
+    def test_ir_mode_toggle_exists(self):
+        app = QuantUIApp()
+        assert isinstance(app._ir_mode_toggle, widgets.ToggleButtons)
+
+    def test_ir_mode_toggle_default_stick(self):
+        app = QuantUIApp()
+        assert app._ir_mode_toggle.value == "Stick"
+
+    def test_ir_mode_toggle_has_two_options(self):
+        app = QuantUIApp()
+        assert set(app._ir_mode_toggle.options) == {"Stick", "Broadened"}
+
+    def test_fwhm_slider_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._ir_fwhm_slider.layout.display == "none"
+
+    def test_fwhm_slider_default_20(self):
+        app = QuantUIApp()
+        assert app._ir_fwhm_slider.value == 20.0
+
+    def test_fwhm_slider_range(self):
+        app = QuantUIApp()
+        assert app._ir_fwhm_slider.min == 5.0
+        assert app._ir_fwhm_slider.max == 100.0
+
+
+class TestShowIRSpectrum:
+    """_show_ir_spectrum reveals accordion and wires mode toggle."""
+
+    def _make_freq_result(self):
+        from unittest.mock import MagicMock
+
+        r = MagicMock()
+        r.frequencies_cm1 = [500.0, 1000.0, 3000.0]
+        r.ir_intensities = [10.0, 50.0, 5.0]
+        return r
+
+    def test_show_ir_spectrum_returns_true_with_data(self):
+        app = QuantUIApp()
+        app._last_ir_freqs = []
+        app._last_ir_ints = []
+        ok = app._show_ir_spectrum(self._make_freq_result())
+        assert ok is True
+
+    def test_accordion_revealed_via_activate(self):
+        # _show_ir_spectrum populates widget; _activate_ana_panel reveals it.
+        app = QuantUIApp()
+        app._show_ir_spectrum(self._make_freq_result())
+        assert app._ir_accordion.layout.display == "none"  # still hidden
+        app._activate_ana_panel("IR Spectrum")
+        assert app._ir_accordion.layout.display == ""
+
+    def test_fwhm_slider_shown_when_broadened(self):
+        app = QuantUIApp()
+        app._show_ir_spectrum(self._make_freq_result())
+        app._ir_mode_toggle.value = "Broadened"
+        assert app._ir_fwhm_slider.layout.display == ""
+
+    def test_fwhm_slider_hidden_when_stick(self):
+        app = QuantUIApp()
+        app._show_ir_spectrum(self._make_freq_result())
+        app._ir_mode_toggle.value = "Broadened"
+        app._ir_mode_toggle.value = "Stick"
+        assert app._ir_fwhm_slider.layout.display == "none"
+
+
+# ---------------------------------------------------------------------------
+# M6 — Orbital Diagram accordion
+# ---------------------------------------------------------------------------
+
+
+class TestOrbitalAccordionWidgets:
+    """Orbital accordion widgets exist and have the correct initial state."""
+
+    def test_orb_accordion_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_orb_accordion")
+
+    def test_orb_accordion_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._orb_accordion.layout.display == "none"
+
+    def test_orb_diagram_html_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_orb_diagram_html")
+
+    def test_orb_toggle_has_four_options(self):
+        app = QuantUIApp()
+        assert set(app._orb_toggle.options) == {"HOMO-1", "HOMO", "LUMO", "LUMO+1"}
+
+    def test_orb_toggle_default_homo(self):
+        app = QuantUIApp()
+        assert app._orb_toggle.value == "HOMO"
+
+    def test_orb_iso_controls_hidden_initially(self):
+        app = QuantUIApp()
+        assert app._orb_iso_controls.layout.display == "none"
+
+    def test_orb_accordion_hidden_after_run_clicked(self):
+        app = QuantUIApp()
+        app._orb_accordion.layout.display = ""
+        app._on_run_clicked(None)
+        assert app._orb_accordion.layout.display == "none"
+
+
+class TestShowOrbitalDiagram:
+    """_show_orbital_diagram reveals accordion when MO data is present."""
+
+    def _make_result_with_mo(self):
+        from unittest.mock import MagicMock
+
+        import numpy as np
+
+        r = MagicMock()
+        r.formula = "H2O"
+        r.mo_energy_hartree = np.array([-1.5, -0.8, 0.2, 0.9])
+        r.mo_occ = np.array([2.0, 2.0, 0.0, 0.0])
+        r.mo_coeff = None
+        r.pyscf_mol_atom = None
+        r.pyscf_mol_basis = None
+        return r
+
+    def test_show_orbital_diagram_returns_true_with_mo_data(self):
+        app = QuantUIApp()
+        ok = app._show_orbital_diagram(self._make_result_with_mo())
+        assert ok is True
+
+    def test_accordion_revealed_via_activate(self):
+        # _show_orbital_diagram populates widget; _activate_ana_panel reveals it.
+        app = QuantUIApp()
+        app._show_orbital_diagram(self._make_result_with_mo())
+        assert app._orb_accordion.layout.display == "none"  # still hidden
+        app._activate_ana_panel("Energies")
+        assert app._orb_accordion.layout.display == ""
+
+    def test_accordion_stays_hidden_when_no_mo_data(self):
+        from unittest.mock import MagicMock
+
+        app = QuantUIApp()
+        r = MagicMock()
+        r.mo_energy_hartree = None
+        r.mo_occ = None
+        app._show_orbital_diagram(r)
+        assert app._orb_accordion.layout.display == "none"
+
+    def test_diagram_html_populated(self):
+        app = QuantUIApp()
+        app._show_orbital_diagram(self._make_result_with_mo())
+        # plotly renders an interactive <div>; matplotlib fallback renders <img>
+        val = app._orb_diagram_html.value
+        assert "<div" in val or "<img" in val
+
+    def test_isosurface_controls_hidden_when_no_mo_coeff(self):
+        app = QuantUIApp()
+        app._show_orbital_diagram(self._make_result_with_mo())
+        # mo_coeff is None in mock → iso controls stay hidden
+        assert app._orb_iso_controls.layout.display == "none"
+
+
+# ---------------------------------------------------------------------------
+# M-UI — Results tab widgets (M-UI.8)
+# ---------------------------------------------------------------------------
+
+
+class TestResultsTab:
+    """Results tab panel contains the expected widgets and backward-compat alias."""
+
+    def test_results_tab_panel_is_vbox(self):
+        app = QuantUIApp()
+        import ipywidgets as widgets
+
+        assert isinstance(app.results_tab_panel, widgets.VBox)
+
+    def test_results_panel_alias_points_to_same_object(self):
+        app = QuantUIApp()
+        assert app.results_panel is app.results_tab_panel
+
+    def test_results_tab_contains_result_output(self):
+        app = QuantUIApp()
+        assert app.result_output in app.results_tab_panel.children
+
+    def test_to_analysis_btn_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._to_analysis_btn.layout.display == "none"
+
+    def test_advanced_accordion_in_results_tab(self):
+        app = QuantUIApp()
+        assert app.advanced_accordion in app.results_tab_panel.children
+
+
+# ---------------------------------------------------------------------------
+# M-UI — Analysis tab widgets (M-UI.8)
+# ---------------------------------------------------------------------------
+
+
+class TestAnalysisTab:
+    """Analysis tab panel contains the expected widgets and backward-compat alias."""
+
+    def test_analysis_tab_panel_is_vbox(self):
+        app = QuantUIApp()
+        import ipywidgets as widgets
+
+        assert isinstance(app.analysis_tab_panel, widgets.VBox)
+
+    def test_post_calc_panel_alias_points_to_same_object(self):
+        app = QuantUIApp()
+        assert app.post_calc_panel is app.analysis_tab_panel
+
+    def test_analysis_context_label_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_analysis_context_lbl")
+        import ipywidgets as widgets
+
+        assert isinstance(app._analysis_context_lbl, widgets.HTML)
+
+    def test_analysis_empty_html_initially_hidden(self):
+        """Empty-state message starts hidden; it appears only when a non-analysis calc completes."""
+        app = QuantUIApp()
+        assert app._analysis_empty_html.layout.display == "none"
+
+    def test_orb_accordion_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app._orb_accordion in app.analysis_tab_panel.children
+
+    def test_vib_accordion_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app.vib_accordion in app.analysis_tab_panel.children
+
+    def test_ir_accordion_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app._ir_accordion in app.analysis_tab_panel.children
+
+
+# ---------------------------------------------------------------------------
+# M-ANA — Panel switcher (M-ANA)
+# ---------------------------------------------------------------------------
+
+
+class TestAnaSwitcher:
+    """Panel switcher strip: buttons, state, activation, and deactivation."""
+
+    def test_eight_buttons_exist(self):
+        app = QuantUIApp()
+        assert len(app._ana_btns) == 8
+
+    def test_panel_names(self):
+        app = QuantUIApp()
+        assert app._ana_panel_names == [
+            "Energies",
+            "Trajectory",
+            "Vibrational",
+            "IR Spectrum",
+            "PES Scan",
+            "Isosurface",
+            "UV-Vis",
+            "NMR",
+        ]
+
+    def test_buttons_initially_dimmed(self):
+        app = QuantUIApp()
+        for btn in app._ana_btns:
+            assert btn.layout.opacity == "0.35"
+
+    def test_no_panels_available_initially(self):
+        app = QuantUIApp()
+        assert len(app._ana_available) == 0
+
+    def test_all_accordions_hidden_initially(self):
+        app = QuantUIApp()
+        for acc in app._ana_accordions:
+            assert acc.layout.display == "none"
+
+    def test_switcher_box_in_analysis_tab(self):
+        app = QuantUIApp()
+        assert app._ana_switcher_box in app.analysis_tab_panel.children
+
+    def test_activate_panel_marks_available(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        assert "Energies" in app._ana_available
+
+    def test_activate_panel_sets_opacity(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        orb_btn = app._ana_btns[0]
+        assert orb_btn.layout.opacity == "1.0"
+
+    def test_activate_panel_auto_selects(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        assert app._orb_accordion.layout.display == ""
+        assert app._orb_accordion.selected_index == 0
+
+    def test_activate_panel_no_auto_select(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies", auto_select=False)
+        assert app._orb_accordion.layout.display == "none"
+
+    def test_activate_hides_other_accordions(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        # All other accordions should be hidden
+        for name, acc in zip(app._ana_panel_names, app._ana_accordions):
+            if name != "Energies":
+                assert acc.layout.display == "none"
+
+    def test_deactivate_all_clears_available(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        app._activate_ana_panel("IR Spectrum", auto_select=False)
+        app._deactivate_all_ana_panels()
+        assert len(app._ana_available) == 0
+
+    def test_deactivate_all_hides_accordions(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        app._deactivate_all_ana_panels()
+        for acc in app._ana_accordions:
+            assert acc.layout.display == "none"
+
+    def test_deactivate_all_dims_buttons(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies")
+        app._deactivate_all_ana_panels()
+        for btn in app._ana_btns:
+            assert btn.layout.opacity == "0.35"
+
+    def test_click_unavailable_shows_warning(self):
+        app = QuantUIApp()
+        app._on_ana_panel_click("Energies")
+        assert app._ana_unavail_html.layout.display == ""
+        assert "Energies" in app._ana_unavail_html.value
+
+    def test_click_available_selects_panel(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("IR Spectrum", auto_select=False)
+        app._on_ana_panel_click("IR Spectrum")
+        assert app._ir_accordion.layout.display == ""
+        assert app._ana_active == "IR Spectrum"
+
+
+# ---------------------------------------------------------------------------
+# M-UI — Completion banner (M-UI.8)
+# ---------------------------------------------------------------------------
+
+
+class TestCompletionBanner:
+    """Completion banner widget exists and is initially hidden."""
+
+    def test_completion_banner_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_completion_banner")
+        import ipywidgets as widgets
+
+        assert isinstance(app._completion_banner, widgets.HBox)
+
+    def test_completion_banner_initially_hidden(self):
+        app = QuantUIApp()
+        assert app._completion_banner.layout.display == "none"
+
+    def test_go_results_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_go_results_btn")
+        import ipywidgets as widgets
+
+        assert isinstance(app._go_results_btn, widgets.Button)
+
+    def test_go_analysis_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_go_analysis_btn")
+
+    def test_help_btn_exists(self):
+        app = QuantUIApp()
+        assert hasattr(app, "_help_btn")
+        import ipywidgets as widgets
+
+        assert isinstance(app._help_btn, widgets.Button)
+
+    def test_help_panel_initially_hidden(self):
+        app = QuantUIApp()
+        assert app.help_tab_panel.layout.display == "none"

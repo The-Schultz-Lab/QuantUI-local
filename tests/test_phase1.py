@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-QuantUI-local Smoke Test
+QuantUI Smoke Test
 
 Quick validation of core local functionality.
 Ported from QuantUI test_phase1.py with SLURM-specific checks removed:
@@ -225,7 +225,7 @@ def test_session_calc():
 def main():
     """Run all checks and print summary."""
     print("=" * 60)
-    print("QuantUI-local Smoke Test")
+    print("QuantUI Smoke Test")
     print("=" * 60)
 
     results = []
