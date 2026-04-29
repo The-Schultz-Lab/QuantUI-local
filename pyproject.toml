@@ -40,8 +40,10 @@ packages = ["quantui"]
 [project.optional-dependencies]
 # PySCF requires Linux/macOS/WSL — not available on Windows natively.
 # Use the Apptainer container (apptainer/quantui.def) for Windows.
+# pyscf-properties provides pyscf.prop (NMR, etc.) — moved out of core in PySCF 2.0.
 pyscf = [
     "pyscf>=2.3.0",
+    "pyscf-properties",
 ]
 
 # ASE: structure I/O, extended molecule library, geometry optimisation

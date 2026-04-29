@@ -46,5 +46,6 @@ dependencies:
       - black>=24.0.0
       - ruff>=0.4.0
       # Install QuantUI in editable mode
-      # On Linux/WSL also run: conda install -c conda-forge pyscf
+      # On Linux/WSL also run: conda install -c conda-forge pyscf pyscf-properties
+      - pyscf-properties   # NMR and other properties (pyscf.prop); moved out of pyscf core in v2.0
       - -e ..
