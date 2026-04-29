@@ -79,7 +79,6 @@ def run_nmr_calc(
     """
     try:
         from pyscf import dft, gto, scf
-        from pyscf.prop import nmr as _pyscf_nmr
     except ImportError as exc:
         raise ImportError(
             "PySCF is not installed — cannot run NMR calculations.\n"
@@ -122,10 +121,7 @@ def run_nmr_calc(
     converged = bool(getattr(mf, "converged", False))
 
     try:
-        if method_upper == "UHF":
-            nmr_obj = _pyscf_nmr.UHF(mf)
-        else:
-            nmr_obj = _pyscf_nmr.RHF(mf)
+        nmr_obj = mf.NMR()
         tensors = nmr_obj.kernel()
     except Exception as exc:
         raise RuntimeError(

@@ -210,6 +210,8 @@ def run_pes_scan(
         ) from exc
 
     try:
+        import contextlib
+
         from ase.constraints import FixInternals
         from ase.optimize import BFGS
     except ImportError as exc:
@@ -274,24 +276,33 @@ def run_pes_scan(
             # Drive the coordinate to the target value
             if scan_type == "bond":
                 atoms.set_distance(i1, i2, val, fix=0.5)
-                constraint = FixInternals(bonds=[(val, [i1, i2])])
-            elif scan_type == "angle":
-                atoms.set_angle(i1, i2, i3, val)
-                constraint = FixInternals(angles=[(math.radians(val), [i1, i2, i3])])
-            else:  # dihedral
-                atoms.set_dihedral(i1, i2, i3, i4, val)
-                constraint = FixInternals(
-                    dihedrals=[(math.radians(val), [i1, i2, i3, i4])]
-                )
 
-            atoms.set_constraint(constraint)
+            # Diatomic bond scans have zero relaxable DOF — FixInternals
+            # has an off-by-one on 2-atom systems, so skip BFGS entirely.
+            _diatomic_bond = scan_type == "bond" and n_atoms <= 2
 
-            # Run constrained BFGS optimization
-            import contextlib
+            if _diatomic_bond:
+                ok = True
+            else:
+                if scan_type == "bond":
+                    constraint = FixInternals(bonds=[(val, [i1, i2])])
+                elif scan_type == "angle":
+                    atoms.set_angle(i1, i2, i3, val)
+                    constraint = FixInternals(
+                        angles=[(math.radians(val), [i1, i2, i3])]
+                    )
+                else:  # dihedral
+                    atoms.set_dihedral(i1, i2, i3, i4, val)
+                    constraint = FixInternals(
+                        dihedrals=[(math.radians(val), [i1, i2, i3, i4])]
+                    )
 
-            dyn = BFGS(atoms, logfile=_stream)
-            with contextlib.redirect_stdout(_null):
-                ok = bool(dyn.run(fmax=fmax, steps=max_opt_steps))
+                atoms.set_constraint(constraint)
+
+                dyn = BFGS(atoms, logfile=_stream)
+                with contextlib.redirect_stdout(_null):
+                    ok = bool(dyn.run(fmax=fmax, steps=max_opt_steps))
+
             converged_all = converged_all and ok
 
             # Record energy (convert eV → Hartree) and geometry

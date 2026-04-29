@@ -299,10 +299,22 @@ def run_freq_calc(
             _freq_au = freq_info.get("freq_au")
             if _freq_au is None:
                 _freq_au = _np.array(frequencies_cm1) * _CM1_TO_HARTREE
+            else:
+                # PySCF may return complex freq_au for imaginary modes; take real parts.
+                _freq_au = _np.array(
+                    [f.real if hasattr(f, "real") else f for f in _freq_au],
+                    dtype=float,
+                )
             _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15, 101325)
-            _H = float(_tout["H"])
-            _S = float(_tout["S"])  # J/(mol·K)
-            _zpve = float(_tout.get("ZPE", zpve_hartree))
+
+            # PySCF 2.x returns (value, unit_string) tuples; earlier versions
+            # return plain floats.  _tv() extracts the numeric value either way.
+            def _tv(v):
+                return float(v[0] if isinstance(v, (tuple, list)) else v)
+
+            _H = _tv(_tout["H"])
+            _S = _tv(_tout["S"])  # J/(mol·K)
+            _zpve = _tv(_tout.get("ZPE", zpve_hartree))
             _G = _H - 298.15 * _S / _HARTREE_TO_JMOL
             thermo_data = ThermoData(
                 zpve_hartree=_zpve,

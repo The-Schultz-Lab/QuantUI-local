@@ -390,6 +390,7 @@ class TestGenerateCubeFromArrays:
             nx=8,
             ny=8,
             nz=8,
+            spin=1,
         )
         assert result.exists()
 

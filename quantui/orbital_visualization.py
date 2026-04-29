@@ -578,6 +578,7 @@ def generate_cube_from_arrays(
     ny: int = 60,
     nz: int = 60,
     margin: float = 5.0,
+    spin: int = 0,
 ) -> Path:
     """
     Generate a cube file from in-session MO data (no ``.npz`` file required).
@@ -624,7 +625,7 @@ def generate_cube_from_arrays(
             "  conda install -c conda-forge pyscf"
         ) from exc
 
-    mol = gto.M(atom=mol_atom, basis=mol_basis, unit="Angstrom")
+    mol = gto.M(atom=mol_atom, basis=mol_basis, unit="Angstrom", spin=spin)
 
     coeff = np.asarray(mo_coeff)
     if coeff.ndim == 3:
