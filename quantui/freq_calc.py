@@ -305,16 +305,41 @@ def run_freq_calc(
                     [f.real if hasattr(f, "real") else f for f in _freq_au],
                     dtype=float,
                 )
-            _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15, 101325)
+
+            # PySCF 2.x thermo() may or may not accept the pressure argument.
+            try:
+                _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15, 101325)
+            except TypeError:
+                _tout = pyscf_thermo.thermo(mf, _freq_au, 298.15)
 
             # PySCF 2.x returns (value, unit_string) tuples; earlier versions
             # return plain floats.  _tv() extracts the numeric value either way.
             def _tv(v):
-                return float(v[0] if isinstance(v, (tuple, list)) else v)
+                if isinstance(v, (tuple, list)):
+                    return float(v[0])
+                if hasattr(v, "item"):
+                    return float(v.item())
+                return float(v)
 
-            _H = _tv(_tout["H"])
-            _S = _tv(_tout["S"])  # J/(mol·K)
-            _zpve = _tv(_tout.get("ZPE", zpve_hartree))
+            _keys = sorted(_tout.keys())
+            _H_raw, _S_raw, _Z_raw = None, None, None
+            for _k in ("H", "H_0K", "Htot"):
+                if _tout.get(_k) is not None:
+                    _H_raw = _tout[_k]
+                    break
+            for _k in ("S", "Stot", "S_tot"):
+                if _tout.get(_k) is not None:
+                    _S_raw = _tout[_k]
+                    break
+            for _k in ("ZPE", "zpve", "ZPE_vib"):
+                if _tout.get(_k) is not None:
+                    _Z_raw = _tout[_k]
+                    break
+            if _H_raw is None or _S_raw is None:
+                raise KeyError(f"Missing H or S in thermo dict (keys: {_keys})")
+            _H = _tv(_H_raw)
+            _S = _tv(_S_raw)  # J/(mol·K)
+            _zpve = _tv(_Z_raw) if _Z_raw is not None else zpve_hartree
             _G = _H - 298.15 * _S / _HARTREE_TO_JMOL
             thermo_data = ThermoData(
                 zpve_hartree=_zpve,
@@ -322,8 +347,8 @@ def run_freq_calc(
                 S_jmol=_S,
                 G_hartree=_G,
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.warning("Thermochemistry failed: %s", _exc)
 
     except Exception as exc:
         logger.warning("Hessian/frequency computation failed: %s", exc)

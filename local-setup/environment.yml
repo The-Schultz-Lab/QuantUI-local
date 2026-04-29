@@ -45,6 +45,8 @@ dependencies:
       # Code formatting and linting (not on conda-forge)
       - black>=24.0.0
       - ruff>=0.4.0
-      # Install QuantUI in editable mode
+      # PySCF NMR calculations (moved out of main pyscf package in 2.x)
       # On Linux/WSL also run: conda install -c conda-forge pyscf
+      - pyscf-properties
+      # Install QuantUI in editable mode
       - -e ..

@@ -123,6 +123,11 @@ def run_nmr_calc(
     try:
         nmr_obj = mf.NMR()
         tensors = nmr_obj.kernel()
+    except AttributeError as exc:
+        raise ImportError(
+            "NMR shielding is not available in this PySCF installation. "
+            "Install the NMR module with: pip install pyscf-properties"
+        ) from exc
     except Exception as exc:
         raise RuntimeError(
             f"NMR shielding failed for {molecule.get_formula()}: {exc}"
