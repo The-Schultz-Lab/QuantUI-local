@@ -321,13 +321,13 @@ def run_freq_calc(
                     return float(v.item())
                 return float(v)
 
-            _keys = sorted(_tout.keys())
+            # PySCF 2.x (>=2.6) uses "H_tot"/"S_tot"; earlier versions used "H"/"S".
             _H_raw, _S_raw, _Z_raw = None, None, None
-            for _k in ("H", "H_0K", "Htot"):
+            for _k in ("H_tot", "H", "Htot", "H_0K"):
                 if _tout.get(_k) is not None:
                     _H_raw = _tout[_k]
                     break
-            for _k in ("S", "Stot", "S_tot"):
+            for _k in ("S_tot", "S", "Stot"):
                 if _tout.get(_k) is not None:
                     _S_raw = _tout[_k]
                     break
@@ -336,7 +336,9 @@ def run_freq_calc(
                     _Z_raw = _tout[_k]
                     break
             if _H_raw is None or _S_raw is None:
-                raise KeyError(f"Missing H or S in thermo dict (keys: {_keys})")
+                raise KeyError(
+                    f"Missing H or S in thermo dict (keys: {sorted(_tout.keys())})"
+                )
             _H = _tv(_H_raw)
             _S = _tv(_S_raw)  # J/(mol·K)
             _zpve = _tv(_Z_raw) if _Z_raw is not None else zpve_hartree

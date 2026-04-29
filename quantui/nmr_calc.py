@@ -121,13 +121,21 @@ def run_nmr_calc(
     converged = bool(getattr(mf, "converged", False))
 
     try:
-        nmr_obj = mf.NMR()
-        tensors = nmr_obj.kernel()
-    except AttributeError as exc:
+        from pyscf.prop import nmr as _pyscf_nmr
+    except ImportError as exc:
         raise ImportError(
-            "NMR shielding is not available in this PySCF installation. "
-            "Install the NMR module with: pip install pyscf-properties"
+            "PySCF NMR module (pyscf.prop.nmr) not found. "
+            "Ensure PySCF>=2.0 is installed: pip install 'pyscf>=2.0'"
         ) from exc
+
+    try:
+        if method_upper == "RHF":
+            nmr_obj = _pyscf_nmr.RHF(mf)
+        elif method_upper == "UHF":
+            nmr_obj = _pyscf_nmr.UHF(mf)
+        else:
+            nmr_obj = _pyscf_nmr.RKS(mf) if mol.spin == 0 else _pyscf_nmr.UKS(mf)
+        tensors = nmr_obj.kernel()
     except Exception as exc:
         raise RuntimeError(
             f"NMR shielding failed for {molecule.get_formula()}: {exc}"
