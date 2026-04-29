@@ -1743,7 +1743,7 @@ class QuantUIApp:
             freqs = ir.get("frequencies_cm1")
             ints = ir.get("ir_intensities")
             disps = ir.get("displacements")
-            if not (freqs and ints and disps and mol_data.get("atoms")):
+            if not (freqs and disps and mol_data.get("atoms")):
                 return False
             from quantui.molecule import Molecule as _Mol
 
