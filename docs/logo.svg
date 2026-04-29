@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 280" width="280" height="280">
+  <defs>
+    <style>
+      .ring { transform-origin: 140px 140px; }
+      .ring--1 { animation: spin1  9s linear infinite; }
+      .ring--2 { animation: spin2 13s linear infinite reverse; transform: rotate(60deg); }
+      .ring--3 { animation: spin3 17s linear infinite; transform: rotate(120deg); }
+      @keyframes spin1 { to { transform: rotate(360deg); } }
+      @keyframes spin2 { to { transform: rotate(-300deg); } }
+      @keyframes spin3 { to { transform: rotate(480deg); } }
+      @media (prefers-reduced-motion: reduce) { .ring { animation-play-state: paused; } }
+    </style>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="halo" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="22" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ambient halo -->
+  <circle cx="140" cy="140" r="48" fill="rgba(37,99,235,0.20)" filter="url(#halo)"/>
+
+  <!-- orbital rings + electron dots -->
+  <g class="ring ring--1">
+    <ellipse cx="140" cy="140" rx="115" ry="33" stroke="#0891b2" stroke-width="1.4" fill="none" opacity="0.70"/>
+    <circle cx="255" cy="140" r="5.5" fill="#67e8f9"/>
+  </g>
+  <g class="ring ring--2">
+    <ellipse cx="140" cy="140" rx="115" ry="33" stroke="#0891b2" stroke-width="1.4" fill="none" opacity="0.55"/>
+    <circle cx="255" cy="140" r="4.5" fill="#93c5fd"/>
+  </g>
+  <g class="ring ring--3">
+    <ellipse cx="140" cy="140" rx="115" ry="33" stroke="#3b82f6" stroke-width="1.4" fill="none" opacity="0.42"/>
+    <circle cx="255" cy="140" r="4" fill="#60a5fa"/>
+  </g>
+
+  <!-- nucleus -->
+  <circle cx="140" cy="140" r="20" fill="rgba(37,99,235,0.25)" filter="url(#glow)"/>
+  <circle cx="140" cy="140" r="14" fill="#2563eb" filter="url(#glow)"/>
+  <circle cx="140" cy="140" r="8"  fill="#60a5fa"/>
+  <circle cx="137" cy="137" r="3"  fill="rgba(255,255,255,0.45)"/>
+</svg>
