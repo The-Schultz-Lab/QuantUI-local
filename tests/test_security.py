@@ -1,7 +1,7 @@
 """
 Tests for quantui.security
 
-QuantUI-local security module contains only SecurityError.
+QuantUI security module contains only SecurityError.
 Path-traversal hardening, resource-limit enforcement, concurrent-job
 limits, and walltime validation are SLURM-cluster concerns removed from
 the local version — see quantui.utils.session_can_handle() instead.

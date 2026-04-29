@@ -1,5 +1,5 @@
 """
-results_storage — Persist and reload QuantUI-local calculation results.
+results_storage — Persist and reload QuantUI calculation results.
 
 Each calculation is saved to a timestamped subdirectory::
 

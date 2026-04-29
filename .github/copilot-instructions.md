@@ -1,4 +1,4 @@
-# QuantUI-local — AI Assistant Context
+# QuantUI — AI Assistant Context
 
 > Stable project context for GitHub Copilot, Claude, and other AI coding assistants.
 > Describes what the project IS and how it is built — not where development currently
@@ -9,7 +9,7 @@
 
 ## Overview
 
-QuantUI-local is an interactive Jupyter/Voilà interface for running PySCF quantum
+QuantUI is an interactive Jupyter/Voilà interface for running PySCF quantum
 chemistry calculations locally — no cluster account, no SLURM, no queueing. Students
 design molecules, launch RHF/UHF/DFT calculations in their own Python kernel, and
 visualize results in minutes. It is a downstream port of the cluster-focused
@@ -23,7 +23,7 @@ University. The UI runs as a Voilà app — students never see code.
 ## Repository Structure
 
 ```
-QuantUI-local/
+QuantUI/
 ├── quantui/                  ← Main Python package (imports as `quantui`)
 │   ├── app.py                ← QuantUIApp class — all widgets, callbacks, state
 │   ├── molecule.py           ← Molecule dataclass + XYZ/SMILES parsing
@@ -55,12 +55,12 @@ QuantUI-local/
 ├── .github/
 │   └── copilot-instructions.md  ← This file
 ├── apptainer/
-│   ├── quantui-local.def     ← Apptainer container definition
+│   ├── quantui.def     ← Apptainer container definition
 │   └── build.sh              ← Build script
 ├── local-setup/              ← Conda environment YAMLs
 ├── launch-app.bat            ← Windows double-click launcher (Voilà app mode)
 ├── launch-dev.bat            ← Windows double-click launcher (JupyterLab mode)
-├── pyproject.toml            ← Package config (name: quantui-local, imports as quantui)
+├── pyproject.toml            ← Package config (name: quantui, imports as quantui)
 └── pytest.ini                ← pytest configuration
 ```
 
@@ -245,7 +245,7 @@ to build the context from disk.
    `with output_widget:` from a background thread except via `with output_widget:` context.
 
 4. **No new top-level dependencies** without updating both `pyproject.toml`
-   and the Apptainer container `apptainer/quantui-local.def`.
+   and the Apptainer container `apptainer/quantui.def`.
 
 5. **All constants in `config.py`.** Method names, basis sets, layout widths,
    and other shared literals must be defined in `config.py` and imported from
@@ -410,7 +410,7 @@ electron-count scaling → cross-method N_basis → cross-method electron-count.
 ```powershell
 # Activate environment (Windows PowerShell)
 & "$env:USERPROFILE\miniconda3\shell\condabin\conda-hook.ps1"
-conda activate quantui-local
+conda activate quantui
 
 # Voilà app mode (student-facing — no code visible)
 voila notebooks/molecule_computations.ipynb
@@ -432,7 +432,7 @@ python -c "from quantui.app import QuantUIApp; print('OK')"
 entry in `sys.path` resolves to the current directory; running from the wrong directory
 can shadow the editable install with a different repo's `quantui/` package.
 
-**Python executable:** `C:\Users\schul\miniconda3\envs\quantui-local\python.exe`
+**Python executable:** `C:\Users\schul\miniconda3\envs\quantui\python.exe`
 
 Note: PySCF calculations will show "unavailable" on Windows — this is expected.
 All UI, molecule, visualization, and PubChem features work natively on Windows.
@@ -491,14 +491,14 @@ Install all: `pip install -e ".[pyscf,ase,app,dev]"`
 
 ## Apptainer Container
 
-The container at `apptainer/quantui-local.def` bundles Python + PySCF + ASE +
+The container at `apptainer/quantui.def` bundles Python + PySCF + ASE +
 py3Dmol + Voilà into a single portable `.sif` file. This is the supported path
 for Windows users.
 
 - Build: `bash apptainer/build.sh --clean` (requires Linux/WSL with Apptainer ≥ 1.0)
-- Run (app mode): `apptainer run quantui-local.sif app`
-- Run (JupyterLab): `apptainer run quantui-local.sif`
-- Verify: `apptainer test quantui-local.sif`
+- Run (app mode): `apptainer run quantui.sif app`
+- Run (JupyterLab): `apptainer run quantui.sif`
+- Verify: `apptainer test quantui.sif`
 
 The container sets `QUANTUI_RESULTS_DIR=$HOME/.quantui/results` so results survive
 across kernel restarts and are accessible from the host (home dir is bind-mounted).
@@ -507,7 +507,7 @@ across kernel restarts and are accessible from the host (home dir is bind-mounte
 
 ## Relationship to Source Repo
 
-QuantUI-local is a downstream port of `NCCU-Schultz-Lab/QuantUI` (the cluster version).
+QuantUI is a downstream port of `NCCU-Schultz-Lab/QuantUI` (the cluster version).
 Bug fixes and module updates originate in `QuantUI` and are ported here.
 
 | Removed from source | Reason |

@@ -1,5 +1,5 @@
 """
-Timing calibration benchmark suite for QuantUI-local.
+Timing calibration benchmark suite for QuantUI.
 
 Runs a fixed set of small calculations that span the student-relevant
 method/basis/molecule-size space.  Each completed step is logged to

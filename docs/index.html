@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuantUI-local — Quantum Chemistry in Jupyter</title>
+  <title>QuantUI — Quantum Chemistry in Jupyter</title>
   <meta name="description" content="Interactive Jupyter interface for running PySCF quantum chemistry calculations locally. No cluster account, no SLURM, no queueing.">
-  <meta property="og:title" content="QuantUI-local">
+  <meta property="og:title" content="QuantUI">
   <meta property="og:description" content="Quantum chemistry in Jupyter — molecules, PySCF, and 3D visualization on your laptop.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
@@ -327,12 +327,12 @@
 <!-- ── Navigation ──────────────────────────────────────────────────────── -->
 <nav class="nav" role="navigation">
   <div class="nav__inner">
-    <a class="nav__logo" href="#">QuantUI-local</a>
+    <a class="nav__logo" href="#">QuantUI</a>
     <span class="nav__badge">v0.1 &middot; MIT</span>
     <a class="nav__link" href="#features">Features</a>
     <a class="nav__link" href="#install">Install</a>
     <a class="nav__link" href="#tutorials">Tutorials</a>
-    <a class="btn btn--ghost" href="https://github.com/The-Schultz-Lab/QuantUI-local">GitHub &rarr;</a>
+    <a class="btn btn--ghost" href="https://github.com/The-Schultz-Lab/QuantUI">GitHub &rarr;</a>
   </div>
 </nav>
 
@@ -353,7 +353,7 @@
           in under a minute.
         </p>
         <div class="hero__actions">
-          <a class="btn btn--primary" href="https://github.com/The-Schultz-Lab/QuantUI-local">
+          <a class="btn btn--primary" href="https://github.com/The-Schultz-Lab/QuantUI">
             View on GitHub
           </a>
           <a class="btn btn--outline" href="#install">Get started</a>
@@ -526,7 +526,7 @@
       <a href="https://learn.microsoft.com/en-us/windows/wsl/install" target="_blank" rel="noopener">WSL&nbsp;2</a>
       with Ubuntu. Install conda inside WSL and follow the standard
       installation below. Alternatively, use the
-      <a href="https://github.com/The-Schultz-Lab/QuantUI-local/blob/main/apptainer/README.md" target="_blank" rel="noopener">Apptainer container</a>
+      <a href="https://github.com/The-Schultz-Lab/QuantUI/blob/main/apptainer/README.md" target="_blank" rel="noopener">Apptainer container</a>
       which bundles the complete environment in a single file.
     </div>
   </div>
@@ -546,8 +546,8 @@
         <span class="code-block__label">bash</span>
       </div>
       <pre><code><span class="c"># Create a dedicated conda environment</span>
-conda create -n quantui-local python=3.11
-conda activate quantui-local
+conda create -n quantui python=3.11
+conda activate quantui
 
 <span class="c"># Install with PySCF, ASE, and Voilà app server</span>
 pip install -e <span class="s">".[pyscf,ase,app]"</span>
@@ -560,7 +560,7 @@ voila notebooks/molecule_computations.ipynb</code></pre>
     </div>
 
     <p class="section__note">
-      Also available via <code style="font-size:0.8rem;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:.1rem .35rem;">pip install quantui-local[pyscf,ase,app]</code>
+      Also available via <code style="font-size:0.8rem;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:.1rem .35rem;">pip install quantui[pyscf,ase,app]</code>
       or the Apptainer container for Windows.
     </p>
   </div>
@@ -672,15 +672,15 @@ voila notebooks/molecule_computations.ipynb</code></pre>
   <div class="container">
     <div class="footer__inner">
       <div>
-        <div class="footer__name">QuantUI-local</div>
+        <div class="footer__name">QuantUI</div>
         <span class="footer__copy">
           MIT License &middot; Copyright 2026 The Schultz Lab, North Carolina Central University
         </span>
       </div>
       <nav class="footer__links" aria-label="Footer links">
         <a href="https://github.com/The-Schultz-Lab" target="_blank" rel="noopener">Schultz Lab</a>
-        <a href="https://github.com/The-Schultz-Lab/QuantUI-local" target="_blank" rel="noopener">Repository</a>
-        <a href="https://github.com/The-Schultz-Lab/QuantUI-local/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+        <a href="https://github.com/The-Schultz-Lab/QuantUI" target="_blank" rel="noopener">Repository</a>
+        <a href="https://github.com/The-Schultz-Lab/QuantUI/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
         <a href="https://github.com/The-Schultz-Lab/QuantUI" target="_blank" rel="noopener">Cluster version</a>
       </nav>
     </div>

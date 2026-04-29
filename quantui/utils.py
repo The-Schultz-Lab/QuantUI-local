@@ -1,5 +1,5 @@
 """
-QuantUI-local Utilities Module
+QuantUI Utilities Module
 
 Helper functions for validation, session resource detection, and general
 utilities used across the application. SLURM-specific helpers (job ID

@@ -1,5 +1,5 @@
 """
-Tests for QuantUI-local Calculator Module
+Tests for QuantUI Calculator Module
 
 Tests PySCFCalculation class for calculation setup and script generation.
 Resource estimation (estimate_resources) was a SLURM-cluster feature and

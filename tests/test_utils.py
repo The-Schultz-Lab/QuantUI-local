@@ -1,5 +1,5 @@
 """
-Tests for QuantUI-local Utils Module
+Tests for QuantUI Utils Module
 
 Tests utility functions for username detection, file operations,
 validation, formatting, and error handling.

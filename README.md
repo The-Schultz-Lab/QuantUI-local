@@ -1,7 +1,7 @@
-# QuantUI-local
+# QuantUI
 
-[![CI](https://github.com/The-Schultz-Lab/QuantUI-local/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Schultz-Lab/QuantUI-local/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://the-schultz-lab.github.io/QuantUI-local/)
+[![CI](https://github.com/The-Schultz-Lab/QuantUI/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Schultz-Lab/QuantUI/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://the-schultz-lab.github.io/QuantUI/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%20|%203.10%20|%203.11-blue)](https://www.python.org)
 
@@ -57,7 +57,7 @@ Built for classroom teaching at the
 ### Windows users: Apptainer container
 
 PySCF does not install on Windows natively. The
-[`apptainer/quantui-local.def`](apptainer/quantui-local.def) container bundles
+[`apptainer/quantui.def`](apptainer/quantui.def) container bundles
 the complete environment and runs anywhere Apptainer/Singularity is available.
 See [`apptainer/README.md`](apptainer/README.md) for build and run instructions.
 
@@ -69,8 +69,8 @@ See [`apptainer/README.md`](apptainer/README.md) for build and run instructions.
 
 ```bash
 # Create a dedicated environment
-conda create -n quantui-local python=3.11
-conda activate quantui-local
+conda create -n quantui python=3.11
+conda activate quantui
 
 # Install with PySCF and ASE
 pip install -e ".[pyscf,ase,app]"
@@ -79,7 +79,7 @@ pip install -e ".[pyscf,ase,app]"
 ### Option B — pip only
 
 ```bash
-python -m pip install quantui-local[pyscf,ase,app]
+python -m pip install quantui[pyscf,ase,app]
 ```
 
 ### Option C — Apptainer container (Windows / reproducible deployment)
@@ -92,7 +92,7 @@ See [apptainer/README.md](apptainer/README.md).
 
 ```bash
 # Activate your environment
-conda activate quantui-local
+conda activate quantui
 
 # JupyterLab (full IDE — shows code)
 jupyter lab notebooks/molecule_computations.ipynb
@@ -207,10 +207,10 @@ pyproject.toml            Package metadata and tool config
 
 ## Relationship to the cluster version
 
-QuantUI-local is a downstream port of the cluster-based
-[QuantUI](https://github.com/The-Schultz-Lab/QuantUI) repository. All SLURM
+QuantUI (this repo) is a downstream port of the cluster-based
+[QuantUI-cluster](https://github.com/The-Schultz-Lab/QuantUI) repository. All SLURM
 infrastructure (job manager, job storage, batch templates) has been removed.
-Bug fixes flow `QuantUI → QuantUI-local`, not the other way around.
+Bug fixes flow from the cluster repo into this one, not the other way around.
 
 ---
 

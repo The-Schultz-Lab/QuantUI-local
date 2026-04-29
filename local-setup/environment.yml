@@ -1,4 +1,4 @@
-name: quantui-local
+name: quantui
 channels:
   - conda-forge
   - defaults
@@ -45,6 +45,6 @@ dependencies:
       # Code formatting and linting (not on conda-forge)
       - black>=24.0.0
       - ruff>=0.4.0
-      # Install QuantUI-local in editable mode
+      # Install QuantUI in editable mode
       # On Linux/WSL also run: conda install -c conda-forge pyscf
       - -e ..

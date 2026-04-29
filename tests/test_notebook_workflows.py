@@ -4,9 +4,9 @@ Headless tests for the core notebook workflows.
 These tests exercise the same code paths the notebook UI calls, without
 requiring a browser, Voilà, or ipywidgets. Run them inside the container:
 
-    apptainer exec quantui-local.sif python -m pytest tests/test_notebook_workflows.py -v
+    apptainer exec quantui.sif python -m pytest tests/test_notebook_workflows.py -v
 
-Or locally (Linux/WSL with quantui-local env active):
+Or locally (Linux/WSL with quantui env active):
 
     python -m pytest tests/test_notebook_workflows.py -v
 """

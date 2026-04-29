@@ -1,5 +1,5 @@
 """
-Performance and event logging for QuantUI-local.
+Performance and event logging for QuantUI.
 
 Two separate log files, both stored in ``~/.quantui/logs/`` by default
 (override with the ``QUANTUI_LOG_DIR`` environment variable):

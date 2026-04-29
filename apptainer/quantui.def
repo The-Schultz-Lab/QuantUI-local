@@ -2,21 +2,21 @@ Bootstrap: docker
 FROM: continuumio/miniconda3:latest
 
 %help
-  QuantUI-local — Educational Quantum Chemistry Interface
+  QuantUI — Educational Quantum Chemistry Interface
 
-  Lightweight local version of QuantUI for teaching PySCF calculations
+  Lightweight local teaching interface for running PySCF calculations
   without a cluster. Includes PySCF, ASE, py3Dmol, and Voilà.
 
   Usage:
     # Clean widget UI (students see no code — recommended for class)
-    apptainer run quantui-local.sif app
+    apptainer run quantui.sif app
 
     # JupyterLab (exploration / development mode)
-    apptainer run quantui-local.sif
+    apptainer run quantui.sif
 
   Build:
     # From the repo root:
-    apptainer build quantui-local.sif apptainer/quantui-local.def
+    apptainer build quantui.sif apptainer/quantui.def
 
 %labels
   Maintainer "Jonathan Schultz"
@@ -63,7 +63,7 @@ FROM: continuumio/miniconda3:latest
     py3dmol \
     requests
 
-  echo "Installing QuantUI-local..."
+  echo "Installing QuantUI..."
   cd /opt/quantui
   pip install --no-cache-dir -e .
 

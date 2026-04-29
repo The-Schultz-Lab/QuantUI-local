@@ -1,5 +1,5 @@
 """
-Issue tracking for QuantUI-local.
+Issue tracking for QuantUI.
 
 User-reported issues are stored in a local SQLite database alongside the
 session event log.  Each issue captures a description and a snapshot of the

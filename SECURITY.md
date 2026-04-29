@@ -1,6 +1,6 @@
 # Security Policy
 
-QuantUI-local is an educational teaching tool designed for classroom and local
+QuantUI is an educational teaching tool designed for classroom and local
 research use. It runs calculations inside your own Python session — there is
 no server, no user accounts, and no data stored outside your local machine.
 
@@ -19,7 +19,7 @@ GitHub issue**.
 Instead, report it privately via one of these channels:
 
 - **GitHub private vulnerability reporting** — use the
-  [Security tab](https://github.com/The-Schultz-Lab/QuantUI-local/security/advisories/new)
+  [Security tab](https://github.com/The-Schultz-Lab/QuantUI/security/advisories/new)
   on this repository (preferred).
 - **Email** — contact the lab maintainer through the GitHub profile
   [@The-Schultz-Lab](https://github.com/The-Schultz-Lab).
@@ -28,7 +28,7 @@ Please include:
 
 1. A short description of the issue and its potential impact
 2. Steps to reproduce (or a minimal proof-of-concept)
-3. The version of QuantUI-local affected
+3. The version of QuantUI affected
 4. Your suggested fix, if you have one
 
 We aim to acknowledge reports within **5 business days** and to release a fix
@@ -55,7 +55,7 @@ Issues that are explicitly **out of scope**:
 
 ## Dependencies
 
-QuantUI-local relies on PySCF, ASE, NumPy, Matplotlib, ipywidgets, and
+QuantUI relies on PySCF, ASE, NumPy, Matplotlib, ipywidgets, and
 py3Dmol. Security advisories for these packages are tracked automatically
 via Dependabot. If you become aware of a critical CVE in one of these
 dependencies before Dependabot picks it up, please report it using the

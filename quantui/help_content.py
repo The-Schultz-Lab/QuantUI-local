@@ -41,7 +41,7 @@ HELP_TOPICS: Dict[str, Dict[str, str]] = {
             "</ol>"
             "<p><b>Platform note:</b> PySCF calculations require Linux, macOS, "
             "or WSL. On Windows, run the pre-built container: "
-            "<code>apptainer run quantui-local.sif</code></p>"
+            "<code>apptainer run quantui.sif</code></p>"
             "<p>Each dropdown in the Calculate tab has a <b>?</b> button for "
             "context-sensitive help on that specific option.</p>"
         ),
@@ -205,7 +205,7 @@ HELP_TOPICS: Dict[str, Dict[str, str]] = {
             "and G. K.-L. Chan, "
             "<i>J. Chem. Phys.</i> <b>153</b>, 024109 (2020)."
             "</blockquote>"
-            "<p>Also cite QuantUI-local (your instructor will provide the reference).</p>"
+            "<p>Also cite QuantUI (your instructor will provide the reference).</p>"
             "<p><b>BibTeX key:</b> <code>Sun2020</code> — search for "
             "'PySCF 2020' in Google Scholar or your reference manager.</p>"
         ),

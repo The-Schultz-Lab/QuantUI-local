@@ -1,5 +1,5 @@
 """
-QuantUI-local application class.
+QuantUI application class.
 
 All widget creation, state management, callbacks, and tab wiring live here.
 The notebook is a thin launcher::
@@ -300,7 +300,7 @@ class _AnalysisContext:
 
 class QuantUIApp:
     """
-    Self-contained QuantUI-local application widget.
+    Self-contained QuantUI application widget.
 
     Instantiate once; call ``display()`` to inject CSS and show the UI::
 
@@ -328,9 +328,7 @@ class QuantUIApp:
 
         # Log startup, but never let optional logging I/O break app startup.
         try:
-            _calc_log.log_event(
-                "startup", f"QuantUI-local {quantui.__version__} started"
-            )
+            _calc_log.log_event("startup", f"QuantUI {quantui.__version__} started")
         except OSError:
             pass
 
@@ -468,7 +466,7 @@ class QuantUIApp:
             f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;'
             f'padding:12px 16px;border-radius:6px;margin:4px 0 8px">'
             f'<div style="font-weight:600;font-size:14px;color:#1e293b">'
-            f"QuantUI-local {quantui.__version__}"
+            f"QuantUI {quantui.__version__}"
             f'<span style="font-weight:400;font-size:12px;color:#94a3b8;margin-left:10px">'
             f"Python {_py_ver}{_env_badge}</span></div>"
             f'<table style="margin-top:10px;border-collapse:collapse">{_rows}</table>'
@@ -5057,7 +5055,7 @@ class QuantUIApp:
                 f"Import error: {_err_detail}\n\n"
                 "A required calculation dependency could not be loaded.\n"
                 "On Windows: use the Apptainer container.\n"
-                "  apptainer run quantui-local.sif\n"
+                "  apptainer run quantui.sif\n"
             )
             log.write(_msg)
             _err_html = (
@@ -5066,7 +5064,7 @@ class QuantUIApp:
                 '<b style="color:#b91c1c">&#9888; Dependency Not Available</b><br>'
                 f'<span style="color:#7f1d1d">{_err_detail}</span><br><br>'
                 '<small style="color:#991b1b">On Windows, use the Apptainer container: '
-                "<code>apptainer run quantui-local.sif</code>. "
+                "<code>apptainer run quantui.sif</code>. "
                 "Full details are in the <b>Output</b> tab.</small>"
                 "</div>"
             )
