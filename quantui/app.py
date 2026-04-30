@@ -1537,6 +1537,13 @@ class QuantUIApp:
             else:
                 acc.layout.display = "none"
                 btn.button_style = ""
+        # Plotly charts inside hidden accordions render with 0 dimensions and appear
+        # blank.  Re-render the IR figure whenever its panel is brought into view so
+        # the chart always paints into a visible, correctly-sized container.
+        if name == "IR Spectrum" and getattr(self, "_last_ir_freqs", None):
+            self._update_ir_figure(
+                self._ir_mode_toggle.value, self._ir_fwhm_slider.value
+            )
 
     def _activate_ana_panel(self, name: str, auto_select: bool = True) -> None:
         """Mark a panel as available (full opacity) and optionally select it."""
