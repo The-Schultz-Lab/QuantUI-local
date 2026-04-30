@@ -4191,6 +4191,22 @@ class QuantUIApp:
         except ImportError:
             return None
 
+        try:
+            return self._build_vib_data_inner(
+                freq_result, molecule, np, VibrationalData, VibrationalMode
+            )
+        except Exception as _e:
+            try:
+                from quantui import calc_log as _clog
+
+                _clog.log_event("vib_data_error", f"{type(_e).__name__}: {_e}"[:300])
+            except Exception:
+                pass
+            return None
+
+    def _build_vib_data_inner(
+        self, freq_result, molecule, np, VibrationalData, VibrationalMode
+    ):
         displacements = getattr(freq_result, "displacements", None)
         if displacements is None:
             return None
@@ -4294,15 +4310,17 @@ class QuantUIApp:
 
         # Show loading indicator and render in a background thread so _do_run
         # is not blocked while the animation is generated (can take several seconds).
+        # append_display_data is used instead of display() because this method is
+        # called from the _do_run background thread; display(HTML(...)) is not
+        # thread-safe for plain HTML but append_display_data is.
         _first_label, _first_mode = options[0]
         self.vib_output.clear_output()
-        with self.vib_output:
-            display(
-                HTML(
-                    f'<p style="color:#555;font-style:italic;padding:8px">'
-                    f"⏳ Rendering vibrational animation ({_first_label})…</p>"
-                )
+        self.vib_output.append_display_data(
+            HTML(
+                f'<p style="color:#555;font-style:italic;padding:8px">'
+                f"⏳ Rendering vibrational animation ({_first_label})…</p>"
             )
+        )
         threading.Thread(
             target=self._render_vib_mode,
             args=(vib_data, molecule, _first_mode),
@@ -4390,8 +4408,13 @@ class QuantUIApp:
             self._ir_fig.value = _pio.to_html(
                 fig, include_plotlyjs="cdn", full_html=False
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            try:
+                from quantui import calc_log as _clog
+
+                _clog.log_event("ir_fig_error", f"{type(_e).__name__}: {_e}"[:300])
+            except Exception:
+                pass
 
     def _show_orbital_diagram(self, result) -> bool:
         """Build and reveal the interactive orbital diagram accordion.
@@ -4592,12 +4615,12 @@ class QuantUIApp:
         Safe to call from background thread via ``with output:`` context.
         """
         from IPython.display import HTML as _H
-        from IPython.display import display as _ipy_display
 
         def _err(msg: str) -> None:
             self.vib_output.clear_output()
-            with self.vib_output:
-                _ipy_display(_H(f'<p style="color:#b91c1c;padding:8px">⚠ {msg}</p>'))
+            self.vib_output.append_display_data(
+                _H(f'<p style="color:#b91c1c;padding:8px">⚠ {msg}</p>')
+            )
 
         try:
             from plotlymol3d import create_vibration_animation, xyzblock_to_rdkitmol
@@ -4620,6 +4643,12 @@ class QuantUIApp:
             return
 
         try:
+            from quantui import calc_log as _clog_anim
+
+            _clog_anim.log_event("vib_render_start", f"mode {mode_number}")
+        except Exception:
+            pass
+        try:
             anim_fig = create_vibration_animation(
                 vib_data=vib_data,
                 mode_number=mode_number,
@@ -4631,12 +4660,29 @@ class QuantUIApp:
             )
             anim_fig.update_layout(height=420)
         except Exception as exc:
+            try:
+                from quantui import calc_log as _clog_anim
+
+                _clog_anim.log_event(
+                    "vib_render_error",
+                    f"mode {mode_number}: {type(exc).__name__}: {exc}"[:300],
+                )
+            except Exception:
+                pass
             _err(f"Animation generation failed: {exc}")
             return
+        try:
+            from quantui import calc_log as _clog_anim
 
+            _clog_anim.log_event("vib_render_done", f"mode {mode_number}")
+        except Exception:
+            pass
+
+        import plotly.io as _pio
+
+        _anim_html = _pio.to_html(anim_fig, full_html=False, include_plotlyjs="cdn")
         self.vib_output.clear_output()
-        with self.vib_output:
-            _ipy_display(anim_fig)
+        self.vib_output.append_display_data(_H(_anim_html))
 
     def _on_vib_mode_changed(self, change) -> None:
         """Re-render vib animation when the mode dropdown changes."""
@@ -4652,13 +4698,12 @@ class QuantUIApp:
             f"mode {mode_number}",
         )
         self.vib_output.clear_output()
-        with self.vib_output:
-            display(
-                HTML(
-                    f'<p style="color:#555;font-style:italic;padding:8px">'
-                    f"⏳ Rendering vibrational animation ({_label})…</p>"
-                )
+        self.vib_output.append_display_data(
+            HTML(
+                f'<p style="color:#555;font-style:italic;padding:8px">'
+                f"⏳ Rendering vibrational animation ({_label})…</p>"
             )
+        )
         threading.Thread(
             target=self._render_vib_mode,
             args=(vib_data, molecule, mode_number),
@@ -4946,7 +4991,6 @@ class QuantUIApp:
                 preopt_result=_pre_opt,
                 source="live",
             )
-            self._apply_analysis_context(_ana_ctx)
 
             self.step_progress.complete(2)
             self.step_progress.complete(3)
@@ -5022,6 +5066,13 @@ class QuantUIApp:
                     )
                 except Exception:
                     pass
+
+            # Activate analysis panels AFTER saving/refreshing the results browser.
+            # _refresh_results_browser (above) sets past_dd.options, which fires its
+            # observer and calls _deactivate_all_ana_panels.  Placing this call here
+            # means that observer has already run (harmlessly, panels not yet active)
+            # by the time we activate them.
+            self._apply_analysis_context(_ana_ctx)
 
             # Log performance
             try:
