@@ -312,6 +312,7 @@ class QuantUIApp:
         # ── Instance state ────────────────────────────────────────────────
         self._molecule: Optional[Molecule] = None
         self._last_result: Any = None
+        self._last_calc_type: Optional[str] = None  # e.g. "frequency", "single_point"
         self._results: List = []
         self._pending_traj_result: Any = None
         self.root_tab: widgets.Tab
@@ -1824,7 +1825,10 @@ class QuantUIApp:
             )
             self._apply_plotly_theme(_fig)
             self._tddft_fig.value = _pio.to_html(
-                _fig, include_plotlyjs="cdn", full_html=False
+                _fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
             return True
         except Exception:
@@ -3493,6 +3497,7 @@ class QuantUIApp:
                 "method": self.method_dd.value,
                 "basis": self.basis_dd.value,
                 "calc_type": self.calc_type_dd.value,
+                "last_calc_type": getattr(self, "_last_calc_type", None),
             }
         except Exception:
             pass
@@ -3510,7 +3515,16 @@ class QuantUIApp:
             except Exception:
                 pass
         try:
-            ctx["recent_events"] = _calc_log.get_recent_events(15)
+            _all_ev = _calc_log.get_recent_events(60)
+            # Always include the 10 most recent non-startup events so that calc
+            # events are not starved out by a burst of startup entries (e.g.
+            # rapid notebook restarts).  Merge with the 5 most recent events of
+            # any type to preserve immediate context, then re-sort by timestamp.
+            _non_startup = [e for e in _all_ev if e.get("event") != "startup"]
+            _keep_ids = {id(e) for e in _non_startup[-10:]} | {
+                id(e) for e in _all_ev[-5:]
+            }
+            ctx["recent_events"] = [e for e in _all_ev if id(e) in _keep_ids]
         except Exception:
             pass
         return ctx
@@ -4413,7 +4427,10 @@ class QuantUIApp:
             )
             self._apply_plotly_theme(fig)
             self._ir_fig.value = _pio.to_html(
-                fig, include_plotlyjs="cdn", full_html=False
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
         except Exception as _e:
             try:
@@ -4461,7 +4478,12 @@ class QuantUIApp:
                 self._orb_ymin_input.value = round(float(yr[0]), 2)
                 self._orb_ymax_input.value = round(float(yr[1]), 2)
             self._apply_plotly_theme(fig)
-            html_str = _pio.to_html(fig, include_plotlyjs="cdn", full_html=False)
+            html_str = _pio.to_html(
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
+            )
             self._orb_diagram_html.value = html_str
             _plotly_rendered = True
         except Exception:
@@ -4552,7 +4574,10 @@ class QuantUIApp:
             )
             self._apply_plotly_theme(fig)
             self._orb_diagram_html.value = _pio.to_html(
-                fig, include_plotlyjs="cdn", full_html=False
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
         except Exception:
             pass
@@ -4687,7 +4712,12 @@ class QuantUIApp:
 
         import plotly.io as _pio
 
-        _anim_html = _pio.to_html(anim_fig, full_html=False, include_plotlyjs="cdn")
+        _anim_html = _pio.to_html(
+            anim_fig,
+            full_html=False,
+            include_plotlyjs="cdn",
+            config={"responsive": True},
+        )
         self.vib_output.clear_output()
         self.vib_output.append_display_data(_H(_anim_html))
 
@@ -4971,6 +5001,7 @@ class QuantUIApp:
             _elapsed = time.perf_counter() - _run_wall_t
             _elapsed_cpu = time.process_time() - _run_cpu_t
             self._last_result = result
+            self._last_calc_type = save_type
             self.accumulate_btn.disabled = False
 
             self.result_output.append_display_data(HTML(result_html))
@@ -5863,7 +5894,10 @@ class QuantUIApp:
                 hovermode="closest",
             )
             self._pes_plot_html.value = pio.to_html(
-                fig, include_plotlyjs="cdn", full_html=False
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
         except Exception:
             pass
