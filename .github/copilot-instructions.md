@@ -47,6 +47,9 @@ QuantUI/
 │   ├── ir_plot.py            ← IR spectrum Plotly figure builder
 │   ├── config.py             ← All constants/defaults (methods, basis sets, etc.)
 │   ├── utils.py              ← Session resource checks, sanitize_filename, etc.
+│   ├── issue_tracker.py      ← In-app issue/bug logging to issues.db
+│   ├── log_utils.py          ← Shared logging helpers
+│   ├── benchmarks.py         ← Performance benchmarking utilities
 │   └── security.py           ← SecurityError exception class
 ├── notebooks/
 │   ├── molecule_computations.ipynb  ← Student-facing Voilà app (thin launcher)
@@ -86,7 +89,7 @@ notebooks/molecule_computations.ipynb
         │  _build_compare_section()   → compare_panel              │
         │  _build_output_tab()        → log viewer                 │
         │  _build_help_section()      → help panel                 │
-        │  _build_ana_switcher()      → Analysis tab button strip  │
+        │  _build_ana_switcher()      → Analysis tab always-visible panels │
         │  _assemble_tabs()           → root_tab (Tab widget)      │
         └──────────────────────────────────────────────────────────┘
                 │  _do_run() dispatches by calc_type_dd.value:
@@ -124,7 +127,8 @@ must understand this pattern.**
 After a calculation completes (live or history), `_apply_analysis_context(ctx)` is the
 single entry point for all panel population. It:
 
-1. Calls `_deactivate_all_ana_panels()` to reset all 8 panels to grey/hidden
+1. Calls `_deactivate_all_ana_panels()` to reset all 8 panels — collapses accordions
+   and restores "Not available" placeholders (panels remain in the DOM — never hidden)
 2. Looks up `_PANEL_REGISTRY[ctx.calc_type]` for an ordered list of
    `(panel_name, populate_method_name, auto_select)` tuples
 3. Calls each populate method (e.g. `_pop_energies(ctx)`)
@@ -173,11 +177,12 @@ _PANEL_REGISTRY = {
 
 1. Create the accordion widget in `_build_results_section()` (follow existing pattern)
 2. Add it to the `analysis_tab_panel` VBox in `_build_analysis_section()`
-3. Add `(panel_name, accordion, tooltip)` to `_PANEL_META` in `_build_ana_switcher()`
-4. Add the matching tooltip to `_deactivate_all_ana_panels()` tooltip list (must mirror `_PANEL_META`)
-5. Write `_pop_xxx(self, ctx: _AnalysisContext) -> bool`
-6. Add the entry to `_PANEL_REGISTRY`
-7. If history replay needs data: ensure `save_spectra` in `_do_run` saves it
+3. Add `(panel_name, accordion_attr_name, "available after X")` to `_PANEL_META`
+   (class-level `ClassVar` — this is the single source of truth for placeholder text
+   and accordion attribute lookup; `_build_ana_switcher()` reads it at init time)
+4. Write `_pop_xxx(self, ctx: _AnalysisContext) -> bool`
+5. Add the entry to `_PANEL_REGISTRY`
+6. If history replay needs data: ensure `save_spectra` in `_do_run` saves it
 
 ### Live run vs history replay — same code path
 
@@ -190,7 +195,12 @@ to build the context from disk.
 
 ## Analysis Tab — 8 Panels
 
-| Panel | Accordion | Activated by calc types |
+All 8 panels are **always in the DOM** (`layout.display=""`, `selected_index=None`).
+Unavailable panels show a "Not available — run a X calculation first" placeholder.
+`_activate_ana_panel()` swaps the placeholder for real content and expands the accordion.
+`_deactivate_all_ana_panels()` restores placeholders and collapses — never hides.
+
+| Panel | Accordion attr | Activated by calc types |
 |---|---|---|
 | Energies | `_orb_accordion` | Single Point, Geometry Opt |
 | Trajectory | `traj_accordion` | Geometry Opt, PES Scan, Frequency (pre-opt only) |
@@ -260,6 +270,17 @@ to build the context from disk.
    (`_show_orbital_diagram`, `_show_vib_animation`, `_show_ir_spectrum`,
    `_show_pes_scan_result`) return `bool` and must not call `_activate_ana_panel()`.
 
+8. **Never use `include_plotlyjs="cdn"` in widget HTML.** CDN requests fail
+   silently in offline classroom deployments — the figure div stays blank with no
+   error anywhere. Use `include_plotlyjs="require"` (Voilà/RequireJS path) or
+   `include_plotlyjs=True` (inline bundle, works everywhere). This rule is enforced
+   by `tests/test_code_quality.py::test_no_cdn_plotlyjs`.
+
+9. **All `.observe()` callbacks must be wrapped with `_safe_cb`.** Exceptions in
+   raw `.observe()` handlers disappear into the kernel console — invisible in Voilà.
+   Use `widget.observe(self._safe_cb(self._on_x), names="value")` so exceptions are
+   routed to the Log tab instead. See `_safe_cb()` in `app.py`.
+
 ---
 
 ## Supported Calculations
@@ -306,10 +327,12 @@ __init__()
 | Attribute | Type | Purpose |
 | --- | --- | --- |
 | `self._ana_available` | `set[str]` | Names of panels with data; populated by `_activate_ana_panel()` |
-| `self._ana_active` | `str` | Currently visible panel name |
-| `self._ana_panel_names` | `list[str]` | Ordered panel names matching `_PANEL_META` |
-| `self._ana_accordions` | `list[Accordion]` | Ordered accordions matching `_PANEL_META` |
-| `self._ana_btns` | `list[Button]` | Ordered switcher buttons matching `_PANEL_META` |
+| `self._ana_active` | `str` | Currently expanded panel name |
+| `self._ana_panel_names` | `list[str]` | Ordered panel names derived from `_PANEL_META` |
+| `self._ana_accordions` | `list[Accordion]` | Ordered accordions derived from `_PANEL_META` |
+| `self._ana_unavail_msgs` | `dict[str, HTML]` | Panel name → "Not available" placeholder widget |
+| `self._ana_content_boxes` | `dict[str, VBox]` | Panel name → real content VBox (hidden until activated) |
+| `self._ana_btns` | `list[Button]` | Switcher buttons — **pending removal in M-PLOT-FIX.3** |
 | `self._pending_traj_result` | `Any` | Trajectory stub; rendered lazily on accordion expand |
 | `self._last_orb_info` | `Optional[...]` | Orbital info from last successful `_show_orbital_diagram` |
 | `self._last_ir_freqs` | `list[float]` | IR frequencies stored by `_show_ir_spectrum` |
@@ -445,7 +468,7 @@ Test files in `tests/`:
 
 | File | What it covers |
 | --- | --- |
-| `test_app.py` | QuantUIApp — widgets, panel registry, callbacks, history replay |
+| `test_app.py` | QuantUIApp — widgets, panel registry, callbacks, always-visible panels |
 | `test_molecule.py` | Molecule parsing, validation, formula |
 | `test_session_calc.py` | `run_in_session()` — PySCF-gated |
 | `test_notebook_workflows.py` | End-to-end HF/DFT/preopt/thread-safety — PySCF-gated |
@@ -453,16 +476,23 @@ Test files in `tests/`:
 | `test_freq_calc.py` | `run_freq_calc()` — PySCF-gated |
 | `test_tddft_calc.py` | `run_tddft_calc()` — PySCF-gated |
 | `test_nmr_calc.py` | `run_nmr_calc()` — PySCF + pyscf.prop required |
-| `test_pes_scan.py` | `run_pes_scan()` — PySCF + ASE required |
+| `test_pes_scan.py` | `run_pes_scan()` + PES analysis panel |
+| `test_ir_plot.py` | `plot_ir_spectrum()` — stick and broadened modes |
 | `test_comparison.py` | Result comparison tables |
 | `test_results_storage.py` | Save/load/list round-trip |
 | `test_security.py` | `SecurityError`, `sanitize_filename()` |
+| `test_code_quality.py` | Static analysis — bans CDN plotlyjs, bare except/pass *(pending M-PLOT-FIX.5)* |
+| `test_sp/` | Single-point analysis history replay (end-to-end) |
+| `test_geo_opt/` | Geometry opt analysis history replay |
+| `test_tddft/` | TD-DFT / UV-Vis analysis history replay |
+| `test_nmr/` | NMR analysis history replay |
+| `test_freq_analysis_history.py` | Frequency analysis history replay (Vibrational + IR) |
+| `test_pes_scan_analysis_history.py` | PES scan analysis history replay |
 
 **PySCF-gated tests** use `@pytest.mark.skipif(not _PYSCF_AVAILABLE, ...)`.
 On Windows, these become skips — not failures.
 
-**Baseline (WSL, 2026-04-27):** 699 passed, 15 skipped, 10 failed (all pre-existing:
-7 NMR pyscf.prop, 1 orbital viz, 1 PES scan, 1 freq thermo).
+**Baseline (WSL, 2026-05-01 session 29):** 865 passed, 15 skipped.
 
 ---
 
