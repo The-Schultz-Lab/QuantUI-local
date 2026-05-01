@@ -323,7 +323,10 @@ def run_in_session(
         _mo_energy_ha_arr = _np.array(mf.mo_energy)
         _mo_occ_arr = _np.array(mf.mo_occ)
         _mo_coeff_arr = _np.array(mf.mo_coeff)
-        _pyscf_mol_atom = molecule.to_pyscf_format()
+        _pyscf_mol_atom = [
+            (atom, list(map(float, coords)))
+            for atom, coords in zip(molecule.atoms, molecule.coordinates)
+        ]
         _pyscf_mol_basis = basis
     except Exception:
         pass
