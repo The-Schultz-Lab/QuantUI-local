@@ -46,6 +46,10 @@ dependencies:
       - black>=24.0.0
       - ruff>=0.4.0
       # Install QuantUI in editable mode
-      # On Linux/WSL also run: conda install -c conda-forge pyscf pyscf-properties
-      - pyscf-properties   # NMR and other properties (pyscf.prop); moved out of pyscf core in v2.0
+      # On Linux/WSL also run: conda install -c conda-forge pyscf
+      # (pyscf-properties is pip-only; installed here automatically)
+      # PyPI pyscf-properties 0.1.0 is missing the infrared module and has an NMR
+      # reshape bug fixed in commit 4eee5a4 (2024-11-07, unreleased).  Install
+      # from GitHub source until a new release lands on PyPI.
+      - pyscf-properties @ git+https://github.com/pyscf/properties.git
       - -e ..

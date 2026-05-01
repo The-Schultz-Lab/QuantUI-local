@@ -210,7 +210,7 @@ def run_tddft_calc(
     oscillator_strengths: List[float] = []
 
     try:
-        td = mf.TDDFT()
+        td = mf.TDHF() if using_hf else mf.TDDFT()
         td.nstates = nstates
         td.verbose = 3
         td.stdout = stream

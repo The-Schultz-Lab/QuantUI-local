@@ -175,5 +175,54 @@ class TestRunFreqCalcThermo:
             assert result.thermo.G_hartree < result.thermo.H_hartree
 
 
+# ============================================================================
+# IR intensities — PySCF required
+# ============================================================================
+
+
+class TestIRIntensities:
+    """make_ir_intensity() should return real km/mol values for H₂O / RHF.
+
+    H₂O has 3 vibrational modes: bending (~1600 cm⁻¹), symmetric stretch
+    (~3700 cm⁻¹), antisymmetric stretch (~3800 cm⁻¹).  All three are
+    IR-active (A1 and B2 symmetry), so all intensities must be positive.
+    """
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_ir_intensities_non_empty(self):
+        from quantui.freq_calc import run_freq_calc
+
+        result = run_freq_calc(_water(), method="RHF", basis="STO-3G")
+        assert result.ir_intensities, "ir_intensities should be non-empty for H₂O/RHF"
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_ir_intensities_length_matches_frequencies(self):
+        from quantui.freq_calc import run_freq_calc
+
+        result = run_freq_calc(_water(), method="RHF", basis="STO-3G")
+        assert len(result.ir_intensities) == len(result.frequencies_cm1)
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_ir_intensities_all_non_negative(self):
+        from quantui.freq_calc import run_freq_calc
+
+        result = run_freq_calc(_water(), method="RHF", basis="STO-3G")
+        for i, inten in enumerate(result.ir_intensities):
+            assert inten >= 0, f"mode {i}: intensity {inten:.3f} < 0"
+
+    @pyscf_only
+    @pytest.mark.slow
+    def test_ir_intensities_physically_reasonable(self):
+        """All H₂O modes are IR-active; max intensity should be > 1 km/mol."""
+        from quantui.freq_calc import run_freq_calc
+
+        result = run_freq_calc(_water(), method="RHF", basis="STO-3G")
+        if result.ir_intensities:
+            assert max(result.ir_intensities) > 1.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

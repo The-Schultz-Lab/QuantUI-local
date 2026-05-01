@@ -40,9 +40,12 @@ packages = ["quantui"]
 [project.optional-dependencies]
 # PySCF requires Linux/macOS/WSL — not available on Windows natively.
 # Use the Apptainer container (apptainer/quantui.def) for Windows.
-# pyscf-properties provides pyscf.prop (NMR, etc.) — moved out of core in PySCF 2.0.
+# pyscf>=2.13.0: pyscf.prop.infrared is in pyscf 2.13.0+ core (creates the
+# pyscf.prop namespace that infrared lives under).
+# pyscf-properties: provides additional pyscf.prop.* modules (EFG, IR, etc.).
+# NMR is accessed via pyscf.nmr (core, not overwritten by pyscf-properties).
 pyscf = [
-    "pyscf>=2.3.0",
+    "pyscf>=2.13.0",
     "pyscf-properties",
 ]
 

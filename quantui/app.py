@@ -312,6 +312,7 @@ class QuantUIApp:
         # ── Instance state ────────────────────────────────────────────────
         self._molecule: Optional[Molecule] = None
         self._last_result: Any = None
+        self._last_calc_type: Optional[str] = None  # e.g. "frequency", "single_point"
         self._results: List = []
         self._pending_traj_result: Any = None
         self.root_tab: widgets.Tab
@@ -1537,6 +1538,13 @@ class QuantUIApp:
             else:
                 acc.layout.display = "none"
                 btn.button_style = ""
+        # Plotly charts inside hidden accordions render with 0 dimensions and appear
+        # blank.  Re-render the IR figure whenever its panel is brought into view so
+        # the chart always paints into a visible, correctly-sized container.
+        if name == "IR Spectrum" and getattr(self, "_last_ir_freqs", None):
+            self._update_ir_figure(
+                self._ir_mode_toggle.value, self._ir_fwhm_slider.value
+            )
 
     def _activate_ana_panel(self, name: str, auto_select: bool = True) -> None:
         """Mark a panel as available (full opacity) and optionally select it."""
@@ -1714,14 +1722,32 @@ class QuantUIApp:
         return True
 
     def _pop_preopt_trajectory(self, ctx: _AnalysisContext) -> bool:
-        # Pre-opt trajectory is only available for live Frequency runs that
-        # had the pre-opt checkbox enabled.  Not stored to disk, so history
-        # replay cannot show it.
-        pre = ctx.preopt_result
-        if pre is None:
-            return False
-        traj = getattr(pre, "trajectory", None)
-        energies = list(getattr(pre, "energies_hartree", []))
+        if ctx.source == "live":
+            pre = ctx.preopt_result
+            if pre is None:
+                return False
+            traj = getattr(pre, "trajectory", None)
+            energies = list(getattr(pre, "energies_hartree", []))
+        else:
+            if ctx.result_dir is None:
+                return False
+            preopt_path = ctx.result_dir / "preopt_trajectory.json"
+            if not preopt_path.exists():
+                return False
+            try:
+                from quantui.results_storage import load_trajectory
+
+                traj, energies = load_trajectory(
+                    ctx.result_dir, filename="preopt_trajectory.json"
+                )
+            except Exception as _exc:
+                from quantui import calc_log as _clog
+
+                _clog.log_event(
+                    "pop_preopt_trajectory_error",
+                    f"{type(_exc).__name__}: {_exc}"[:300],
+                )
+                return False
         if not traj or len(traj) < 2:
             return False
         stub = _types_mod.SimpleNamespace(
@@ -1743,7 +1769,7 @@ class QuantUIApp:
             freqs = ir.get("frequencies_cm1")
             ints = ir.get("ir_intensities")
             disps = ir.get("displacements")
-            if not (freqs and ints and disps and mol_data.get("atoms")):
+            if not (freqs and disps and mol_data.get("atoms")):
                 return False
             from quantui.molecule import Molecule as _Mol
 
@@ -1817,7 +1843,10 @@ class QuantUIApp:
             )
             self._apply_plotly_theme(_fig)
             self._tddft_fig.value = _pio.to_html(
-                _fig, include_plotlyjs="cdn", full_html=False
+                _fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
             return True
         except Exception:
@@ -1892,7 +1921,40 @@ class QuantUIApp:
     def _pop_pes_plot(self, ctx: _AnalysisContext) -> bool:
         result = ctx.live_result
         if result is None:
-            return False  # PES energy data not stored to disk; live-only for now
+            scan = ctx.spectra_data.get("pes_scan", {})
+            if not scan or not scan.get("energies_hartree"):
+                return False
+            energies_ha = scan["energies_hartree"]
+            atom_indices = scan.get("atom_indices", [])
+            scan_type = scan.get("scan_type", "bond")
+            x_vals = scan.get("scan_parameter_values", [])
+            e_min = min(energies_ha)
+            _HARTREE_TO_KCAL = 627.5094740631
+            e_rel = [(e - e_min) * _HARTREE_TO_KCAL for e in energies_ha]
+            idx = [i + 1 for i in atom_indices]
+            if scan_type == "bond":
+                label = f"Bond {idx[0]}–{idx[1]} / Å" if len(idx) >= 2 else "Bond / Å"
+            elif scan_type == "angle":
+                label = (
+                    f"Angle {idx[0]}–{idx[1]}–{idx[2]} / °"
+                    if len(idx) >= 3
+                    else "Angle / °"
+                )
+            else:
+                label = (
+                    f"Dihedral {idx[0]}–{idx[1]}–{idx[2]}–{idx[3]} / °"
+                    if len(idx) >= 4
+                    else "Dihedral / °"
+                )
+            result = _types_mod.SimpleNamespace(
+                scan_type=scan_type,
+                atom_indices=atom_indices,
+                scan_parameter_values=x_vals,
+                energies_hartree=energies_ha,
+                energies_relative_kcal=e_rel,
+                scan_coordinate_label=label,
+                converged_all=True,
+            )
         return self._show_pes_scan_result(result)
 
     def _pop_pes_trajectory(self, ctx: _AnalysisContext) -> bool:
@@ -3486,6 +3548,7 @@ class QuantUIApp:
                 "method": self.method_dd.value,
                 "basis": self.basis_dd.value,
                 "calc_type": self.calc_type_dd.value,
+                "last_calc_type": getattr(self, "_last_calc_type", None),
             }
         except Exception:
             pass
@@ -3503,7 +3566,16 @@ class QuantUIApp:
             except Exception:
                 pass
         try:
-            ctx["recent_events"] = _calc_log.get_recent_events(15)
+            _all_ev = _calc_log.get_recent_events(60)
+            # Always include the 10 most recent non-startup events so that calc
+            # events are not starved out by a burst of startup entries (e.g.
+            # rapid notebook restarts).  Merge with the 5 most recent events of
+            # any type to preserve immediate context, then re-sort by timestamp.
+            _non_startup = [e for e in _all_ev if e.get("event") != "startup"]
+            _keep_ids = {id(e) for e in _non_startup[-10:]} | {
+                id(e) for e in _all_ev[-5:]
+            }
+            ctx["recent_events"] = [e for e in _all_ev if id(e) in _keep_ids]
         except Exception:
             pass
         return ctx
@@ -4191,6 +4263,22 @@ class QuantUIApp:
         except ImportError:
             return None
 
+        try:
+            return self._build_vib_data_inner(
+                freq_result, molecule, np, VibrationalData, VibrationalMode
+            )
+        except Exception as _e:
+            try:
+                from quantui import calc_log as _clog
+
+                _clog.log_event("vib_data_error", f"{type(_e).__name__}: {_e}"[:300])
+            except Exception:
+                pass
+            return None
+
+    def _build_vib_data_inner(
+        self, freq_result, molecule, np, VibrationalData, VibrationalMode
+    ):
         displacements = getattr(freq_result, "displacements", None)
         if displacements is None:
             return None
@@ -4294,15 +4382,17 @@ class QuantUIApp:
 
         # Show loading indicator and render in a background thread so _do_run
         # is not blocked while the animation is generated (can take several seconds).
+        # append_display_data is used instead of display() because this method is
+        # called from the _do_run background thread; display(HTML(...)) is not
+        # thread-safe for plain HTML but append_display_data is.
         _first_label, _first_mode = options[0]
         self.vib_output.clear_output()
-        with self.vib_output:
-            display(
-                HTML(
-                    f'<p style="color:#555;font-style:italic;padding:8px">'
-                    f"⏳ Rendering vibrational animation ({_first_label})…</p>"
-                )
+        self.vib_output.append_display_data(
+            HTML(
+                f'<p style="color:#555;font-style:italic;padding:8px">'
+                f"⏳ Rendering vibrational animation ({_first_label})…</p>"
             )
+        )
         threading.Thread(
             target=self._render_vib_mode,
             args=(vib_data, molecule, _first_mode),
@@ -4388,10 +4478,18 @@ class QuantUIApp:
             )
             self._apply_plotly_theme(fig)
             self._ir_fig.value = _pio.to_html(
-                fig, include_plotlyjs="cdn", full_html=False
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            try:
+                from quantui import calc_log as _clog
+
+                _clog.log_event("ir_fig_error", f"{type(_e).__name__}: {_e}"[:300])
+            except Exception:
+                pass
 
     def _show_orbital_diagram(self, result) -> bool:
         """Build and reveal the interactive orbital diagram accordion.
@@ -4431,7 +4529,12 @@ class QuantUIApp:
                 self._orb_ymin_input.value = round(float(yr[0]), 2)
                 self._orb_ymax_input.value = round(float(yr[1]), 2)
             self._apply_plotly_theme(fig)
-            html_str = _pio.to_html(fig, include_plotlyjs="cdn", full_html=False)
+            html_str = _pio.to_html(
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
+            )
             self._orb_diagram_html.value = html_str
             _plotly_rendered = True
         except Exception:
@@ -4522,7 +4625,10 @@ class QuantUIApp:
             )
             self._apply_plotly_theme(fig)
             self._orb_diagram_html.value = _pio.to_html(
-                fig, include_plotlyjs="cdn", full_html=False
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
         except Exception:
             pass
@@ -4592,12 +4698,12 @@ class QuantUIApp:
         Safe to call from background thread via ``with output:`` context.
         """
         from IPython.display import HTML as _H
-        from IPython.display import display as _ipy_display
 
         def _err(msg: str) -> None:
             self.vib_output.clear_output()
-            with self.vib_output:
-                _ipy_display(_H(f'<p style="color:#b91c1c;padding:8px">⚠ {msg}</p>'))
+            self.vib_output.append_display_data(
+                _H(f'<p style="color:#b91c1c;padding:8px">⚠ {msg}</p>')
+            )
 
         try:
             from plotlymol3d import create_vibration_animation, xyzblock_to_rdkitmol
@@ -4620,6 +4726,12 @@ class QuantUIApp:
             return
 
         try:
+            from quantui import calc_log as _clog_anim
+
+            _clog_anim.log_event("vib_render_start", f"mode {mode_number}")
+        except Exception:
+            pass
+        try:
             anim_fig = create_vibration_animation(
                 vib_data=vib_data,
                 mode_number=mode_number,
@@ -4631,12 +4743,34 @@ class QuantUIApp:
             )
             anim_fig.update_layout(height=420)
         except Exception as exc:
+            try:
+                from quantui import calc_log as _clog_anim
+
+                _clog_anim.log_event(
+                    "vib_render_error",
+                    f"mode {mode_number}: {type(exc).__name__}: {exc}"[:300],
+                )
+            except Exception:
+                pass
             _err(f"Animation generation failed: {exc}")
             return
+        try:
+            from quantui import calc_log as _clog_anim
 
+            _clog_anim.log_event("vib_render_done", f"mode {mode_number}")
+        except Exception:
+            pass
+
+        import plotly.io as _pio
+
+        _anim_html = _pio.to_html(
+            anim_fig,
+            full_html=False,
+            include_plotlyjs="cdn",
+            config={"responsive": True},
+        )
         self.vib_output.clear_output()
-        with self.vib_output:
-            _ipy_display(anim_fig)
+        self.vib_output.append_display_data(_H(_anim_html))
 
     def _on_vib_mode_changed(self, change) -> None:
         """Re-render vib animation when the mode dropdown changes."""
@@ -4652,13 +4786,12 @@ class QuantUIApp:
             f"mode {mode_number}",
         )
         self.vib_output.clear_output()
-        with self.vib_output:
-            display(
-                HTML(
-                    f'<p style="color:#555;font-style:italic;padding:8px">'
-                    f"⏳ Rendering vibrational animation ({_label})…</p>"
-                )
+        self.vib_output.append_display_data(
+            HTML(
+                f'<p style="color:#555;font-style:italic;padding:8px">'
+                f"⏳ Rendering vibrational animation ({_label})…</p>"
             )
+        )
         threading.Thread(
             target=self._render_vib_mode,
             args=(vib_data, molecule, mode_number),
@@ -4887,7 +5020,15 @@ class QuantUIApp:
                     progress_stream=log,  # type: ignore[arg-type]
                 )
                 result_html = self._format_pes_scan_result(result)
-                save_spectra, save_type = {}, "pes_scan"
+                save_spectra = {
+                    "pes_scan": {
+                        "scan_type": result.scan_type,
+                        "atom_indices": result.atom_indices,
+                        "scan_parameter_values": result.scan_parameter_values,
+                        "energies_hartree": result.energies_hartree,
+                    }
+                }
+                save_type = "pes_scan"
             else:  # Single Point
                 self.run_status.value = "Calculating..."
                 from quantui import run_in_session
@@ -4919,6 +5060,7 @@ class QuantUIApp:
             _elapsed = time.perf_counter() - _run_wall_t
             _elapsed_cpu = time.process_time() - _run_cpu_t
             self._last_result = result
+            self._last_calc_type = save_type
             self.accumulate_btn.disabled = False
 
             self.result_output.append_display_data(HTML(result_html))
@@ -4946,7 +5088,6 @@ class QuantUIApp:
                 preopt_result=_pre_opt,
                 source="live",
             )
-            self._apply_analysis_context(_ana_ctx)
 
             self.step_progress.complete(2)
             self.step_progress.complete(3)
@@ -5002,6 +5143,17 @@ class QuantUIApp:
                     _e_list = getattr(result, "energies_hartree", [])
                     if _traj:
                         save_trajectory(_saved_dir, _traj, _e_list or [])
+                # Persist pre-opt geometry trajectory for Frequency runs (DEC-007).
+                if ct == "Frequency" and _pre_opt is not None:
+                    _pre_traj = getattr(_pre_opt, "trajectory", None)
+                    _pre_e = list(getattr(_pre_opt, "energies_hartree", []))
+                    if _pre_traj:
+                        save_trajectory(
+                            _saved_dir,
+                            _pre_traj,
+                            _pre_e,
+                            filename="preopt_trajectory.json",
+                        )
                 # Persist MO data for orbital diagram + isosurface replay.
                 if ct in ("Single Point", "Geometry Opt", "Frequency"):
                     save_orbitals(_saved_dir, result)
@@ -5022,6 +5174,13 @@ class QuantUIApp:
                     )
                 except Exception:
                     pass
+
+            # Activate analysis panels AFTER saving/refreshing the results browser.
+            # _refresh_results_browser (above) sets past_dd.options, which fires its
+            # observer and calls _deactivate_all_ana_panels.  Placing this call here
+            # means that observer has already run (harmlessly, panels not yet active)
+            # by the time we activate them.
+            self._apply_analysis_context(_ana_ctx)
 
             # Log performance
             try:
@@ -5805,7 +5964,10 @@ class QuantUIApp:
                 hovermode="closest",
             )
             self._pes_plot_html.value = pio.to_html(
-                fig, include_plotlyjs="cdn", full_html=False
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True},
             )
         except Exception:
             pass

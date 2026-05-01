@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .molecule import Molecule
 
@@ -120,13 +120,141 @@ def run_nmr_calc(
 
     converged = bool(getattr(mf, "converged", False))
 
+    # pyscf.nmr does not exist in released pyscf; use pyscf.prop.nmr (pyscf-properties).
+    _pyscf_nmr: Any = None
     try:
-        from pyscf.prop import nmr as _pyscf_nmr
+        import pyscf.prop.nmr
+
+        _pyscf_nmr = pyscf.prop.nmr
     except ImportError as exc:
         raise ImportError(
-            "PySCF NMR module (pyscf.prop.nmr) not found. "
-            "Ensure PySCF>=2.0 is installed: pip install 'pyscf>=2.0'"
+            "PySCF NMR module not found. "
+            "Install pyscf-properties: pip install pyscf-properties"
         ) from exc
+
+    # pyscf-properties 0.1.0 gen_vind hardcodes reshape(3, nmo, nocc).
+    # pyscf 2.x krylov reduces the batch below 3 via linear-dependency masking,
+    # causing "cannot reshape array of size N into shape (3,nmo,nocc)".
+    # Patch gen_vind to use reshape(-1, nmo, nocc) so any batch size works.
+    try:
+        from functools import reduce as _reduce_nmr
+
+        import pyscf.prop.nmr.rhf as _prop_nmr_rhf
+        from pyscf import lib as _pyscf_lib_nmr
+
+        def _fixed_gen_vind(mf_arg, mo_coeff, mo_occ):
+            vresp = mf_arg.gen_response(singlet=True, hermi=2)
+            occidx = mo_occ > 0
+            orbo = mo_coeff[:, occidx]
+            nocc = orbo.shape[1]
+            _nao, nmo = mo_coeff.shape
+
+            def vind(mo1):
+                _mo1 = _np.asarray(mo1).reshape(-1, nmo, nocc)
+                dm1 = _np.asarray(
+                    [
+                        _reduce_nmr(_np.dot, (mo_coeff, x * 2, orbo.T.conj()))
+                        for x in _mo1
+                    ]
+                )
+                dm1 = dm1 - dm1.transpose(0, 2, 1).conj()
+                v1mo = _pyscf_lib_nmr.einsum(
+                    "xpq,pi,qj->xij", vresp(dm1), mo_coeff.conj(), orbo
+                )
+                return v1mo.ravel()
+
+            return vind
+
+        _prop_nmr_rhf.gen_vind = _fixed_gen_vind
+    except Exception:
+        pass
+
+    # pyscf-properties 0.1.0 get_vxc_giao computes
+    #   blksize = min(int(X*BLKSIZE)*BLKSIZE, ngrids)
+    # which equals ngrids when ngrids < X*BLKSIZE, and ngrids may not be
+    # divisible by BLKSIZE.  pyscf 2.x block_loop asserts blksize%BLKSIZE==0.
+    # Patch get_vxc_giao to round blksize down to the nearest BLKSIZE multiple.
+    try:
+        import numpy as _np_rks
+        import pyscf.prop.nmr.rks as _prop_nmr_rks
+        from pyscf.dft import numint as _numint_rks
+
+        def _fixed_get_vxc_giao(
+            ni, mol, grids, xc_code, dms, max_memory=2000, verbose=None
+        ):
+            xctype = ni._xc_type(xc_code)
+            make_rho, nset, nao = ni._gen_rho_evaluator(mol, dms, hermi=1)
+            ngrids = len(grids.weights)
+            _BLKSIZE = _numint_rks.BLKSIZE
+            _raw_blk = int(max_memory / 12 * 1e6 / 8 / nao / _BLKSIZE) * _BLKSIZE
+            blksize = max(_BLKSIZE, (min(_raw_blk, ngrids) // _BLKSIZE) * _BLKSIZE)
+            shls_slice = (0, mol.nbas)
+            ao_loc = mol.ao_loc_nr()
+
+            vmat = _np_rks.zeros((3, nao, nao))
+            if xctype == "LDA":
+                buf = _np_rks.empty((4, blksize, nao))
+                ao_deriv = 0
+                for ao, mask, weight, coords in ni.block_loop(
+                    mol, grids, nao, ao_deriv, max_memory, blksize=blksize, buf=buf
+                ):
+                    rho = make_rho(0, ao, mask, "LDA")
+                    vxc = ni.eval_xc(xc_code, rho, 0, deriv=1)[1]
+                    vrho = vxc[0]
+                    aow = _np_rks.einsum("pi,p->pi", ao, weight * vrho)
+                    giao = mol.eval_gto(
+                        "GTOval_ig", coords, comp=3, non0tab=mask, out=buf[1:]
+                    )
+                    vmat[0] += _numint_rks._dot_ao_ao(
+                        mol, aow, giao[0], mask, shls_slice, ao_loc
+                    )
+                    vmat[1] += _numint_rks._dot_ao_ao(
+                        mol, aow, giao[1], mask, shls_slice, ao_loc
+                    )
+                    vmat[2] += _numint_rks._dot_ao_ao(
+                        mol, aow, giao[2], mask, shls_slice, ao_loc
+                    )
+                    rho = vxc = vrho = aow = None
+            elif xctype == "GGA":
+                buf = _np_rks.empty((10, blksize, nao))
+                ao_deriv = 1
+                for ao, mask, weight, coords in ni.block_loop(
+                    mol, grids, nao, ao_deriv, max_memory, blksize=blksize, buf=buf
+                ):
+                    rho = make_rho(0, ao, mask, "GGA")
+                    vxc = ni.eval_xc(xc_code, rho, 0, deriv=1)[1]
+                    vrho, vsigma = vxc[:2]
+                    wv = _np_rks.empty_like(rho)
+                    wv[0] = weight * vrho
+                    wv[1:] = rho[1:] * (weight * vsigma * 2)
+                    aow = _np_rks.einsum("npi,np->pi", ao[:4], wv)
+                    giao = mol.eval_gto(
+                        "GTOval_ig", coords, 3, non0tab=mask, out=buf[4:]
+                    )
+                    vmat[0] += _numint_rks._dot_ao_ao(
+                        mol, aow, giao[0], mask, shls_slice, ao_loc
+                    )
+                    vmat[1] += _numint_rks._dot_ao_ao(
+                        mol, aow, giao[1], mask, shls_slice, ao_loc
+                    )
+                    vmat[2] += _numint_rks._dot_ao_ao(
+                        mol, aow, giao[2], mask, shls_slice, ao_loc
+                    )
+                    giao = mol.eval_gto(
+                        "GTOval_ipig", coords, 9, non0tab=mask, out=buf[1:]
+                    )
+                    _prop_nmr_rks._gga_sum_(
+                        vmat, mol, ao, giao, wv, mask, shls_slice, ao_loc
+                    )
+                    rho = vxc = vrho = vsigma = wv = aow = None
+            elif xctype == "MGGA":
+                raise NotImplementedError("meta-GGA")
+
+            return vmat - vmat.transpose(0, 2, 1)
+
+        _prop_nmr_rks.get_vxc_giao = _fixed_get_vxc_giao
+    except Exception:
+        pass
 
     try:
         if method_upper == "RHF":

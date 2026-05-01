@@ -22,8 +22,9 @@ Built for classroom teaching at the
 - **3D visualization** — interactive py3Dmol or PlotlyMol viewer with a live
   backend toggle when both are installed; post-calculation structure rendered
   automatically in the results panel
-- **In-session calculations** — RHF, UHF, 9 DFT functionals, MP2, and NMR
-  shielding via PySCF, running in your Python kernel (no batch submission)
+- **In-session calculations** — RHF, UHF, 9 DFT functionals, MP2, NMR
+  shielding, TD-DFT UV-Vis, and 1D PES scans via PySCF, running in your
+  Python kernel (no batch submission)
 - **Implicit solvent** — PCM solvation (Water, Ethanol, THF, DMSO,
   Acetonitrile) via a single checkbox
 - **Rich results** — total energy, HOMO-LUMO gap, Mulliken charges, dipole
@@ -148,6 +149,7 @@ Five step-by-step notebooks in [`notebooks/tutorials/`](notebooks/tutorials/):
 | Frequency | Vibrational frequencies, ZPVE, IR intensities, thermochemistry (H/S/G at 298 K), animated normal modes, IR spectrum chart (stick / Lorentzian broadened) |
 | UV-Vis (TD-DFT) | Excitation energies, oscillator strengths, UV-Vis spectrum plot |
 | NMR Shielding | ¹H and ¹³C chemical shifts relative to TMS via GIAO; tabulated by element |
+| PES Scan | 1D potential energy surface along a bond, angle, or dihedral; energy profile chart; geometry animation at each scan point |
 
 ### Basis sets
 
@@ -184,6 +186,7 @@ quantui/                  Main package
   ir_plot.py              IR spectrum chart (stick and Lorentzian broadened)
   tddft_calc.py           TD-DFT UV-Vis excited-state calculations
   nmr_calc.py             NMR shielding + ¹H/¹³C chemical shift prediction
+  pes_scan.py             1D potential energy surface scan
   optimizer.py            QM geometry optimization with trajectory
   visualization_py3dmol.py  3D viewer (py3Dmol + PlotlyMol backends)
   pubchem.py              PubChem molecule search
@@ -197,7 +200,7 @@ quantui/                  Main package
 notebooks/
   molecule_computations.ipynb   Main student-facing interface
   tutorials/                    Step-by-step guided notebooks (01–05)
-tests/                    pytest test suite (575+ tests)
+tests/                    pytest test suite (860+ tests)
 apptainer/                Container definition for reproducible deployment
 local-setup/              Conda environment definition
 pyproject.toml            Package metadata and tool config

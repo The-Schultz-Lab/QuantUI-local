@@ -96,7 +96,13 @@ def save_result(
         ]
     )
     dest = base / dirname
-    dest.mkdir(parents=True, exist_ok=True)
+    # Windows timer resolution can produce identical microsecond timestamps for
+    # back-to-back calls; append a counter to guarantee a unique directory.
+    _collision = 1
+    while dest.exists():
+        dest = base / f"{dirname}_{_collision}"
+        _collision += 1
+    dest.mkdir(parents=True)
 
     _e_ha = getattr(result, "energy_hartree", float("nan"))
     # energy_ev may be a property (SessionResult) or absent (OptimizationResult
@@ -222,8 +228,13 @@ def load_orbitals(result_dir: Path):
     return stub
 
 
-def save_trajectory(result_dir: Path, trajectory: list, energies: list) -> None:
-    """Persist geometry-optimisation trajectory to *result_dir*/trajectory.json.
+def save_trajectory(
+    result_dir: Path,
+    trajectory: list,
+    energies: list,
+    filename: str = "trajectory.json",
+) -> None:
+    """Persist geometry-optimisation trajectory to *result_dir*/*filename*.
 
     Parameters
     ----------
@@ -233,6 +244,9 @@ def save_trajectory(result_dir: Path, trajectory: list, energies: list) -> None:
         List of ``Molecule`` objects (one per optimisation step).
     energies:
         List of total energies in Hartree, parallel to *trajectory*.
+    filename:
+        Output filename inside *result_dir*. Defaults to ``trajectory.json``.
+        Pass ``preopt_trajectory.json`` for pre-optimisation steps.
     """
     if not trajectory:
         return
@@ -249,10 +263,10 @@ def save_trajectory(result_dir: Path, trajectory: list, energies: list) -> None:
             for i, mol in enumerate(trajectory)
         ],
     }
-    (result_dir / "trajectory.json").write_text(json.dumps(data))
+    (result_dir / filename).write_text(json.dumps(data))
 
 
-def load_trajectory(result_dir: Path):
+def load_trajectory(result_dir: Path, filename: str = "trajectory.json"):
     """Reload a saved trajectory as (molecules, energies).
 
     Returns
@@ -269,7 +283,7 @@ def load_trajectory(result_dir: Path):
     """
     from quantui.molecule import Molecule
 
-    raw = json.loads((result_dir / "trajectory.json").read_text())
+    raw = json.loads((result_dir / filename).read_text())
     atoms = raw["atoms"]
     charge = raw.get("charge", 0)
     mult = raw.get("multiplicity", 1)
