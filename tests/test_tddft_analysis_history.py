@@ -15,6 +15,7 @@ Covers the complete path from "calculation finishes" to "history panels activate
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -200,7 +201,10 @@ class TestTDDFTPanelActivation:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _PYSCF_AVAILABLE, reason="PySCF not available on this platform")
+@pytest.mark.skipif(
+    not _PYSCF_AVAILABLE or sys.platform == "win32",
+    reason="PySCF not available or not supported on native Windows",
+)
 class TestTDDFTDoRunEndToEnd:
     """Full pipeline: real RHF/STO-3G TD-DFT (3 states) → disk → history → panel."""
 

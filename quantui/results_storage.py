@@ -96,7 +96,13 @@ def save_result(
         ]
     )
     dest = base / dirname
-    dest.mkdir(parents=True, exist_ok=True)
+    # Windows timer resolution can produce identical microsecond timestamps for
+    # back-to-back calls; append a counter to guarantee a unique directory.
+    _collision = 1
+    while dest.exists():
+        dest = base / f"{dirname}_{_collision}"
+        _collision += 1
+    dest.mkdir(parents=True)
 
     _e_ha = getattr(result, "energy_hartree", float("nan"))
     # energy_ev may be a property (SessionResult) or absent (OptimizationResult

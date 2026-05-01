@@ -16,6 +16,7 @@ Covers the complete path from "calculation finishes" to "history panels activate
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -242,7 +243,10 @@ class TestPESScanPanelActivation:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _PYSCF_AVAILABLE, reason="PySCF not available on this platform")
+@pytest.mark.skipif(
+    not _PYSCF_AVAILABLE or sys.platform == "win32",
+    reason="PySCF not available or not supported on native Windows",
+)
 class TestPESScanDoRunEndToEnd:
     """Full pipeline: real RHF/STO-3G H2 bond scan → disk → history → panels."""
 

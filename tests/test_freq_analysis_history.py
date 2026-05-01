@@ -20,6 +20,7 @@ data pipeline will show up here before a user notices in the UI.
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -333,7 +334,10 @@ class TestFreqAnalysisPanelActivation:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _PYSCF_AVAILABLE, reason="PySCF not available on this platform")
+@pytest.mark.skipif(
+    not _PYSCF_AVAILABLE or sys.platform == "win32",
+    reason="PySCF not available or not supported on native Windows",
+)
 class TestFreqDoRunEndToEnd:
     """Full pipeline: patched run_freq_calc → disk → _history_load_analysis → panels.
 

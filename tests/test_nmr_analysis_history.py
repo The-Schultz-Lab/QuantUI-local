@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -221,8 +222,8 @@ class TestNMRPanelActivation:
 
 
 @pytest.mark.skipif(
-    not _NMR_AVAILABLE,
-    reason="PySCF or pyscf-properties not available on this platform",
+    not _NMR_AVAILABLE or sys.platform == "win32",
+    reason="PySCF/pyscf-properties not available or not supported on native Windows",
 )
 class TestNMRDoRunEndToEnd:
     """Full pipeline: real RHF/STO-3G NMR → disk → history → panel."""
