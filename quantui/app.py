@@ -675,7 +675,7 @@ class QuantUIApp:
         )
         self.preopt_cb = widgets.Checkbox(
             value=False,
-            description="Pre-optimize geometry (fast LJ force-field)",
+            description="Pre-optimize geometry (for a crude starting point)",
             disabled=not _PREOPT_AVAILABLE,
             layout=widgets.Layout(width="400px"),
         )
@@ -753,7 +753,7 @@ class QuantUIApp:
         )
         self._freq_preopt_cb = widgets.Checkbox(
             value=False,
-            description="Pre-optimize geometry first (recommended for unoptimised inputs)",
+            description="Geometry optimization (recommended for unoptimized inputs)",
             style={"description_width": "initial"},
             layout=widgets.Layout(width="100%"),
         )
@@ -1459,30 +1459,42 @@ class QuantUIApp:
 
     def _build_ana_switcher(self) -> None:
         """Build the always-visible panel switcher strip for the Analysis tab."""
-        _PANEL_META = [
-            ("Energies", self._orb_accordion, "Single Point / Geometry Opt"),
-            (
-                "Trajectory",
-                self.traj_accordion,
-                "Geometry Opt / PES Scan / Frequency pre-opt",
-            ),
-            ("Vibrational", self.vib_accordion, "Frequency"),
-            ("IR Spectrum", self._ir_accordion, "Frequency"),
-            ("PES Scan", self._pes_scan_accordion, "PES Scan"),
-            ("Isosurface", self._iso_accordion, "Single Point (Linux/WSL only)"),
-            ("UV-Vis", self._tddft_accordion, "UV-Vis (TD-DFT)"),
-            ("NMR", self._nmr_accordion, "NMR Shielding"),
+        panel_meta = [
+            (name, getattr(self, attr), when) for name, attr, when in self._PANEL_META
         ]
-        self._ana_panel_names: list = [m[0] for m in _PANEL_META]
-        self._ana_accordions: list = [m[1] for m in _PANEL_META]
+        self._ana_panel_names: list = [m[0] for m in panel_meta]
+        self._ana_accordions: list = [m[1] for m in panel_meta]
         self._ana_available: set = set()
         self._ana_active: str = ""
         self._ana_unavail_html = widgets.HTML(
             value="",
             layout=widgets.Layout(display="none", margin="4px 0 8px"),
         )
+
+        # Wrap each accordion's child so it holds both an "unavailable" message
+        # and the real content.  Real content starts hidden; the unavailable
+        # message is shown until _activate_ana_panel() is called.
+        self._ana_unavail_msgs: dict = {}
+        self._ana_content_boxes: dict = {}
+        for name, acc, when in panel_meta:
+            unavail = widgets.HTML(
+                value=(
+                    f'<div style="padding:12px 16px;color:#6b7280;font-size:13px;'
+                    f'font-style:italic">Not available — run a {when} '
+                    f"calculation first.</div>"
+                ),
+                layout=widgets.Layout(display=""),
+            )
+            content = acc.children[0]
+            self._ana_unavail_msgs[name] = unavail
+            self._ana_content_boxes[name] = content
+            content.layout.display = "none"
+            acc.children = (widgets.VBox([unavail, content]),)
+            acc.layout.display = ""  # always in the DOM
+            acc.selected_index = None  # collapsed until activated
+
         self._ana_btns: list = []
-        for name, _acc, when in _PANEL_META:
+        for name, _acc, when in panel_meta:
             btn = widgets.Button(
                 description=name,
                 button_style="",
@@ -1508,14 +1520,12 @@ class QuantUIApp:
         if name in self._ana_available:
             self._select_ana_panel(name)
         else:
-            # Grey out all buttons except clicked; show "not available" note
+            # Highlight the clicked button as a warning; show inline note.
             for btn in self._ana_btns:
                 btn.button_style = ""
             for btn, pname in zip(self._ana_btns, self._ana_panel_names):
                 if pname == name:
                     btn.button_style = "warning"
-            for acc in self._ana_accordions:
-                acc.layout.display = "none"
             self._ana_unavail_html.value = (
                 f'<p style="color:#92400e;background:#fffbeb;border:1px solid #fde68a;'
                 f'border-radius:4px;padding:6px 12px;margin:0;font-size:13px">'
@@ -1525,67 +1535,66 @@ class QuantUIApp:
             self._ana_active = ""
 
     def _select_ana_panel(self, name: str) -> None:
-        """Show the named panel; hide all others and update button styles."""
+        """Expand the named panel; collapse all others. Updates button styles."""
         self._ana_active = name
         self._ana_unavail_html.layout.display = "none"
         for pname, acc, btn in zip(
             self._ana_panel_names, self._ana_accordions, self._ana_btns
         ):
             if pname == name:
-                acc.layout.display = ""
                 acc.selected_index = 0
                 btn.button_style = "primary"
             else:
-                acc.layout.display = "none"
+                acc.selected_index = None
                 btn.button_style = ""
-        # Plotly charts inside hidden accordions render with 0 dimensions and appear
-        # blank.  Re-render the IR figure whenever its panel is brought into view so
-        # the chart always paints into a visible, correctly-sized container.
+        # Re-render Plotly charts that may have initialised into a zero-size
+        # container while their accordion was collapsed.
         if name == "IR Spectrum" and getattr(self, "_last_ir_freqs", None):
             self._update_ir_figure(
                 self._ir_mode_toggle.value, self._ir_fwhm_slider.value
             )
+        if name == "Energies" and getattr(self, "_last_orb_info", None) is not None:
+            self._on_orb_range_changed()
 
     def _activate_ana_panel(self, name: str, auto_select: bool = True) -> None:
-        """Mark a panel as available (full opacity) and optionally select it."""
+        """Mark a panel as available: reveal its content, brighten its button."""
         self._ana_available.add(name)
         for btn, pname in zip(self._ana_btns, self._ana_panel_names):
             if pname == name:
                 btn.layout.opacity = "1.0"
                 btn.tooltip = name
+        # Swap unavailable placeholder for real content.
+        if name in self._ana_unavail_msgs:
+            self._ana_unavail_msgs[name].layout.display = "none"
+            self._ana_content_boxes[name].layout.display = ""
         if auto_select:
             self._select_ana_panel(name)
 
     def _deactivate_all_ana_panels(self) -> None:
-        """Reset all panels to hidden/unavailable; used at start of each new run."""
+        """Reset all panels to collapsed/unavailable; used at start of each new run."""
         self._ana_available.clear()
         self._ana_active = ""
         self._ana_unavail_html.layout.display = "none"
-        for acc, btn, _name, meta in zip(
-            self._ana_accordions,
-            self._ana_btns,
-            self._ana_panel_names,
-            # Re-read tooltips from scratch — must mirror _PANEL_META order
-            [
-                "Single Point / Geometry Opt",
-                "Geometry Opt / PES Scan / Frequency pre-opt",
-                "Frequency",
-                "Frequency",
-                "PES Scan",
-                "Single Point (Linux/WSL only)",
-                "UV-Vis (TD-DFT)",
-                "NMR Shielding",
-            ],
+        _when = {name: when for name, _, when in self._PANEL_META}
+        for name, acc, btn in zip(
+            self._ana_panel_names, self._ana_accordions, self._ana_btns
         ):
-            acc.layout.display = "none"
+            # Show the "not available" placeholder; hide real content.
+            if name in self._ana_unavail_msgs:
+                self._ana_unavail_msgs[name].layout.display = ""
+                self._ana_content_boxes[name].layout.display = "none"
             acc.selected_index = None
             btn.button_style = ""
             btn.layout.opacity = "0.35"
-            btn.tooltip = f"Available after: {meta}"
+            btn.tooltip = f"Available after: {_when.get(name, '')}"
 
     # ── Panel registry and unified applier ───────────────────────────────────
     #
-    # _PANEL_REGISTRY maps calc_type string → ordered list of
+    # _PANEL_META: ordered list of (name, accordion_attr, when_str) for every
+    # analysis panel.  Single source of truth for names, accordion references,
+    # and the "available after: …" tooltip text.
+    #
+    # _PANEL_REGISTRY maps calc_type → ordered list of
     # (panel_name, populate_method_name, auto_select) tuples.
     #
     # Rules:
@@ -1595,6 +1604,17 @@ class QuantUIApp:
     #     treated as False (only one panel is auto-selected per result).
     #   • If a populate method returns False / None the panel stays disabled.
     #   • Populate methods must NOT call _activate_ana_panel themselves.
+
+    _PANEL_META: ClassVar[list] = [
+        ("Energies", "_orb_accordion", "Single Point / Geometry Opt"),
+        ("Trajectory", "traj_accordion", "Geometry Opt / PES Scan / Frequency pre-opt"),
+        ("Vibrational", "vib_accordion", "Frequency"),
+        ("IR Spectrum", "_ir_accordion", "Frequency"),
+        ("PES Scan", "_pes_scan_accordion", "PES Scan"),
+        ("Isosurface", "_iso_accordion", "Single Point (Linux/WSL only)"),
+        ("UV-Vis", "_tddft_accordion", "UV-Vis (TD-DFT)"),
+        ("NMR", "_nmr_accordion", "NMR Shielding"),
+    ]
 
     _PANEL_REGISTRY: ClassVar[dict] = {
         "single_point": [

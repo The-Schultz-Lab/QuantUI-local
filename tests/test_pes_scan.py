@@ -191,11 +191,12 @@ class TestPesScanWidgets:
         app = QuantUIApp()
         assert app._scan_steps.value == 10
 
-    def test_pes_scan_accordion_hidden_initially(self):
+    def test_pes_scan_accordion_visible_collapsed_initially(self):
         from quantui.app import QuantUIApp
 
         app = QuantUIApp()
-        assert app._pes_scan_accordion.layout.display == "none"
+        assert app._pes_scan_accordion.layout.display == ""
+        assert app._pes_scan_accordion.selected_index is None
 
     def test_pes_plot_html_empty_initially(self):
         from quantui.app import QuantUIApp
@@ -210,14 +211,14 @@ class TestPesScanWidgets:
         app.calc_type_dd.value = "PES Scan"
         assert len(app.calc_extra_opts.children) > 0
 
-    def test_pes_scan_accordion_cleared_on_run_clicked(self):
+    def test_pes_scan_accordion_collapsed_on_run_clicked(self):
         from quantui.app import QuantUIApp
 
         app = QuantUIApp()
-        app._pes_scan_accordion.layout.display = ""
+        app._pes_scan_accordion.selected_index = 0
         app._pes_plot_html.value = "<div>old</div>"
         app._on_run_clicked(None)
-        assert app._pes_scan_accordion.layout.display == "none"
+        assert app._pes_scan_accordion.selected_index is None
         assert app._pes_plot_html.value == ""
 
 
