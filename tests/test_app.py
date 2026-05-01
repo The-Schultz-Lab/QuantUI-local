@@ -1111,11 +1111,7 @@ class TestAnalysisTab:
 
 
 class TestAnaSwitcher:
-    """Panel switcher strip: buttons, state, activation, and deactivation."""
-
-    def test_eight_buttons_exist(self):
-        app = QuantUIApp()
-        assert len(app._ana_btns) == 8
+    """Analysis panel state: activation, deactivation, and placeholder swapping."""
 
     def test_panel_names(self):
         app = QuantUIApp()
@@ -1130,11 +1126,6 @@ class TestAnaSwitcher:
             "NMR",
         ]
 
-    def test_buttons_initially_dimmed(self):
-        app = QuantUIApp()
-        for btn in app._ana_btns:
-            assert btn.layout.opacity == "0.35"
-
     def test_no_panels_available_initially(self):
         app = QuantUIApp()
         assert len(app._ana_available) == 0
@@ -1145,20 +1136,10 @@ class TestAnaSwitcher:
             assert acc.layout.display == ""
             assert acc.selected_index is None
 
-    def test_switcher_box_in_analysis_tab(self):
-        app = QuantUIApp()
-        assert app._ana_switcher_box in app.analysis_tab_panel.children
-
     def test_activate_panel_marks_available(self):
         app = QuantUIApp()
         app._activate_ana_panel("Energies")
         assert "Energies" in app._ana_available
-
-    def test_activate_panel_sets_opacity(self):
-        app = QuantUIApp()
-        app._activate_ana_panel("Energies")
-        orb_btn = app._ana_btns[0]
-        assert orb_btn.layout.opacity == "1.0"
 
     def test_activate_panel_auto_selects(self):
         app = QuantUIApp()
@@ -1198,13 +1179,6 @@ class TestAnaSwitcher:
             assert acc.layout.display == ""
             assert acc.selected_index is None
 
-    def test_deactivate_all_dims_buttons(self):
-        app = QuantUIApp()
-        app._activate_ana_panel("Energies")
-        app._deactivate_all_ana_panels()
-        for btn in app._ana_btns:
-            assert btn.layout.opacity == "0.35"
-
     def test_unavail_message_shown_initially(self):
         app = QuantUIApp()
         # Every panel starts with the unavailable placeholder visible.
@@ -1224,19 +1198,6 @@ class TestAnaSwitcher:
         app._deactivate_all_ana_panels()
         assert app._ana_unavail_msgs["Energies"].layout.display == ""
         assert app._ana_content_boxes["Energies"].layout.display == "none"
-
-    def test_click_unavailable_shows_warning(self):
-        app = QuantUIApp()
-        app._on_ana_panel_click("Energies")
-        assert app._ana_unavail_html.layout.display == ""
-        assert "Energies" in app._ana_unavail_html.value
-
-    def test_click_available_selects_panel(self):
-        app = QuantUIApp()
-        app._activate_ana_panel("IR Spectrum", auto_select=False)
-        app._on_ana_panel_click("IR Spectrum")
-        assert app._ir_accordion.selected_index == 0
-        assert app._ana_active == "IR Spectrum"
 
 
 # ---------------------------------------------------------------------------

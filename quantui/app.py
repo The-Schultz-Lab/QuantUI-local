@@ -1131,7 +1131,9 @@ class QuantUIApp:
         )
         self.traj_accordion.set_title(0, "Trajectory Viewer")
         self.traj_accordion.selected_index = None  # collapsed by default
-        self.traj_accordion.observe(self._on_traj_expand, names=["selected_index"])
+        self.traj_accordion.observe(
+            self._safe_cb(self._on_traj_expand), names=["selected_index"]
+        )
 
         # Vibrational animation accordion (Frequency only — hidden until Freq completes)
         self.vib_mode_dd = widgets.Dropdown(
@@ -1439,7 +1441,6 @@ class QuantUIApp:
                 self._analysis_context_lbl,
                 self._analysis_mol_output,
                 self._analysis_empty_html,
-                self._ana_switcher_box,
                 self._ana_unavail_html,
                 self._orb_accordion,
                 self._pes_scan_accordion,
@@ -1458,7 +1459,7 @@ class QuantUIApp:
     # ── Analysis panel switcher ───────────────────────────────────────────
 
     def _build_ana_switcher(self) -> None:
-        """Build the always-visible panel switcher strip for the Analysis tab."""
+        """Initialise analysis panel state; wire accordion re-render observers."""
         panel_meta = [
             (name, getattr(self, attr), when) for name, attr, when in self._PANEL_META
         ]
@@ -1493,76 +1494,35 @@ class QuantUIApp:
             acc.layout.display = ""  # always in the DOM
             acc.selected_index = None  # collapsed until activated
 
-        self._ana_btns: list = []
-        for name, _acc, when in panel_meta:
-            btn = widgets.Button(
-                description=name,
-                button_style="",
-                tooltip=f"Available after: {when}",
-                layout=widgets.Layout(margin="0"),
-            )
-            btn.layout.opacity = "0.35"
-            btn.on_click(lambda _b, n=name: self._on_ana_panel_click(n))
-            self._ana_btns.append(btn)
-        self._ana_switcher_box = widgets.HBox(
-            self._ana_btns,
-            layout=widgets.Layout(
-                flex_wrap="wrap",
-                gap="4px",
-                margin="0 0 6px 0",
-                padding="6px 4px",
-                border="1px solid #e2e8f0",
-                border_radius="6px",
-            ),
+        # Re-render Plotly charts when their accordion is expanded by clicking
+        # the header directly (charts rendered into a hidden container have 0 size).
+        self._ir_accordion.observe(
+            self._safe_cb(self._on_ir_accordion_show), names=["selected_index"]
+        )
+        self._orb_accordion.observe(
+            self._safe_cb(self._on_orb_accordion_show), names=["selected_index"]
         )
 
-    def _on_ana_panel_click(self, name: str) -> None:
-        if name in self._ana_available:
-            self._select_ana_panel(name)
-        else:
-            # Highlight the clicked button as a warning; show inline note.
-            for btn in self._ana_btns:
-                btn.button_style = ""
-            for btn, pname in zip(self._ana_btns, self._ana_panel_names):
-                if pname == name:
-                    btn.button_style = "warning"
-            self._ana_unavail_html.value = (
-                f'<p style="color:#92400e;background:#fffbeb;border:1px solid #fde68a;'
-                f'border-radius:4px;padding:6px 12px;margin:0;font-size:13px">'
-                f"<b>{name}</b> is not available for this calculation type.</p>"
-            )
-            self._ana_unavail_html.layout.display = ""
-            self._ana_active = ""
-
-    def _select_ana_panel(self, name: str) -> None:
-        """Expand the named panel; collapse all others. Updates button styles."""
-        self._ana_active = name
-        self._ana_unavail_html.layout.display = "none"
-        for pname, acc, btn in zip(
-            self._ana_panel_names, self._ana_accordions, self._ana_btns
-        ):
-            if pname == name:
-                acc.selected_index = 0
-                btn.button_style = "primary"
-            else:
-                acc.selected_index = None
-                btn.button_style = ""
-        # Re-render Plotly charts that may have initialised into a zero-size
-        # container while their accordion was collapsed.
-        if name == "IR Spectrum" and getattr(self, "_last_ir_freqs", None):
+    def _on_ir_accordion_show(self, change) -> None:
+        if change["new"] == 0 and getattr(self, "_last_ir_freqs", None):
             self._update_ir_figure(
                 self._ir_mode_toggle.value, self._ir_fwhm_slider.value
             )
-        if name == "Energies" and getattr(self, "_last_orb_info", None) is not None:
+
+    def _on_orb_accordion_show(self, change) -> None:
+        if change["new"] == 0 and getattr(self, "_last_orb_info", None) is not None:
             self._on_orb_range_changed()
 
+    def _select_ana_panel(self, name: str) -> None:
+        """Expand the named panel and collapse all others."""
+        self._ana_active = name
+        self._ana_unavail_html.layout.display = "none"
+        for pname, acc in zip(self._ana_panel_names, self._ana_accordions):
+            acc.selected_index = 0 if pname == name else None
+
     def _activate_ana_panel(self, name: str, auto_select: bool = True) -> None:
-        """Mark a panel as available: reveal its content, brighten its button."""
+        """Mark a panel as available: reveal its content."""
         self._ana_available.add(name)
-        for btn, pname in zip(self._ana_btns, self._ana_panel_names):
-            if pname == name:
-                btn.layout.opacity = "1.0"
-                btn.tooltip = name
         # Swap unavailable placeholder for real content.
         if name in self._ana_unavail_msgs:
             self._ana_unavail_msgs[name].layout.display = "none"
@@ -1575,18 +1535,12 @@ class QuantUIApp:
         self._ana_available.clear()
         self._ana_active = ""
         self._ana_unavail_html.layout.display = "none"
-        _when = {name: when for name, _, when in self._PANEL_META}
-        for name, acc, btn in zip(
-            self._ana_panel_names, self._ana_accordions, self._ana_btns
-        ):
+        for name, acc in zip(self._ana_panel_names, self._ana_accordions):
             # Show the "not available" placeholder; hide real content.
             if name in self._ana_unavail_msgs:
                 self._ana_unavail_msgs[name].layout.display = ""
                 self._ana_content_boxes[name].layout.display = "none"
             acc.selected_index = None
-            btn.button_style = ""
-            btn.layout.opacity = "0.35"
-            btn.tooltip = f"Available after: {_when.get(name, '')}"
 
     # ── Panel registry and unified applier ───────────────────────────────────
     #
@@ -1864,7 +1818,7 @@ class QuantUIApp:
             self._apply_plotly_theme(_fig)
             self._tddft_fig.value = _pio.to_html(
                 _fig,
-                include_plotlyjs="cdn",
+                include_plotlyjs="require",
                 full_html=False,
                 config={"responsive": True},
             )
@@ -2496,30 +2450,42 @@ class QuantUIApp:
     def _wire_callbacks(self) -> None:
         # 3D viewer backend toggle (only wired when both backends are available)
         if self.viz_backend_toggle is not None:
-            self.viz_backend_toggle.observe(self._on_viz_backend_changed, names="value")
+            self.viz_backend_toggle.observe(
+                self._safe_cb(self._on_viz_backend_changed), names="value"
+            )
         # 3D viewer style and lighting controls
         if VISUALIZATION_AVAILABLE:
-            self.viz_style_dd.observe(self._on_viz_style_changed, names="value")
-            self.viz_lighting_dd.observe(self._on_viz_lighting_changed, names="value")
+            self.viz_style_dd.observe(
+                self._safe_cb(self._on_viz_style_changed), names="value"
+            )
+            self.viz_lighting_dd.observe(
+                self._safe_cb(self._on_viz_lighting_changed), names="value"
+            )
         # Theme
-        self.theme_btn.observe(self._on_theme_changed, names="value")
+        self.theme_btn.observe(self._safe_cb(self._on_theme_changed), names="value")
         # Molecule input
-        self.preset_dd.observe(self._on_load_preset, names="value")
+        self.preset_dd.observe(self._safe_cb(self._on_load_preset), names="value")
         self.xyz_btn.on_click(self._on_load_xyz)
         self.pubchem_btn.on_click(self._on_search_pubchem)
         self.change_mol_btn.on_click(self._on_expand_mol_input)
         # Calc type
-        self.calc_type_dd.observe(self._on_calc_type_changed, names="value")
-        self._freq_seed_dd.observe(self._on_freq_seed_changed, names="value")
-        self._scan_type_dd.observe(self._update_scan_widgets, names="value")
+        self.calc_type_dd.observe(
+            self._safe_cb(self._on_calc_type_changed), names="value"
+        )
+        self._freq_seed_dd.observe(
+            self._safe_cb(self._on_freq_seed_changed), names="value"
+        )
+        self._scan_type_dd.observe(
+            self._safe_cb(self._update_scan_widgets), names="value"
+        )
         self._freq_seed_refresh_btn.on_click(
             lambda _btn: self._refresh_freq_seed_options()
         )
         # Notes + estimate
-        self.method_dd.observe(self._update_notes, names="value")
-        self.basis_dd.observe(self._update_notes, names="value")
-        self.method_dd.observe(self._update_estimate, names="value")
-        self.basis_dd.observe(self._update_estimate, names="value")
+        self.method_dd.observe(self._safe_cb(self._update_notes), names="value")
+        self.basis_dd.observe(self._safe_cb(self._update_notes), names="value")
+        self.method_dd.observe(self._safe_cb(self._update_estimate), names="value")
+        self.basis_dd.observe(self._safe_cb(self._update_estimate), names="value")
         # Help buttons
         self.method_help_btn.on_click(self._on_method_help)
         self.basis_help_btn.on_click(self._on_basis_help)
@@ -2529,7 +2495,9 @@ class QuantUIApp:
         # Accumulate / export
         self.accumulate_btn.on_click(self._on_accumulate)
         self.clear_btn.on_click(self._on_clear)
-        self.solvent_cb.observe(self._on_solvent_cb_changed, names="value")
+        self.solvent_cb.observe(
+            self._safe_cb(self._on_solvent_cb_changed), names="value"
+        )
         self._cal_run_btn.on_click(self._on_cal_run)
         self._cal_stop_btn.on_click(self._on_cal_stop)
         self.export_btn.on_click(self._on_export)
@@ -2537,7 +2505,7 @@ class QuantUIApp:
         self.export_mol_btn.on_click(self._on_export_mol)
         self.export_pdb_btn.on_click(self._on_export_pdb)
         # History
-        self.past_dd.observe(self._on_past_dd_changed, names="value")
+        self.past_dd.observe(self._safe_cb(self._on_past_dd_changed), names="value")
         self.past_refresh_btn.on_click(self._on_past_refresh)
         self.copy_path_btn.on_click(self._on_copy_results_path)
         self.view_log_btn.on_click(self._on_view_log)
@@ -2562,7 +2530,9 @@ class QuantUIApp:
         self._help_btn.on_click(self._on_help_toggle)
         # Exit
         self._exit_btn.on_click(self._on_exit_clicked)
-        self.help_topic_dd.observe(self._on_help_topic_changed, names="value")
+        self.help_topic_dd.observe(
+            self._safe_cb(self._on_help_topic_changed), names="value"
+        )
         # Tab navigation buttons
         self._go_results_btn.on_click(
             lambda _: setattr(self.root_tab, "selected_index", 1)
@@ -2574,11 +2544,19 @@ class QuantUIApp:
             lambda _: setattr(self.root_tab, "selected_index", 2)
         )
         # Vibrational mode selector
-        self.vib_mode_dd.observe(self._on_vib_mode_changed, names="value")
+        self.vib_mode_dd.observe(
+            self._safe_cb(self._on_vib_mode_changed), names="value"
+        )
         # Orbital diagram axis controls
-        self._orb_ymin_input.observe(self._on_orb_range_changed, names="value")
-        self._orb_ymax_input.observe(self._on_orb_range_changed, names="value")
-        self._orb_n_orb_input.observe(self._on_orb_range_changed, names="value")
+        self._orb_ymin_input.observe(
+            self._safe_cb(self._on_orb_range_changed), names="value"
+        )
+        self._orb_ymax_input.observe(
+            self._safe_cb(self._on_orb_range_changed), names="value"
+        )
+        self._orb_n_orb_input.observe(
+            self._safe_cb(self._on_orb_range_changed), names="value"
+        )
         # Orbital isosurface generate button
         self._iso_generate_btn.on_click(self._on_iso_generate)
 
@@ -4094,7 +4072,7 @@ class QuantUIApp:
 
             threading.Thread(target=_on_demand, daemon=True).start()
 
-        _step_slider.observe(_update_frame, names="value")
+        _step_slider.observe(self._safe_cb(_update_frame), names="value")
 
         # --- Export button ---
         _export_btn = widgets.Button(
@@ -4467,8 +4445,8 @@ class QuantUIApp:
             if self._ir_mode_toggle.value == "Broadened":
                 self._update_ir_figure("Broadened", change["new"])
 
-        self._ir_mode_toggle.observe(_on_mode, names="value")
-        self._ir_fwhm_slider.observe(_on_fwhm, names="value")
+        self._ir_mode_toggle.observe(self._safe_cb(_on_mode), names="value")
+        self._ir_fwhm_slider.observe(self._safe_cb(_on_fwhm), names="value")
 
         # Reset toggle/slider to defaults
         self._ir_mode_toggle.value = "Stick"
@@ -4499,7 +4477,7 @@ class QuantUIApp:
             self._apply_plotly_theme(fig)
             self._ir_fig.value = _pio.to_html(
                 fig,
-                include_plotlyjs="cdn",
+                include_plotlyjs="require",
                 full_html=False,
                 config={"responsive": True},
             )
@@ -4551,7 +4529,7 @@ class QuantUIApp:
             self._apply_plotly_theme(fig)
             html_str = _pio.to_html(
                 fig,
-                include_plotlyjs="cdn",
+                include_plotlyjs="require",
                 full_html=False,
                 config={"responsive": True},
             )
@@ -4646,7 +4624,7 @@ class QuantUIApp:
             self._apply_plotly_theme(fig)
             self._orb_diagram_html.value = _pio.to_html(
                 fig,
-                include_plotlyjs="cdn",
+                include_plotlyjs="require",
                 full_html=False,
                 config={"responsive": True},
             )
@@ -4786,7 +4764,7 @@ class QuantUIApp:
         _anim_html = _pio.to_html(
             anim_fig,
             full_html=False,
-            include_plotlyjs="cdn",
+            include_plotlyjs="require",
             config={"responsive": True},
         )
         self.vib_output.clear_output()
@@ -5443,6 +5421,28 @@ class QuantUIApp:
     def _update_log_panel(self, log_text: str, label: str = "") -> None:
         self._render_log(log_text, label)
 
+    def _safe_cb(self, fn):
+        """Wrap an .observe() handler so exceptions are logged instead of silently dropped."""
+
+        def _wrapper(change):
+            try:
+                fn(change)
+            except Exception as _e:
+                import traceback as _tb
+
+                try:
+                    from quantui import calc_log as _clog
+
+                    _clog.log_event(
+                        "callback_error",
+                        f"{getattr(fn, '__name__', repr(fn))}: "
+                        f"{type(_e).__name__}: {_e}\n{_tb.format_exc()[:800]}",
+                    )
+                except Exception:
+                    pass
+
+        return _wrapper
+
     def _goto_output_tab(self) -> None:
         self.root_tab.selected_index = 5
 
@@ -5985,7 +5985,7 @@ class QuantUIApp:
             )
             self._pes_plot_html.value = pio.to_html(
                 fig,
-                include_plotlyjs="cdn",
+                include_plotlyjs="require",
                 full_html=False,
                 config={"responsive": True},
             )
