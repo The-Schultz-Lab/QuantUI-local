@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .molecule import Molecule
 
@@ -120,13 +120,24 @@ def run_nmr_calc(
 
     converged = bool(getattr(mf, "converged", False))
 
+    # pyscf.nmr (core) is NOT overwritten by pyscf-properties; always prefer it.
+    # pyscf.prop.nmr (pyscf-properties) uses an old CPHF interface incompatible
+    # with pyscf 2.x and will produce a reshape error at runtime.
+    _pyscf_nmr: Any = None
     try:
-        from pyscf.prop import nmr as _pyscf_nmr
-    except ImportError as exc:
-        raise ImportError(
-            "PySCF NMR module (pyscf.prop.nmr) not found. "
-            "Ensure PySCF>=2.0 is installed: pip install 'pyscf>=2.0'"
-        ) from exc
+        import pyscf.nmr
+
+        _pyscf_nmr = pyscf.nmr
+    except ImportError:
+        try:
+            import pyscf.prop.nmr
+
+            _pyscf_nmr = pyscf.prop.nmr
+        except ImportError as exc:
+            raise ImportError(
+                "PySCF NMR module not found. "
+                "Install PySCF>=2.13.0: pip install 'pyscf>=2.13.0'"
+            ) from exc
 
     try:
         if method_upper == "RHF":
