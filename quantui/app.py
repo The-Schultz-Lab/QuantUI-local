@@ -1722,14 +1722,32 @@ class QuantUIApp:
         return True
 
     def _pop_preopt_trajectory(self, ctx: _AnalysisContext) -> bool:
-        # Pre-opt trajectory is only available for live Frequency runs that
-        # had the pre-opt checkbox enabled.  Not stored to disk, so history
-        # replay cannot show it.
-        pre = ctx.preopt_result
-        if pre is None:
-            return False
-        traj = getattr(pre, "trajectory", None)
-        energies = list(getattr(pre, "energies_hartree", []))
+        if ctx.source == "live":
+            pre = ctx.preopt_result
+            if pre is None:
+                return False
+            traj = getattr(pre, "trajectory", None)
+            energies = list(getattr(pre, "energies_hartree", []))
+        else:
+            if ctx.result_dir is None:
+                return False
+            preopt_path = ctx.result_dir / "preopt_trajectory.json"
+            if not preopt_path.exists():
+                return False
+            try:
+                from quantui.results_storage import load_trajectory
+
+                traj, energies = load_trajectory(
+                    ctx.result_dir, filename="preopt_trajectory.json"
+                )
+            except Exception as _exc:
+                from quantui import calc_log as _clog
+
+                _clog.log_event(
+                    "pop_preopt_trajectory_error",
+                    f"{type(_exc).__name__}: {_exc}"[:300],
+                )
+                return False
         if not traj or len(traj) < 2:
             return False
         stub = _types_mod.SimpleNamespace(
@@ -5084,6 +5102,17 @@ class QuantUIApp:
                     _e_list = getattr(result, "energies_hartree", [])
                     if _traj:
                         save_trajectory(_saved_dir, _traj, _e_list or [])
+                # Persist pre-opt geometry trajectory for Frequency runs (DEC-007).
+                if ct == "Frequency" and _pre_opt is not None:
+                    _pre_traj = getattr(_pre_opt, "trajectory", None)
+                    _pre_e = list(getattr(_pre_opt, "energies_hartree", []))
+                    if _pre_traj:
+                        save_trajectory(
+                            _saved_dir,
+                            _pre_traj,
+                            _pre_e,
+                            filename="preopt_trajectory.json",
+                        )
                 # Persist MO data for orbital diagram + isosurface replay.
                 if ct in ("Single Point", "Geometry Opt", "Frequency"):
                     save_orbitals(_saved_dir, result)

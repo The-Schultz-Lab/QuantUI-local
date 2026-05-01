@@ -316,6 +316,17 @@ class TestFreqAnalysisPanelActivation:
         app._apply_analysis_context(ctx)
         assert app._analysis_empty_html.layout.display == "none"
 
+    # 3d: Trajectory panel stays dark when preopt_trajectory.json is absent
+    def test_trajectory_dark_when_no_preopt_trajectory_file(
+        self, tmp_path, app, freq_result, water_mol
+    ):
+        saved = self._save(tmp_path, freq_result, water_mol)
+        # save_result never writes preopt_trajectory.json — confirm absent
+        assert not (saved / "preopt_trajectory.json").exists()
+        ctx = app._build_history_context(saved)
+        app._apply_analysis_context(ctx)
+        assert "Trajectory" not in app._ana_available
+
 
 # ---------------------------------------------------------------------------
 # Part 4: _do_run end-to-end (PySCF-gated)
@@ -400,3 +411,18 @@ class TestFreqDoRunEndToEnd:
         running_app._deactivate_all_ana_panels()
         running_app._history_load_analysis(saved[0])
         assert running_app._to_analysis_btn.layout.display == ""
+
+    # 3c: Trajectory panel activates on history load when pre-opt was enabled
+    def test_history_load_activates_trajectory_panel_when_preopt_enabled(
+        self, tmp_path, running_app, monkeypatch
+    ):
+        running_app._freq_preopt_cb.value = True
+        saved = self._run_freq(running_app, tmp_path, monkeypatch)
+        assert saved, "No result saved to disk"
+        result_dir = saved[0]
+        assert (
+            result_dir / "preopt_trajectory.json"
+        ).exists(), "preopt_trajectory.json must be written when pre-opt runs"
+        running_app._deactivate_all_ana_panels()
+        running_app._history_load_analysis(result_dir)
+        assert "Trajectory" in running_app._ana_available
