@@ -42,7 +42,7 @@ packages = ["quantui"]
 # Use the Apptainer container (apptainer/quantui.def) for Windows.
 # pyscf-properties provides pyscf.prop (NMR, etc.) — moved out of core in PySCF 2.0.
 pyscf = [
-    "pyscf>=2.3.0,<=2.13.0",
+    "pyscf>=2.3.0,<2.13.0",
     "pyscf-properties",
 ]
 
