@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass, field
-from typing import IO, List, Optional
+from typing import IO, Any, List, Optional
 
 from .molecule import Molecule
 from .session_calc import HARTREE_TO_EV
@@ -249,29 +249,45 @@ def run_freq_calc(
         hess_obj.verbose = mol.verbose
         hess_obj.stdout = stream
 
-        # Use pyscf.prop.infrared.proc_hessian_ when available so the CPHF
-        # mo1_grad computed here can be reused for IR intensities at no extra
-        # cost.  Falls back to hess_obj.kernel() if the module is absent.
+        # Primary: proc_hessian_ (pyscf-properties ≤ 0.1.0 with pyscf 2.13.x)
+        # computes the Hessian + CPHF in one pass; mo1_grad is reused for IR.
+        # Fallback A: Infrared.kernel() (newer pyscf where proc_hessian_ was
+        # removed) runs the same combined computation via a different API.
+        # Fallback B: plain hess_obj.kernel() if infrared is unavailable.
         _mo1_grad = None
         _h1ao_grad = None
+        _IRCls: Any = None
+        _kdd: Any = None
+        _kir: Any = None
+        _ir_inten_raw = None  # pre-computed intensities from Fallback A
         try:
-            from pyscf.prop.infrared.rhf import (
-                Infrared as _IRCls,
-            )
-            from pyscf.prop.infrared.rhf import (
-                kernel_dipderiv as _kdd,
-            )
-            from pyscf.prop.infrared.rhf import (
-                kernel_ir as _kir,
-            )
-            from pyscf.prop.infrared.rhf import (  # type: ignore[import]
-                proc_hessian_ as _proc_hess,
-            )
+            import pyscf.prop.infrared.rhf as _ir_rhf_primary
 
-            _, _h1ao_grad, _mo1_grad, _ = _proc_hess(hess_obj)
+            _IRCls = _ir_rhf_primary.Infrared
+            _kdd = _ir_rhf_primary.kernel_dipderiv
+            _kir = _ir_rhf_primary.kernel_ir
+            _, _h1ao_grad, _mo1_grad, _ = _ir_rhf_primary.proc_hessian_(hess_obj)
             h = hess_obj.de
-        except ImportError:
-            h = hess_obj.kernel()
+        except (ImportError, AttributeError):
+            # proc_hessian_ absent — try Infrared.kernel() which gives both
+            # Hessian and IR intensities via a single CPHF solve.
+            try:
+                from pyscf.prop.infrared import rhf as _ir_rhf_mod
+
+                _ir_obj = _ir_rhf_mod.Infrared(mf)
+                _ir_obj.verbose = mol.verbose
+                _ir_obj.stdout = stream
+                _ir_obj.kernel()
+                h = _ir_obj.de
+                _ir_inten_raw = getattr(_ir_obj, "ir_inten", None)
+            except ImportError:
+                h = hess_obj.kernel()
+            except Exception as _ir_exc:
+                logger.warning(
+                    "Infrared.kernel() failed (%s); using Hessian.kernel() only",
+                    _ir_exc,
+                )
+                h = hess_obj.kernel()
 
         freq_info = pyscf_thermo.harmonic_analysis(mol, h)
 
@@ -308,13 +324,25 @@ def run_freq_calc(
         except Exception:
             displacements = None
 
-        # IR intensities — free alongside the Hessian when pyscf.prop.infrared
-        # is available: mo1_grad from proc_hessian_ is reused, so no second
-        # CPHF solve is needed.
-        if _mo1_grad is not None:
-            try:
-                import numpy as _np_ir
+        # IR intensities — two code paths depending on which Hessian route ran.
+        def _store_ir(arr):
+            """Validate length and store IR intensities."""
+            nonlocal ir_intensities
+            import numpy as _np_ir2
 
+            _ir_arr = _np_ir2.asarray(arr, dtype=float).real.ravel().tolist()
+            if len(_ir_arr) == len(frequencies_cm1):
+                ir_intensities = _ir_arr
+            else:
+                logger.warning(
+                    "IR intensity count (%d) != frequency count (%d); discarding",
+                    len(_ir_arr),
+                    len(frequencies_cm1),
+                )
+
+        if _mo1_grad is not None:
+            # proc_hessian_ path: assemble IRCls manually with stashed gradients.
+            try:
                 _mf_ir = _IRCls(mf)
                 _mf_ir.mf_hess = hess_obj
                 _mf_ir._h1ao_grad = _h1ao_grad
@@ -322,17 +350,13 @@ def run_freq_calc(
                 _mf_ir.vib_dict = freq_info
                 _kdd(_mf_ir)
                 _kir(_mf_ir)
-                _ir_arr = (
-                    _np_ir.asarray(_mf_ir.ir_inten, dtype=float).real.ravel().tolist()
-                )
-                if len(_ir_arr) == len(frequencies_cm1):
-                    ir_intensities = _ir_arr
-                else:
-                    logger.warning(
-                        "IR intensity count (%d) != frequency count (%d); discarding",
-                        len(_ir_arr),
-                        len(frequencies_cm1),
-                    )
+                _store_ir(_mf_ir.ir_inten)
+            except Exception as _ir_exc:
+                logger.warning("IR intensities unavailable: %s", _ir_exc)
+        elif _ir_inten_raw is not None:
+            # Infrared.kernel() path: intensities already computed above.
+            try:
+                _store_ir(_ir_inten_raw)
             except Exception as _ir_exc:
                 logger.warning("IR intensities unavailable: %s", _ir_exc)
 
