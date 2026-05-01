@@ -1921,7 +1921,40 @@ class QuantUIApp:
     def _pop_pes_plot(self, ctx: _AnalysisContext) -> bool:
         result = ctx.live_result
         if result is None:
-            return False  # PES energy data not stored to disk; live-only for now
+            scan = ctx.spectra_data.get("pes_scan", {})
+            if not scan or not scan.get("energies_hartree"):
+                return False
+            energies_ha = scan["energies_hartree"]
+            atom_indices = scan.get("atom_indices", [])
+            scan_type = scan.get("scan_type", "bond")
+            x_vals = scan.get("scan_parameter_values", [])
+            e_min = min(energies_ha)
+            _HARTREE_TO_KCAL = 627.5094740631
+            e_rel = [(e - e_min) * _HARTREE_TO_KCAL for e in energies_ha]
+            idx = [i + 1 for i in atom_indices]
+            if scan_type == "bond":
+                label = f"Bond {idx[0]}–{idx[1]} / Å" if len(idx) >= 2 else "Bond / Å"
+            elif scan_type == "angle":
+                label = (
+                    f"Angle {idx[0]}–{idx[1]}–{idx[2]} / °"
+                    if len(idx) >= 3
+                    else "Angle / °"
+                )
+            else:
+                label = (
+                    f"Dihedral {idx[0]}–{idx[1]}–{idx[2]}–{idx[3]} / °"
+                    if len(idx) >= 4
+                    else "Dihedral / °"
+                )
+            result = _types_mod.SimpleNamespace(
+                scan_type=scan_type,
+                atom_indices=atom_indices,
+                scan_parameter_values=x_vals,
+                energies_hartree=energies_ha,
+                energies_relative_kcal=e_rel,
+                scan_coordinate_label=label,
+                converged_all=True,
+            )
         return self._show_pes_scan_result(result)
 
     def _pop_pes_trajectory(self, ctx: _AnalysisContext) -> bool:
@@ -4987,7 +5020,15 @@ class QuantUIApp:
                     progress_stream=log,  # type: ignore[arg-type]
                 )
                 result_html = self._format_pes_scan_result(result)
-                save_spectra, save_type = {}, "pes_scan"
+                save_spectra = {
+                    "pes_scan": {
+                        "scan_type": result.scan_type,
+                        "atom_indices": result.atom_indices,
+                        "scan_parameter_values": result.scan_parameter_values,
+                        "energies_hartree": result.energies_hartree,
+                    }
+                }
+                save_type = "pes_scan"
             else:  # Single Point
                 self.run_status.value = "Calculating..."
                 from quantui import run_in_session
