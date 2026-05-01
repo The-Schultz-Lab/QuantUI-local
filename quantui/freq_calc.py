@@ -249,27 +249,7 @@ def run_freq_calc(
         hess_obj.verbose = mol.verbose
         hess_obj.stdout = stream
 
-        # Primary: Infrared.kernel() (pyscf-properties) computes the Hessian +
-        # CPHF in one pass and stores IR intensities in ir_inten.
-        # Fallback: plain hess_obj.kernel() when pyscf-properties is absent.
-        _ir_inten_raw = None
-        try:
-            from pyscf.prop.infrared import rhf as _ir_rhf_mod
-
-            _ir_obj = _ir_rhf_mod.Infrared(mf)
-            _ir_obj.verbose = mol.verbose
-            _ir_obj.stdout = stream
-            _ir_obj.kernel()
-            h = _ir_obj.de
-            _ir_inten_raw = getattr(_ir_obj, "ir_inten", None)
-        except ImportError:
-            h = hess_obj.kernel()
-        except Exception as _ir_exc:
-            logger.warning(
-                "Infrared.kernel() failed (%s); using Hessian.kernel() only",
-                _ir_exc,
-            )
-            h = hess_obj.kernel()
+        h = hess_obj.kernel()
 
         freq_info = pyscf_thermo.harmonic_analysis(mol, h)
 
@@ -306,27 +286,69 @@ def run_freq_calc(
         except Exception:
             displacements = None
 
-        # IR intensities — two code paths depending on which Hessian route ran.
-        def _store_ir(arr):
-            """Validate length and store IR intensities."""
-            nonlocal ir_intensities
-            import numpy as _np_ir2
-
-            _ir_arr = _np_ir2.asarray(arr, dtype=float).real.ravel().tolist()
-            if len(_ir_arr) == len(frequencies_cm1):
-                ir_intensities = _ir_arr
-            else:
-                logger.warning(
-                    "IR intensity count (%d) != frequency count (%d); discarding",
-                    len(_ir_arr),
-                    len(frequencies_cm1),
-                )
-
-        if _ir_inten_raw is not None:
+        # Numerical IR intensities via finite-difference dipole derivatives.
+        # pyscf.prop.infrared is absent from released pyscf/pyscf-properties;
+        # we compute ∂μ/∂R by displacing each atom ±DELTA, then project onto
+        # the harmonic normal modes.
+        # Reference: Porezag & Pederson, Phys. Rev. B 54, 7830 (1996).
+        if displacements is not None and frequencies_cm1:
             try:
-                _store_ir(_ir_inten_raw)
+                import numpy as _np_ir
+
+                _DELTA = 0.01  # Bohr
+                _BOHR_TO_ANG = 0.52917721092
+                _KM_MOL_FAC = 42.255  # (D/Å)²/amu → km/mol
+
+                _n_ir = mol.natm
+                _coords0 = mol.atom_coords().copy()
+                _dm0 = mf.make_rdm1()
+                _dpdx = _np_ir.zeros((_n_ir * 3, 3))
+                _xc = getattr(mf, "xc", None)
+
+                _mol_v = mol.verbose
+                mol.verbose = 0
+                try:
+                    for _I in range(_n_ir):
+                        for _ax in range(3):
+                            _cp = _coords0.copy()
+                            _cp[_I, _ax] += _DELTA
+                            mol.set_geom_(_cp, unit="Bohr")
+                            if _xc is not None:
+                                _mf_d = dft.RKS(mol) if mol.spin == 0 else dft.UKS(mol)
+                                _mf_d.xc = _xc
+                            else:
+                                _mf_d = scf.RHF(mol) if mol.spin == 0 else scf.UHF(mol)
+                            _mf_d.verbose = 0
+                            _mf_d.stdout = stream
+                            _mf_d.kernel(dm0=_dm0)
+                            _mu_p = _np_ir.array(_mf_d.dip_moment(verbose=0))
+
+                            _cm = _coords0.copy()
+                            _cm[_I, _ax] -= _DELTA
+                            mol.set_geom_(_cm, unit="Bohr")
+                            if _xc is not None:
+                                _mf_d = dft.RKS(mol) if mol.spin == 0 else dft.UKS(mol)
+                                _mf_d.xc = _xc
+                            else:
+                                _mf_d = scf.RHF(mol) if mol.spin == 0 else scf.UHF(mol)
+                            _mf_d.verbose = 0
+                            _mf_d.stdout = stream
+                            _mf_d.kernel(dm0=_dm0)
+                            _mu_m = _np_ir.array(_mf_d.dip_moment(verbose=0))
+
+                            _dpdx[3 * _I + _ax] = (_mu_p - _mu_m) / (2 * _DELTA)
+                finally:
+                    mol.set_geom_(_coords0, unit="Bohr")
+                    mol.verbose = _mol_v
+
+                _dpdx_AA = _dpdx / _BOHR_TO_ANG
+                _nm_flat = _np_ir.array(displacements).reshape(len(frequencies_cm1), -1)
+                _dpdQ = _nm_flat @ _dpdx_AA
+                _ir = (_KM_MOL_FAC * (_dpdQ**2).sum(axis=1)).tolist()
+                if len(_ir) == len(frequencies_cm1):
+                    ir_intensities = _ir
             except Exception as _ir_exc:
-                logger.warning("IR intensities unavailable: %s", _ir_exc)
+                logger.warning("Numerical IR intensities failed: %s", _ir_exc)
 
         # Thermochemistry at 298.15 K / 1 atm — best-effort
         try:
