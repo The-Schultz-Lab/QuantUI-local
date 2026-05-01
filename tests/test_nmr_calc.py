@@ -28,19 +28,6 @@ pyscf_only = pytest.mark.skipif(
     not _PYSCF_AVAILABLE, reason="PySCF not installed (Linux/macOS/WSL only)"
 )
 
-# pyscf-properties 0.1.0 (PyPI) has a reshape bug in nmr/rhf.py that
-# was fixed on the pyscf/properties master branch (commit 4eee5a4,
-# "fix nmr", 2024-11-07) but not yet released.  Mark the integration
-# tests xfail until a fixed release lands on PyPI.
-# Fix: pip install git+https://github.com/pyscf/properties.git
-_nmr_xfail = pytest.mark.xfail(
-    reason=(
-        "pyscf-properties 0.1.0 incompatible with pyscf>=2.13.0: "
-        "rhf.py reshapes mo1 to (3,nmo,nocc) but krylov returns (nmo*nocc,). "
-        "Fixed on pyscf/properties master (commit 4eee5a4) — awaiting PyPI release."
-    ),
-    strict=False,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -179,28 +166,24 @@ class TestRunNMRCalc:
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_water_returns_nmr_result(self):
         result = run_nmr_calc(_water(), method="RHF", basis="STO-3G")
         assert isinstance(result, NMRResult)
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_water_has_two_h_shifts(self):
         result = run_nmr_calc(_water(), method="RHF", basis="STO-3G")
         assert len(result.h_shifts()) == 2
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_water_no_c_shifts(self):
         result = run_nmr_calc(_water(), method="RHF", basis="STO-3G")
         assert result.c_shifts() == []
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_methane_has_c_and_h_shifts(self):
         result = run_nmr_calc(_methane(), method="RHF", basis="STO-3G")
         assert len(result.c_shifts()) == 1
@@ -208,7 +191,6 @@ class TestRunNMRCalc:
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_water_h_shifts_reasonable_range(self):
         result = run_nmr_calc(_water(), method="B3LYP", basis="6-31G*")
         for _i, delta in result.h_shifts():
@@ -217,7 +199,6 @@ class TestRunNMRCalc:
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_formula_matches_molecule(self):
         result = run_nmr_calc(_water(), method="RHF", basis="STO-3G")
         assert "O" in result.formula
@@ -225,7 +206,6 @@ class TestRunNMRCalc:
 
     @pyscf_only
     @pytest.mark.slow
-    @_nmr_xfail
     def test_shielding_iso_length_matches_atoms(self):
         mol = _water()
         result = run_nmr_calc(mol, method="RHF", basis="STO-3G")

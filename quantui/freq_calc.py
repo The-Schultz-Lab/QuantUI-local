@@ -248,7 +248,30 @@ def run_freq_calc(
         hess_obj = mf.Hessian()
         hess_obj.verbose = mol.verbose
         hess_obj.stdout = stream
-        h = hess_obj.kernel()
+
+        # Use pyscf.prop.infrared.proc_hessian_ when available so the CPHF
+        # mo1_grad computed here can be reused for IR intensities at no extra
+        # cost.  Falls back to hess_obj.kernel() if the module is absent.
+        _mo1_grad = None
+        _h1ao_grad = None
+        try:
+            from pyscf.prop.infrared.rhf import (
+                Infrared as _IRCls,
+            )
+            from pyscf.prop.infrared.rhf import (
+                kernel_dipderiv as _kdd,
+            )
+            from pyscf.prop.infrared.rhf import (
+                kernel_ir as _kir,
+            )
+            from pyscf.prop.infrared.rhf import (  # type: ignore[import]
+                proc_hessian_ as _proc_hess,
+            )
+
+            _, _h1ao_grad, _mo1_grad, _ = _proc_hess(hess_obj)
+            h = hess_obj.de
+        except ImportError:
+            h = hess_obj.kernel()
 
         freq_info = pyscf_thermo.harmonic_analysis(mol, h)
 
@@ -285,12 +308,33 @@ def run_freq_calc(
         except Exception:
             displacements = None
 
-        # IR intensities — best-effort; silently omitted if unavailable
-        try:
-            ir_info = pyscf_thermo.ir_spectrum(mf, h)
-            ir_intensities = [float(x) for x in ir_info["ir_inten"]]
-        except Exception:
-            ir_intensities = []
+        # IR intensities — free alongside the Hessian when pyscf.prop.infrared
+        # is available: mo1_grad from proc_hessian_ is reused, so no second
+        # CPHF solve is needed.
+        if _mo1_grad is not None:
+            try:
+                import numpy as _np_ir
+
+                _mf_ir = _IRCls(mf)
+                _mf_ir.mf_hess = hess_obj
+                _mf_ir._h1ao_grad = _h1ao_grad
+                _mf_ir._mo1_grad = _mo1_grad
+                _mf_ir.vib_dict = freq_info
+                _kdd(_mf_ir)
+                _kir(_mf_ir)
+                _ir_arr = (
+                    _np_ir.asarray(_mf_ir.ir_inten, dtype=float).real.ravel().tolist()
+                )
+                if len(_ir_arr) == len(frequencies_cm1):
+                    ir_intensities = _ir_arr
+                else:
+                    logger.warning(
+                        "IR intensity count (%d) != frequency count (%d); discarding",
+                        len(_ir_arr),
+                        len(frequencies_cm1),
+                    )
+            except Exception as _ir_exc:
+                logger.warning("IR intensities unavailable: %s", _ir_exc)
 
         # Thermochemistry at 298.15 K / 1 atm — best-effort
         try:
