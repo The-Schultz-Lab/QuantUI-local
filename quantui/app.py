@@ -214,6 +214,24 @@ h3 {
 }
 </style>"""
 
+_LAYOUT_TRAITS: frozenset[str] = frozenset(widgets.Layout.class_trait_names())
+
+
+def _layout(**kwargs: Any) -> widgets.Layout:
+    """Create a Layout while dropping unsupported kwargs to avoid traitlets noise."""
+    normalized = dict(kwargs)
+    if "overflow_y" in normalized and "overflow" not in normalized:
+        normalized["overflow"] = normalized["overflow_y"]
+    normalized.pop("overflow_y", None)
+    if "gap" in normalized and "grid_gap" not in normalized:
+        normalized["grid_gap"] = normalized["gap"]
+    normalized.pop("gap", None)
+    if "flex_wrap" in normalized and "flex_flow" not in normalized:
+        normalized["flex_flow"] = f"row {normalized['flex_wrap']}"
+    normalized.pop("flex_wrap", None)
+    filtered = {k: v for k, v in normalized.items() if k in _LAYOUT_TRAITS}
+    return widgets.Layout(**filtered)
+
 
 # ── SCF regex (module-level so _LogCapture can use them) ─────────────────────
 _RE_CYCLE = re.compile(
@@ -347,9 +365,7 @@ class QuantUIApp:
                             self._issue_btn,
                             self._exit_btn,
                         ],
-                        layout=widgets.Layout(
-                            justify_content="flex-end", margin="0 0 4px"
-                        ),
+                        layout=_layout(justify_content="flex-end", margin="0 0 4px"),
                     ),
                     self._issue_overlay,
                     self._exit_output,
@@ -386,16 +402,14 @@ class QuantUIApp:
 
     def _build_theme_selector(self) -> None:
         self._theme_style = widgets.Output(
-            layout=widgets.Layout(
-                height="0px", overflow="hidden", margin="0", padding="0"
-            )
+            layout=_layout(height="0px", overflow="hidden", margin="0", padding="0")
         )
         self.theme_btn = widgets.ToggleButtons(
             options=["Light", "Dark"],
             value="Dark",
             description="Theme:",
             style={"description_width": "48px", "button_width": "90px"},
-            layout=widgets.Layout(margin="0"),
+            layout=_layout(margin="0"),
         )
         # Apply Dark theme immediately
         with self._theme_style:
@@ -497,7 +511,7 @@ class QuantUIApp:
 
         self._status_tab_panel = widgets.VBox(
             [self._status_html, _guide_html],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=_layout(padding="8px 0"),
         )
 
     # ── Welcome header ────────────────────────────────────────────────────
@@ -570,9 +584,9 @@ class QuantUIApp:
             value='<i style="color:#888">No molecule loaded yet.</i>'
         )
         self.mol_summary_compact = widgets.HTML(value="")
-        self.viz_output = widgets.Output(layout=widgets.Layout(min_height="50px"))
+        self.viz_output = widgets.Output(layout=_layout(min_height="50px"))
         self.run_output = widgets.Output(
-            layout=widgets.Layout(
+            layout=_layout(
                 border="1px solid #c0ccd8",
                 min_height="80px",
                 max_height="400px",
@@ -601,7 +615,7 @@ class QuantUIApp:
                 value=_DEFAULT_VIZ_BACKEND,
                 tooltips=["Plotly-based interactive viewer", "WebGL viewer (py3Dmol)"],
                 style={"button_width": "90px"},
-                layout=widgets.Layout(margin="2px 0 0 0"),
+                layout=_layout(margin="2px 0 0 0"),
             )
         else:
             self.viz_backend_toggle = None  # type: ignore[assignment]
@@ -614,7 +628,7 @@ class QuantUIApp:
             value=_DEFAULT_VIZ_STYLE,
             description="Style:",
             style={"description_width": "40px"},
-            layout=widgets.Layout(width="180px"),
+            layout=_layout(width="180px"),
             disabled=not VISUALIZATION_AVAILABLE,
         )
         # Lighting only applies to the PlotlyMol backend
@@ -624,14 +638,14 @@ class QuantUIApp:
             value=_DEFAULT_LIGHTING,
             description="Lighting:",
             style={"description_width": "58px"},
-            layout=widgets.Layout(width="170px"),
+            layout=_layout(width="170px"),
             disabled=not _lighting_available,
         )
         if not _lighting_available:
             self.viz_lighting_dd.layout.visibility = "hidden"
         self.viz_controls_box = widgets.HBox(
             [self.viz_style_dd, self.viz_lighting_dd],
-            layout=widgets.Layout(gap="8px", margin="2px 0 0 0", align_items="center"),
+            layout=_layout(gap="8px", margin="2px 0 0 0", align_items="center"),
         )
         self.notes_output = widgets.Output()
         self.perf_estimate_html = widgets.HTML()
@@ -648,14 +662,14 @@ class QuantUIApp:
             value=DEFAULT_METHOD,
             description="Method:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="260px"),
+            layout=_layout(width="260px"),
         )
         self.basis_dd = widgets.Dropdown(
             options=SUPPORTED_BASIS_SETS,
             value=DEFAULT_BASIS,
             description="Basis Set:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="260px"),
+            layout=_layout(width="260px"),
         )
         self.charge_si = widgets.BoundedIntText(
             value=DEFAULT_CHARGE,
@@ -663,7 +677,7 @@ class QuantUIApp:
             max=10,
             description="Charge:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="190px"),
+            layout=_layout(width="190px"),
         )
         self.mult_si = widgets.BoundedIntText(
             value=DEFAULT_MULTIPLICITY,
@@ -671,13 +685,13 @@ class QuantUIApp:
             max=10,
             description="Multiplicity:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="190px"),
+            layout=_layout(width="190px"),
         )
         self.preopt_cb = widgets.Checkbox(
             value=False,
             description="Pre-optimize geometry (for a crude starting point)",
             disabled=not _PREOPT_AVAILABLE,
-            layout=widgets.Layout(width="400px"),
+            layout=_layout(width="400px"),
         )
 
         # Implicit solvent (PCM)
@@ -686,14 +700,14 @@ class QuantUIApp:
         self.solvent_cb = widgets.Checkbox(
             value=False,
             description="Implicit solvent (PCM)",
-            layout=widgets.Layout(width="240px"),
+            layout=_layout(width="240px"),
         )
         self.solvent_dd = widgets.Dropdown(
             options=list(_SOLVENT_OPTS.keys()),
             value="Water",
             description="Solvent:",
             style={"description_width": "70px"},
-            layout=widgets.Layout(width="200px", display="none"),
+            layout=_layout(width="200px", display="none"),
         )
 
         # Calculation type + extra options
@@ -709,7 +723,7 @@ class QuantUIApp:
             value="Single Point",
             description="Calc. Type:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="310px"),
+            layout=_layout(width="310px"),
         )
         self.fmax_fi = widgets.BoundedFloatText(
             value=DEFAULT_FMAX,
@@ -718,7 +732,7 @@ class QuantUIApp:
             step=0.005,
             description="Force thr. (eV/Å):",
             style={"description_width": "130px"},
-            layout=widgets.Layout(width="270px"),
+            layout=_layout(width="270px"),
         )
         self.max_steps_si = widgets.BoundedIntText(
             value=DEFAULT_OPT_STEPS,
@@ -726,7 +740,7 @@ class QuantUIApp:
             max=1000,
             description="Max steps:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="200px"),
+            layout=_layout(width="200px"),
         )
         self.nstates_si = widgets.BoundedIntText(
             value=10,
@@ -734,7 +748,7 @@ class QuantUIApp:
             max=50,
             description="# states:",
             style={"description_width": "100px"},
-            layout=widgets.Layout(width="180px"),
+            layout=_layout(width="180px"),
         )
 
         # ── Frequency calc extra widgets ──────────────────────────────────────
@@ -742,20 +756,20 @@ class QuantUIApp:
             options=[("(use current molecule)", "")],
             description="Seed geometry:",
             style={"description_width": "110px"},
-            layout=widgets.Layout(width="420px"),
+            layout=_layout(width="420px"),
             tooltip="Optionally load the final optimised geometry from a previous Geo Opt result",
         )
         self._freq_seed_refresh_btn = widgets.Button(
             description="",
             icon="refresh",
-            layout=widgets.Layout(width="32px", height="32px"),
+            layout=_layout(width="32px", height="32px"),
             tooltip="Refresh the list of saved geometry optimisations",
         )
         self._freq_preopt_cb = widgets.Checkbox(
             value=False,
             description="Geometry optimization (recommended for unoptimized inputs)",
             style={"description_width": "initial"},
-            layout=widgets.Layout(width="100%"),
+            layout=_layout(width="100%"),
         )
         self._freq_seed_note = widgets.HTML("")
 
@@ -765,9 +779,9 @@ class QuantUIApp:
             value="Bond",
             description="Scan type:",
             style={"description_width": "80px"},
-            layout=widgets.Layout(width="220px"),
+            layout=_layout(width="220px"),
         )
-        _atom_idx_layout = widgets.Layout(width="95px")
+        _atom_idx_layout = _layout(width="95px")
         _atom_idx_style = {"description_width": "50px"}
         self._scan_atom1 = widgets.BoundedIntText(
             value=1,
@@ -803,7 +817,7 @@ class QuantUIApp:
         )
         self._scan_atom34_box = widgets.HBox(
             [self._scan_atom3, self._scan_atom4],
-            layout=widgets.Layout(gap="4px"),
+            layout=_layout(gap="4px"),
         )
         self._scan_start = widgets.BoundedFloatText(
             value=0.5,
@@ -812,7 +826,7 @@ class QuantUIApp:
             step=0.1,
             description="Start:",
             style={"description_width": "40px"},
-            layout=widgets.Layout(width="140px"),
+            layout=_layout(width="140px"),
         )
         self._scan_stop = widgets.BoundedFloatText(
             value=2.0,
@@ -821,7 +835,7 @@ class QuantUIApp:
             step=0.1,
             description="Stop:",
             style={"description_width": "40px"},
-            layout=widgets.Layout(width="140px"),
+            layout=_layout(width="140px"),
         )
         self._scan_steps = widgets.BoundedIntText(
             value=10,
@@ -829,7 +843,7 @@ class QuantUIApp:
             max=100,
             description="Points:",
             style={"description_width": "50px"},
-            layout=widgets.Layout(width="120px"),
+            layout=_layout(width="120px"),
         )
         self._scan_unit_lbl = widgets.HTML(
             '<span style="font-size:12px;color:#555">Å</span>'
@@ -841,13 +855,13 @@ class QuantUIApp:
         self.method_help_btn = widgets.Button(
             description="?",
             button_style="",
-            layout=widgets.Layout(width="28px", height="28px"),
+            layout=_layout(width="28px", height="28px"),
             tooltip="RHF vs UHF — opens Help tab",
         )
         self.basis_help_btn = widgets.Button(
             description="?",
             button_style="",
-            layout=widgets.Layout(width="28px", height="28px"),
+            layout=_layout(width="28px", height="28px"),
             tooltip="Choosing a basis set — opens Help tab",
         )
 
@@ -857,7 +871,7 @@ class QuantUIApp:
             button_style="success",
             icon="play",
             disabled=True,
-            layout=widgets.Layout(width="200px", height="36px"),
+            layout=_layout(width="200px", height="36px"),
         )
         self.run_status = widgets.Label()
 
@@ -866,7 +880,7 @@ class QuantUIApp:
             description="Clear",
             button_style="",
             icon="times",
-            layout=widgets.Layout(width="90px", height="26px"),
+            layout=_layout(width="90px", height="26px"),
             tooltip="Clear calculation output",
         )
 
@@ -876,20 +890,20 @@ class QuantUIApp:
             button_style="info",
             icon="plus",
             disabled=True,
-            layout=widgets.Layout(width="190px"),
+            layout=_layout(width="190px"),
         )
         self.clear_btn = widgets.Button(
             description="Clear",
             button_style="warning",
             icon="trash",
-            layout=widgets.Layout(width="100px"),
+            layout=_layout(width="100px"),
         )
         self.export_btn = widgets.Button(
             description="Export Script",
             button_style="",
             icon="download",
             disabled=True,
-            layout=widgets.Layout(width="160px"),
+            layout=_layout(width="160px"),
         )
         self.export_status = widgets.Label()
         _rdkit_tip = (
@@ -901,21 +915,21 @@ class QuantUIApp:
             description="Export XYZ",
             icon="download",
             disabled=True,
-            layout=widgets.Layout(width="130px"),
+            layout=_layout(width="130px"),
         )
         self.export_mol_btn = widgets.Button(
             description="Export MOL",
             icon="download",
             disabled=True,
             tooltip=_rdkit_tip,
-            layout=widgets.Layout(width="130px"),
+            layout=_layout(width="130px"),
         )
         self.export_pdb_btn = widgets.Button(
             description="Export PDB",
             icon="download",
             disabled=True,
             tooltip=_rdkit_tip,
-            layout=widgets.Layout(width="130px"),
+            layout=_layout(width="130px"),
         )
         self.struct_export_status = widgets.Label()
 
@@ -929,7 +943,7 @@ class QuantUIApp:
             value="(select a molecule)",
             description="Molecule:",
             style={"description_width": "90px"},
-            layout=widgets.Layout(width="320px"),
+            layout=_layout(width="320px"),
         )
 
         # XYZ input
@@ -940,7 +954,7 @@ class QuantUIApp:
                 "H  0.757  0.587  0.000\n"
                 "H -0.757  0.587  0.000"
             ),
-            layout=widgets.Layout(width="440px", height="130px"),
+            layout=_layout(width="440px", height="130px"),
         )
         self.xyz_btn = widgets.Button(
             description="Load XYZ", button_style="info", icon="upload"
@@ -950,14 +964,14 @@ class QuantUIApp:
         # PubChem search
         self.pubchem_txt = widgets.Text(
             placeholder="name or SMILES  (e.g. aspirin, caffeine, CC(=O)O)",
-            layout=widgets.Layout(width="380px"),
+            layout=_layout(width="380px"),
         )
         self.pubchem_btn = widgets.Button(
             description="Search",
             button_style="info",
             icon="search",
             disabled=not PUBCHEM_AVAILABLE,
-            layout=widgets.Layout(width="100px"),
+            layout=_layout(width="100px"),
         )
         self.pubchem_msg = widgets.Label(
             value=(
@@ -1012,12 +1026,12 @@ class QuantUIApp:
             description="Change",
             button_style="",
             icon="pencil",
-            layout=widgets.Layout(width="100px", height="32px"),
+            layout=_layout(width="100px", height="32px"),
             tooltip="Re-expand the molecule input panel",
         )
         self.mol_input_collapsed = widgets.HBox(
             [self.mol_summary_compact, self.change_mol_btn],
-            layout=widgets.Layout(align_items="center", gap="12px", padding="6px 0"),
+            layout=_layout(align_items="center", gap="12px", padding="6px 0"),
         )
         _mol_container_children = [
             self.mol_input_expanded,
@@ -1030,7 +1044,7 @@ class QuantUIApp:
             _mol_container_children.append(self.viz_controls_box)
         self.mol_input_container = widgets.VBox(
             _mol_container_children,
-            layout=widgets.Layout(margin="0 0 4px 0"),
+            layout=_layout(margin="0 0 4px 0"),
         )
 
     # ── Calculation setup panel (Cell 5) ──────────────────────────────────
@@ -1045,15 +1059,11 @@ class QuantUIApp:
                             [
                                 widgets.HBox(
                                     [self.method_dd, self.method_help_btn],
-                                    layout=widgets.Layout(
-                                        align_items="center", gap="4px"
-                                    ),
+                                    layout=_layout(align_items="center", gap="4px"),
                                 ),
                                 widgets.HBox(
                                     [self.basis_dd, self.basis_help_btn],
-                                    layout=widgets.Layout(
-                                        align_items="center", gap="4px"
-                                    ),
+                                    layout=_layout(align_items="center", gap="4px"),
                                 ),
                             ]
                         ),
@@ -1066,7 +1076,7 @@ class QuantUIApp:
                 self.preopt_cb,
                 widgets.HBox(
                     [self.solvent_cb, self.solvent_dd],
-                    layout=widgets.Layout(align_items="center", gap="4px"),
+                    layout=_layout(align_items="center", gap="4px"),
                 ),
                 self.notes_output,
             ]
@@ -1093,7 +1103,7 @@ class QuantUIApp:
                         ),
                         self.log_clear_btn,
                     ],
-                    layout=widgets.Layout(
+                    layout=_layout(
                         align_items="center",
                         justify_content="space-between",
                         margin="10px 0 4px",
@@ -1108,15 +1118,15 @@ class QuantUIApp:
 
     def _build_results_section(self) -> None:
         # PES scan energy plot accordion (hidden until a PES Scan completes)
-        self._pes_plot_html = widgets.Output(layout=widgets.Layout(width="100%"))
+        self._pes_plot_html = widgets.Output(layout=_layout(width="100%"))
         self._pes_scan_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
                     [self._pes_plot_html],
-                    layout=widgets.Layout(padding="8px"),
+                    layout=_layout(padding="8px"),
                 )
             ],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self._pes_scan_accordion.set_title(0, "PES Energy Profile")
         self._pes_scan_accordion.selected_index = None
@@ -1125,7 +1135,7 @@ class QuantUIApp:
         self.traj_output = widgets.Output()
         self.traj_accordion = widgets.Accordion(
             children=[self.traj_output],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self.traj_accordion.set_title(0, "Trajectory Viewer")
         self.traj_accordion.selected_index = None  # collapsed by default
@@ -1138,17 +1148,17 @@ class QuantUIApp:
             description="Mode:",
             options=[],
             style={"description_width": "50px"},
-            layout=widgets.Layout(width="360px"),
+            layout=_layout(width="360px"),
         )
         self.vib_output = widgets.Output()
         self.vib_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
                     [self.vib_mode_dd, self.vib_output],
-                    layout=widgets.Layout(padding="8px"),
+                    layout=_layout(padding="8px"),
                 )
             ],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self.vib_accordion.set_title(0, "Vibrational Mode Viewer")
         self.vib_accordion.selected_index = None  # collapsed by default
@@ -1157,8 +1167,8 @@ class QuantUIApp:
         self._ir_mode_toggle = widgets.ToggleButtons(
             options=["Stick", "Broadened"],
             value="Stick",
-            style={"button_width": "80px", "font_size": "12px"},
-            layout=widgets.Layout(margin="0 8px 0 0"),
+            style={"button_width": "80px"},
+            layout=_layout(margin="0 8px 0 0"),
         )
         self._ir_fwhm_slider = widgets.FloatSlider(
             value=20.0,
@@ -1167,23 +1177,23 @@ class QuantUIApp:
             step=5.0,
             description="Line width:",
             style={"description_width": "80px"},
-            layout=widgets.Layout(width="260px", display="none"),
+            layout=_layout(width="260px", display="none"),
         )
-        self._ir_fig = widgets.Output(layout=widgets.Layout(width="100%"))
+        self._ir_fig = widgets.Output(layout=_layout(width="100%"))
 
         _ir_controls = widgets.HBox(
             [self._ir_mode_toggle, self._ir_fwhm_slider],
-            layout=widgets.Layout(align_items="center", margin="0 0 6px 0"),
+            layout=_layout(align_items="center", margin="0 0 6px 0"),
         )
         _ir_body_children = [_ir_controls, self._ir_fig]
         self._ir_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
                     _ir_body_children,
-                    layout=widgets.Layout(padding="8px"),
+                    layout=_layout(padding="8px"),
                 )
             ],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self._ir_accordion.set_title(0, "IR Spectrum")
         self._ir_accordion.selected_index = None
@@ -1197,7 +1207,7 @@ class QuantUIApp:
             max=200.0,
             step=1.0,
             description="Y min:",
-            layout=widgets.Layout(width="140px"),
+            layout=_layout(width="140px"),
             style={"description_width": "45px"},
         )
         self._orb_ymax_input = widgets.BoundedFloatText(
@@ -1206,7 +1216,7 @@ class QuantUIApp:
             max=500.0,
             step=1.0,
             description="Y max:",
-            layout=widgets.Layout(width="140px"),
+            layout=_layout(width="140px"),
             style={"description_width": "45px"},
         )
         self._orb_n_orb_input = widgets.BoundedIntText(
@@ -1215,7 +1225,7 @@ class QuantUIApp:
             max=200,
             step=2,
             description="Show N:",
-            layout=widgets.Layout(width="120px"),
+            layout=_layout(width="120px"),
             style={"description_width": "50px"},
         )
         _orb_controls_row = widgets.HBox(
@@ -1231,24 +1241,24 @@ class QuantUIApp:
                 ),
                 self._orb_n_orb_input,
             ],
-            layout=widgets.Layout(
+            layout=_layout(
                 align_items="center",
                 flex_wrap="wrap",
                 gap="4px",
                 margin="0 0 6px 0",
             ),
         )
-        self._orb_diagram_html = widgets.Output(layout=widgets.Layout(width="100%"))
+        self._orb_diagram_html = widgets.Output(layout=_layout(width="100%"))
         _orb_diagram_content: list = [_orb_controls_row, self._orb_diagram_html]
         self._orb_diagram_box = widgets.VBox(
             _orb_diagram_content,
-            layout=widgets.Layout(width="100%"),
+            layout=_layout(width="100%"),
         )
         self._orb_toggle = widgets.ToggleButtons(
             options=["HOMO-1", "HOMO", "LUMO", "LUMO+1"],
             value="HOMO",
-            style={"button_width": "70px", "font_size": "12px"},
-            layout=widgets.Layout(margin="8px 0 4px 0"),
+            style={"button_width": "70px"},
+            layout=_layout(margin="8px 0 4px 0"),
         )
         self._orb_iso_output = widgets.Output()
         self._orb_iso_controls = widgets.VBox(
@@ -1260,16 +1270,16 @@ class QuantUIApp:
                 self._orb_toggle,
                 self._orb_iso_output,
             ],
-            layout=widgets.Layout(display="none", margin="8px 0 0 0"),
+            layout=_layout(display="none", margin="8px 0 0 0"),
         )
         self._orb_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
                     [self._orb_diagram_box],
-                    layout=widgets.Layout(padding="8px"),
+                    layout=_layout(padding="8px"),
                 )
             ],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self._orb_accordion.set_title(0, "Orbital Diagram")
         self._orb_accordion.selected_index = None
@@ -1284,7 +1294,7 @@ class QuantUIApp:
                 "Generate a 3D orbital isosurface. "
                 "Available after running or loading a Single Point or Geometry Optimization."
             ),
-            layout=widgets.Layout(width="200px", margin="8px 0 4px 0"),
+            layout=_layout(width="200px", margin="8px 0 4px 0"),
         )
         _iso_body = widgets.VBox(
             [
@@ -1297,39 +1307,39 @@ class QuantUIApp:
                 self._orb_iso_controls,
                 self._iso_generate_btn,
             ],
-            layout=widgets.Layout(padding="8px"),
+            layout=_layout(padding="8px"),
         )
         self._iso_accordion = widgets.Accordion(
             children=[_iso_body],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self._iso_accordion.set_title(0, "Orbital Isosurface")
         self._iso_accordion.selected_index = None
 
         # ── UV-Vis spectrum accordion (TD-DFT only — hidden until result) ──
-        self._tddft_fig = widgets.Output(layout=widgets.Layout(width="100%"))
+        self._tddft_fig = widgets.Output(layout=_layout(width="100%"))
         self._tddft_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
                     [self._tddft_fig],
-                    layout=widgets.Layout(padding="8px"),
+                    layout=_layout(padding="8px"),
                 )
             ],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self._tddft_accordion.set_title(0, "UV-Vis Absorption Spectrum")
         self._tddft_accordion.selected_index = None
 
         # ── NMR shielding accordion (NMR only — hidden until result) ────────
-        self._nmr_output = widgets.HTML(value="", layout=widgets.Layout(width="100%"))
+        self._nmr_output = widgets.HTML(value="", layout=_layout(width="100%"))
         self._nmr_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
                     [self._nmr_output],
-                    layout=widgets.Layout(padding="8px"),
+                    layout=_layout(padding="8px"),
                 )
             ],
-            layout=widgets.Layout(display="none", margin="8px 0"),
+            layout=_layout(display="none", margin="8px 0"),
         )
         self._nmr_accordion.set_title(0, "NMR Chemical Shifts")
         self._nmr_accordion.selected_index = None
@@ -1337,14 +1347,14 @@ class QuantUIApp:
         # ── Result directory path label (hidden until a calculation saves) ──
         self._result_dir_label = widgets.HTML(
             value="",
-            layout=widgets.Layout(display="none", margin="4px 0 0 0"),
+            layout=_layout(display="none", margin="4px 0 0 0"),
         )
 
         # ── Full output log accordion (hidden until a calculation saves) ────
         self._result_log_output = widgets.Output()
         self._result_log_accordion = widgets.Accordion(
             children=[self._result_log_output],
-            layout=widgets.Layout(display="none", margin="8px 0 0 0"),
+            layout=_layout(display="none", margin="8px 0 0 0"),
         )
         self._result_log_accordion.set_title(0, "Full output log (pyscf.log)")
         self._result_log_accordion.selected_index = None
@@ -1353,12 +1363,12 @@ class QuantUIApp:
         self._go_results_btn = widgets.Button(
             description="→ View Results",
             button_style="success",
-            layout=widgets.Layout(width="130px"),
+            layout=_layout(width="130px"),
         )
         self._go_analysis_btn = widgets.Button(
             description="→ View Analysis",
             button_style="info",
-            layout=widgets.Layout(width="140px"),
+            layout=_layout(width="140px"),
         )
         self._completion_mol_lbl = widgets.HTML(value="")
         self._completion_banner = widgets.HBox(
@@ -1371,7 +1381,7 @@ class QuantUIApp:
                 self._go_results_btn,
                 self._go_analysis_btn,
             ],
-            layout=widgets.Layout(
+            layout=_layout(
                 display="none",
                 align_items="center",
                 gap="8px",
@@ -1388,13 +1398,13 @@ class QuantUIApp:
             description="→ View Analysis",
             button_style="",
             icon="bar-chart",
-            layout=widgets.Layout(display="none", width="160px", margin="8px 0 0 0"),
+            layout=_layout(display="none", width="160px", margin="8px 0 0 0"),
         )
         # Label above the 3D viewer — updated by _do_run to say "Optimized geometry"
         # for Geometry Opt, or hidden for other calc types that don't change geometry.
         self._viz_label = widgets.HTML(
             value="",
-            layout=widgets.Layout(display="none"),
+            layout=_layout(display="none"),
         )
         self.results_tab_panel = widgets.VBox(
             [
@@ -1407,7 +1417,7 @@ class QuantUIApp:
                 # _build_compare_section — must run before it can be referenced here)
                 self._to_analysis_btn,
             ],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=_layout(padding="8px 0"),
         )
         # Backward-compat alias — existing methods that reference results_panel still work
         self.results_panel = self.results_tab_panel
@@ -1429,7 +1439,7 @@ class QuantUIApp:
                 "Run a Single Point, Geo Opt, or Frequency calculation to see "
                 "orbital diagrams, trajectory animations, and spectra here.</p>"
             ),
-            layout=widgets.Layout(display="none"),
+            layout=_layout(display="none"),
         )
         self._build_ana_switcher()
         self.analysis_tab_panel = widgets.VBox(
@@ -1447,7 +1457,7 @@ class QuantUIApp:
                 self._tddft_accordion,
                 self._nmr_accordion,
             ],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=_layout(padding="8px 0"),
         )
         # Backward-compat alias for post_calc_panel references in tests
         self.post_calc_panel = self.analysis_tab_panel
@@ -1465,7 +1475,7 @@ class QuantUIApp:
         self._ana_active: str = ""
         self._ana_unavail_html = widgets.HTML(
             value="",
-            layout=widgets.Layout(display="none", margin="4px 0 8px"),
+            layout=_layout(display="none", margin="4px 0 8px"),
         )
 
         # Wrap each accordion's child so it holds both an "unavailable" message
@@ -1480,7 +1490,7 @@ class QuantUIApp:
                     f'font-style:italic">Not available — run a {when} '
                     f"calculation first.</div>"
                 ),
-                layout=widgets.Layout(display=""),
+                layout=_layout(display=""),
             )
             content = acc.children[0]
             self._ana_unavail_msgs[name] = unavail
@@ -1964,20 +1974,20 @@ class QuantUIApp:
             description="Load:",
             options=[("(no saved results)", "")],
             style={"description_width": "50px"},
-            layout=widgets.Layout(width="500px"),
+            layout=_layout(width="500px"),
         )
         self.past_refresh_btn = widgets.Button(
             description="Refresh",
             button_style="",
             icon="refresh",
-            layout=widgets.Layout(width="100px"),
+            layout=_layout(width="100px"),
             tooltip="Rescan the results directory",
         )
         self.copy_path_btn = widgets.Button(
             description="Copy path",
             button_style="",
             icon="clipboard",
-            layout=widgets.Layout(width="120px"),
+            layout=_layout(width="120px"),
             tooltip="Copy the results directory path to clipboard",
         )
         self.results_path_lbl = widgets.HTML()
@@ -1986,7 +1996,7 @@ class QuantUIApp:
             description="View log",
             button_style="",
             icon="file-text-o",
-            layout=widgets.Layout(width="110px"),
+            layout=_layout(width="110px"),
             tooltip="Open the full PySCF output log in the Output tab",
         )
 
@@ -1997,7 +2007,7 @@ class QuantUIApp:
             description="",
             button_style="",
             style={"description_width": "0px", "button_width": "140px"},
-            layout=widgets.Layout(margin="0 0 8px"),
+            layout=_layout(margin="0 0 8px"),
         )
         self._cal_run_btn = widgets.Button(
             description="Run Calibration",
@@ -2009,13 +2019,13 @@ class QuantUIApp:
                 if _PYSCF_AVAILABLE
                 else "PySCF required (Linux / macOS / WSL)"
             ),
-            layout=widgets.Layout(width="180px"),
+            layout=_layout(width="180px"),
         )
         self._cal_stop_btn = widgets.Button(
             description="Stop",
             button_style="warning",
             icon="stop",
-            layout=widgets.Layout(width="90px", display="none"),
+            layout=_layout(width="90px", display="none"),
         )
         self._cal_progress = widgets.IntProgress(
             min=0,
@@ -2023,11 +2033,11 @@ class QuantUIApp:
             value=0,
             description="",
             bar_style="info",
-            layout=widgets.Layout(width="300px", display="none"),
+            layout=_layout(width="300px", display="none"),
         )
         self._cal_step_label = widgets.HTML(
             value="",
-            layout=widgets.Layout(display="none"),
+            layout=_layout(display="none"),
         )
         self._cal_results_html = widgets.HTML(value="")
 
@@ -2038,7 +2048,7 @@ class QuantUIApp:
             description="Reset performance database",
             button_style="danger",
             icon="trash",
-            layout=widgets.Layout(width="230px"),
+            layout=_layout(width="230px"),
         )
         self._reset_confirm_html = widgets.HTML(
             '<span style="color:#dc2626;font-size:13px">'
@@ -2049,23 +2059,23 @@ class QuantUIApp:
             description="Yes, delete all records",
             button_style="danger",
             icon="check",
-            layout=widgets.Layout(width="190px"),
+            layout=_layout(width="190px"),
         )
         self._reset_confirm_no = widgets.Button(
             description="Cancel",
             button_style="",
             icon="times",
-            layout=widgets.Layout(width="90px"),
+            layout=_layout(width="90px"),
         )
         self._reset_confirm_box = widgets.VBox(
             [
                 self._reset_confirm_html,
                 widgets.HBox(
                     [self._reset_confirm_yes, self._reset_confirm_no],
-                    layout=widgets.Layout(gap="8px", margin="4px 0 0"),
+                    layout=_layout(gap="8px", margin="4px 0 0"),
                 ),
             ],
-            layout=widgets.Layout(
+            layout=_layout(
                 display="none",
                 border="1px solid #fca5a5",
                 padding="8px 10px",
@@ -2083,7 +2093,7 @@ class QuantUIApp:
                 self._perf_events_html,
                 widgets.HBox(
                     [self._reset_btn],
-                    layout=widgets.Layout(margin="14px 0 4px"),
+                    layout=_layout(margin="14px 0 4px"),
                 ),
                 self._reset_confirm_box,
             ]
@@ -2114,13 +2124,13 @@ class QuantUIApp:
                 self._cal_mode_toggle,
                 widgets.HBox(
                     [self._cal_run_btn, self._cal_stop_btn],
-                    layout=widgets.Layout(gap="6px", align_items="center"),
+                    layout=_layout(gap="6px", align_items="center"),
                 ),
                 self._cal_progress,
                 self._cal_step_label,
                 self._cal_results_html,
             ],
-            layout=widgets.Layout(padding="4px 0"),
+            layout=_layout(padding="4px 0"),
         )
         self._cal_accordion = widgets.Accordion(
             children=[_cal_panel], selected_index=None
@@ -2140,7 +2150,7 @@ class QuantUIApp:
                         self.copy_path_btn,
                         self.view_log_btn,
                     ],
-                    layout=widgets.Layout(align_items="center", gap="8px"),
+                    layout=_layout(align_items="center", gap="8px"),
                 ),
                 self.results_path_lbl,
                 self.past_output,
@@ -2160,26 +2170,26 @@ class QuantUIApp:
             options=[("(no saved results)", "")],
             rows=8,
             description="",
-            layout=widgets.Layout(width="100%"),
+            layout=_layout(width="100%"),
         )
         self.compare_refresh_btn = widgets.Button(
             description="Refresh",
             button_style="",
             icon="refresh",
-            layout=widgets.Layout(width="100px"),
+            layout=_layout(width="100px"),
         )
         self.compare_btn = widgets.Button(
             description="Compare selected",
             button_style="primary",
             icon="bar-chart",
             disabled=True,
-            layout=widgets.Layout(width="180px"),
+            layout=_layout(width="180px"),
         )
         self.compare_clear_btn = widgets.Button(
             description="Clear",
             button_style="warning",
             icon="times",
-            layout=widgets.Layout(width="90px"),
+            layout=_layout(width="90px"),
         )
         self.compare_output = widgets.Output()
 
@@ -2195,11 +2205,11 @@ class QuantUIApp:
                 self.compare_select,
                 widgets.HBox(
                     [self.compare_btn, self.compare_clear_btn],
-                    layout=widgets.Layout(gap="8px", margin="6px 0"),
+                    layout=_layout(gap="8px", margin="6px 0"),
                 ),
                 self.compare_output,
             ],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=_layout(padding="8px 0"),
         )
 
         # Export accordion (Advanced)
@@ -2224,7 +2234,7 @@ class QuantUIApp:
                 ),
                 widgets.HBox(
                     [self.export_xyz_btn, self.export_mol_btn, self.export_pdb_btn],
-                    layout=widgets.Layout(flex_flow="row wrap", gap="6px"),
+                    layout=_layout(flex_flow="row wrap", gap="6px"),
                 ),
                 self.struct_export_status,
             ]
@@ -2249,7 +2259,7 @@ class QuantUIApp:
             description="Clear",
             button_style="",
             icon="times",
-            layout=widgets.Layout(width="80px"),
+            layout=_layout(width="80px"),
         )
         self._clear_log_cache_btn = widgets.Button(
             description="Clear Log Cache",
@@ -2259,12 +2269,12 @@ class QuantUIApp:
                 "Delete the session event log (event_log.jsonl). "
                 "Calculation performance data is preserved."
             ),
-            layout=widgets.Layout(width="160px"),
+            layout=_layout(width="160px"),
         )
         self._clear_log_cache_confirm_btn = widgets.Button(
             description="Confirm clear?",
             button_style="danger",
-            layout=widgets.Layout(width="140px", display="none"),
+            layout=_layout(width="140px", display="none"),
         )
         self.log_tab_panel = widgets.VBox(
             [
@@ -2277,7 +2287,7 @@ class QuantUIApp:
                 ),
                 widgets.HBox(
                     [self._log_clear_btn],
-                    layout=widgets.Layout(margin="0 0 8px"),
+                    layout=_layout(margin="0 0 8px"),
                 ),
                 self._log_source_lbl,
                 self._log_output_html,
@@ -2290,10 +2300,10 @@ class QuantUIApp:
                 ),
                 widgets.HBox(
                     [self._clear_log_cache_btn, self._clear_log_cache_confirm_btn],
-                    layout=widgets.Layout(align_items="center", gap="8px"),
+                    layout=_layout(align_items="center", gap="8px"),
                 ),
             ],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=_layout(padding="8px 0"),
         )
 
     # ── Help section (Cell 10) ────────────────────────────────────────────
@@ -2305,7 +2315,7 @@ class QuantUIApp:
             options=list(zip(_help_labels, _help_keys)),
             description="Topic:",
             style={"description_width": "60px"},
-            layout=widgets.Layout(width="460px"),
+            layout=_layout(width="460px"),
         )
         self.help_content_html = widgets.HTML()
         self._render_help_topic()  # render first topic immediately
@@ -2315,7 +2325,7 @@ class QuantUIApp:
             description="?",
             button_style="",
             tooltip="Help topics",
-            layout=widgets.Layout(width="34px", margin="0 0 0 8px"),
+            layout=_layout(width="34px", margin="0 0 0 8px"),
         )
 
         # Exit button shown in the top bar
@@ -2323,10 +2333,10 @@ class QuantUIApp:
             description="Exit",
             button_style="danger",
             tooltip="Shut down the QuantUI server and close this session",
-            layout=widgets.Layout(width="64px", margin="0 0 0 8px"),
+            layout=_layout(width="64px", margin="0 0 0 8px"),
         )
         self._exit_output = widgets.Output(
-            layout=widgets.Layout(height="0px", overflow="hidden")
+            layout=_layout(height="0px", overflow="hidden")
         )
 
         self.help_tab_panel = widgets.VBox(
@@ -2339,7 +2349,7 @@ class QuantUIApp:
                 self.help_topic_dd,
                 self.help_content_html,
             ],
-            layout=widgets.Layout(
+            layout=_layout(
                 display="none",
                 padding="8px 0",
                 border="1px solid #e2e8f0",
@@ -2357,7 +2367,7 @@ class QuantUIApp:
             button_style="warning",
             icon="flag",
             tooltip="Report a bug or unexpected behaviour observed in this session",
-            layout=widgets.Layout(width="140px", margin="0 0 0 8px"),
+            layout=_layout(width="140px", margin="0 0 0 8px"),
         )
         # ── Issue overlay (hidden until button is clicked) ────────────────
         self._issue_textarea = widgets.Textarea(
@@ -2365,17 +2375,17 @@ class QuantUIApp:
                 "Describe what you observed — what you did, what you expected, "
                 "and what actually happened."
             ),
-            layout=widgets.Layout(width="100%", height="90px"),
+            layout=_layout(width="100%", height="90px"),
         )
         self._issue_submit_btn = widgets.Button(
             description="Submit",
             button_style="success",
-            layout=widgets.Layout(width="90px"),
+            layout=_layout(width="90px"),
         )
         self._issue_cancel_btn = widgets.Button(
             description="Cancel",
             button_style="",
-            layout=widgets.Layout(width="80px"),
+            layout=_layout(width="80px"),
         )
         self._issue_status_html = widgets.HTML()
         self._issue_overlay = widgets.VBox(
@@ -2390,11 +2400,11 @@ class QuantUIApp:
                 self._issue_textarea,
                 widgets.HBox(
                     [self._issue_submit_btn, self._issue_cancel_btn],
-                    layout=widgets.Layout(margin="6px 0 0", gap="8px"),
+                    layout=_layout(margin="6px 0 0", gap="8px"),
                 ),
                 self._issue_status_html,
             ],
-            layout=widgets.Layout(
+            layout=_layout(
                 display="none",
                 border="1px solid #f59e0b",
                 border_radius="6px",
@@ -2415,7 +2425,7 @@ class QuantUIApp:
                 self.run_panel,
                 self._completion_banner,
             ],
-            layout=widgets.Layout(padding="8px 0"),
+            layout=_layout(padding="8px 0"),
         )
 
         # Splice advanced_accordion into results_tab_panel before _to_analysis_btn.
@@ -2804,7 +2814,7 @@ class QuantUIApp:
             self.calc_extra_opts.children = [
                 widgets.HBox(
                     [self.fmax_fi, self.max_steps_si],
-                    layout=widgets.Layout(gap="8px"),
+                    layout=_layout(gap="8px"),
                 ),
             ]
         elif ct == "Frequency":
@@ -2812,7 +2822,7 @@ class QuantUIApp:
             self.calc_extra_opts.children = [
                 widgets.HBox(
                     [self._freq_seed_dd, self._freq_seed_refresh_btn],
-                    layout=widgets.Layout(align_items="center", gap="6px"),
+                    layout=_layout(align_items="center", gap="6px"),
                 ),
                 self._freq_preopt_cb,
                 self._freq_seed_note,
@@ -2840,11 +2850,11 @@ class QuantUIApp:
             self.calc_extra_opts.children = [
                 widgets.HBox(
                     [self._scan_type_dd],
-                    layout=widgets.Layout(margin="0 0 4px 0"),
+                    layout=_layout(margin="0 0 4px 0"),
                 ),
                 widgets.HBox(
                     [self._scan_atom1, self._scan_atom2],
-                    layout=widgets.Layout(gap="4px"),
+                    layout=_layout(gap="4px"),
                 ),
                 self._scan_atom34_box,
                 widgets.HBox(
@@ -2854,7 +2864,7 @@ class QuantUIApp:
                         self._scan_steps,
                         self._scan_unit_lbl,
                     ],
-                    layout=widgets.Layout(gap="4px", align_items="center"),
+                    layout=_layout(gap="4px", align_items="center"),
                 ),
             ]
         else:
@@ -3161,7 +3171,7 @@ class QuantUIApp:
                     _btn = widgets.Button(
                         description=f"→ Analyse  {_short}"[:48],
                         button_style="info",
-                        layout=widgets.Layout(width="auto", max_width="340px"),
+                        layout=_layout(width="auto", max_width="340px"),
                         tooltip=f"Load {_short} into the Analysis tab",
                     )
                     _btn.on_click(lambda _, rd=rdir: self._history_load_analysis(rd))
@@ -3172,7 +3182,7 @@ class QuantUIApp:
                         'font-size:13px;font-weight:600">Analyse a result:</p>'
                     )
                 )
-                display(widgets.VBox(_btns, layout=widgets.Layout(gap="4px")))
+                display(widgets.VBox(_btns, layout=_layout(gap="4px")))
 
     def _on_compare_clear(self, btn) -> None:
         self.compare_select.value = ()
@@ -3203,13 +3213,13 @@ class QuantUIApp:
                 _btn_res = widgets.Button(
                     description="→ View Results",
                     button_style="success",
-                    layout=widgets.Layout(width="130px"),
+                    layout=_layout(width="130px"),
                     tooltip="Show this result in the Results tab",
                 )
                 _btn_ana = widgets.Button(
                     description="→ View Analysis",
                     button_style="info",
-                    layout=widgets.Layout(width="140px"),
+                    layout=_layout(width="140px"),
                     tooltip="Load analysis panels and navigate to the Analysis tab",
                 )
                 _btn_res.on_click(
@@ -3221,7 +3231,7 @@ class QuantUIApp:
                 display(
                     widgets.HBox(
                         [_btn_res, _btn_ana],
-                        layout=widgets.Layout(gap="8px", margin="6px 0 0"),
+                        layout=_layout(gap="8px", margin="6px 0 0"),
                     )
                 )
             except Exception as exc:
@@ -4055,10 +4065,10 @@ class QuantUIApp:
             description="Step:",
             continuous_update=False,
             style={"description_width": "40px"},
-            layout=widgets.Layout(width="360px"),
+            layout=_layout(width="360px"),
         )
         _step_info = widgets.HTML(value=self._traj_step_html(0, traj, energies, rel_e))
-        _frame_out = widgets.Output(layout=widgets.Layout(min_height="340px"))
+        _frame_out = widgets.Output(layout=_layout(min_height="340px"))
         _cache_label = widgets.HTML(
             value=f'<span style="color:#888;font-size:11px;font-style:italic">'
             f"Pre-rendering frames… 0 / {n}</span>"
@@ -4112,7 +4122,7 @@ class QuantUIApp:
         _export_btn = widgets.Button(
             description="Export Animation",
             icon="download",
-            layout=widgets.Layout(width="160px", margin="0 0 0 12px"),
+            layout=_layout(width="160px", margin="0 0 0 12px"),
             tooltip="Generate a standalone HTML animation file (may take a minute)",
         )
         _export_status = widgets.HTML()
@@ -4161,7 +4171,7 @@ class QuantUIApp:
         # --- Assemble layout ---
         _header = widgets.HBox(
             [_step_slider, _export_btn],
-            layout=widgets.Layout(align_items="center", margin="4px 0"),
+            layout=_layout(align_items="center", margin="4px 0"),
         )
         _panel = widgets.VBox(
             [_header, _step_info, _cache_label, _frame_out, _export_status]
