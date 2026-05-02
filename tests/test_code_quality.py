@@ -9,7 +9,7 @@ SRC = Path(__file__).parent.parent / "quantui"
 def _grep(pattern: str) -> list[str]:
     hits = []
     for path in SRC.rglob("*.py"):
-        for i, line in enumerate(path.read_text().splitlines(), 1):
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(pattern, line):
                 hits.append(f"{path.relative_to(SRC.parent)}:{i}: {line.strip()}")
     return hits
