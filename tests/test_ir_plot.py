@@ -37,10 +37,10 @@ class TestStickMode:
         fig = plot_ir_spectrum(_SIMPLE_FREQS, _SIMPLE_INTS)
         assert isinstance(fig.data[0], go.Scatter)
 
-    def test_xaxis_inverted(self):
+    def test_xaxis_low_to_high(self):
         fig = plot_ir_spectrum(_SIMPLE_FREQS, _SIMPLE_INTS)
         x_range = list(fig.layout.xaxis.range)
-        assert x_range[0] > x_range[1], "x-axis must run high → low (4000 → 400)"
+        assert x_range[0] < x_range[1], "x-axis must run low → high (400 → 4000)"
 
     def test_xaxis_title_contains_wavenumber(self):
         fig = plot_ir_spectrum(_SIMPLE_FREQS, _SIMPLE_INTS)
@@ -106,10 +106,10 @@ class TestBroadenedMode:
             y_wide.sum() > y_narrow.sum()
         ), "Wider FWHM should produce larger integrated area"
 
-    def test_xaxis_inverted_broadened(self):
+    def test_xaxis_low_to_high_broadened(self):
         fig = plot_ir_spectrum(_SIMPLE_FREQS, _SIMPLE_INTS, mode="broadened")
         x_range = list(fig.layout.xaxis.range)
-        assert x_range[0] > x_range[1]
+        assert x_range[0] < x_range[1]
 
 
 # ---------------------------------------------------------------------------

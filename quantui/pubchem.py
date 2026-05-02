@@ -334,7 +334,7 @@ def check_pubchem_availability() -> bool:
         url = f"{PUBCHEM_BASE_URL}/compound/cid/962/property/MolecularFormula/JSON"
         response = requests.get(url, timeout=5)
         return bool(response.status_code == 200)
-    except:
+    except Exception:
         return False
 
 
@@ -383,7 +383,7 @@ def smiles_to_xyz(smiles: str, optimize_3d: bool = True) -> Tuple[str, Dict[str,
             # Optimize with UFF force field
             try:
                 AllChem.UFFOptimizeMolecule(mol)
-            except:
+            except Exception:
                 logger.warning("UFF optimization failed, using unoptimized coordinates")
 
         # Extract coordinates

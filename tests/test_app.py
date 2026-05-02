@@ -866,9 +866,10 @@ class TestIRSpectrumWidgets:
         assert hasattr(app, "_ir_accordion")
         assert isinstance(app._ir_accordion, widgets.Accordion)
 
-    def test_ir_accordion_hidden_initially(self):
+    def test_ir_accordion_visible_and_collapsed_initially(self):
         app = QuantUIApp()
-        assert app._ir_accordion.layout.display == "none"
+        assert app._ir_accordion.layout.display == ""
+        assert app._ir_accordion.selected_index is None
 
     def test_ir_mode_toggle_exists(self):
         app = QuantUIApp()
@@ -914,13 +915,13 @@ class TestShowIRSpectrum:
         ok = app._show_ir_spectrum(self._make_freq_result())
         assert ok is True
 
-    def test_accordion_revealed_via_activate(self):
-        # _show_ir_spectrum populates widget; _activate_ana_panel reveals it.
+    def test_accordion_expanded_via_activate(self):
+        # _show_ir_spectrum populates widget; _activate_ana_panel expands it.
         app = QuantUIApp()
         app._show_ir_spectrum(self._make_freq_result())
-        assert app._ir_accordion.layout.display == "none"  # still hidden
+        assert app._ir_accordion.selected_index is None  # still collapsed
         app._activate_ana_panel("IR Spectrum")
-        assert app._ir_accordion.layout.display == ""
+        assert app._ir_accordion.selected_index == 0
 
     def test_fwhm_slider_shown_when_broadened(self):
         app = QuantUIApp()
@@ -948,9 +949,10 @@ class TestOrbitalAccordionWidgets:
         app = QuantUIApp()
         assert hasattr(app, "_orb_accordion")
 
-    def test_orb_accordion_hidden_initially(self):
+    def test_orb_accordion_visible_collapsed_initially(self):
         app = QuantUIApp()
-        assert app._orb_accordion.layout.display == "none"
+        assert app._orb_accordion.layout.display == ""
+        assert app._orb_accordion.selected_index is None
 
     def test_orb_diagram_html_exists(self):
         app = QuantUIApp()
@@ -968,11 +970,11 @@ class TestOrbitalAccordionWidgets:
         app = QuantUIApp()
         assert app._orb_iso_controls.layout.display == "none"
 
-    def test_orb_accordion_hidden_after_run_clicked(self):
+    def test_orb_accordion_collapsed_after_run_clicked(self):
         app = QuantUIApp()
-        app._orb_accordion.layout.display = ""
+        app._orb_accordion.selected_index = 0
         app._on_run_clicked(None)
-        assert app._orb_accordion.layout.display == "none"
+        assert app._orb_accordion.selected_index is None
 
 
 class TestShowOrbitalDiagram:
@@ -997,15 +999,15 @@ class TestShowOrbitalDiagram:
         ok = app._show_orbital_diagram(self._make_result_with_mo())
         assert ok is True
 
-    def test_accordion_revealed_via_activate(self):
-        # _show_orbital_diagram populates widget; _activate_ana_panel reveals it.
+    def test_accordion_expanded_via_activate(self):
+        # _show_orbital_diagram populates widget; _activate_ana_panel expands it.
         app = QuantUIApp()
         app._show_orbital_diagram(self._make_result_with_mo())
-        assert app._orb_accordion.layout.display == "none"  # still hidden
+        assert app._orb_accordion.selected_index is None  # still collapsed
         app._activate_ana_panel("Energies")
-        assert app._orb_accordion.layout.display == ""
+        assert app._orb_accordion.selected_index == 0
 
-    def test_accordion_stays_hidden_when_no_mo_data(self):
+    def test_accordion_stays_collapsed_when_no_mo_data(self):
         from unittest.mock import MagicMock
 
         app = QuantUIApp()
@@ -1013,13 +1015,19 @@ class TestShowOrbitalDiagram:
         r.mo_energy_hartree = None
         r.mo_occ = None
         app._show_orbital_diagram(r)
-        assert app._orb_accordion.layout.display == "none"
+        assert app._orb_accordion.selected_index is None
 
     def test_diagram_html_populated(self):
         app = QuantUIApp()
         app._show_orbital_diagram(self._make_result_with_mo())
-        # plotly renders an interactive <div>; matplotlib fallback renders <img>
-        val = app._orb_diagram_html.value
+        # Plotly renders an interactive <div>; matplotlib fallback renders <img>.
+        # The diagram is now rendered via Output display_data (not HTML.value).
+        payloads = [
+            out.get("data", {}).get("text/html", "")
+            for out in app._orb_diagram_html.outputs
+            if out.get("output_type") == "display_data"
+        ]
+        val = "\n".join(payloads)
         assert "<div" in val or "<img" in val
 
     def test_isosurface_controls_hidden_when_no_mo_coeff(self):
@@ -1109,11 +1117,7 @@ class TestAnalysisTab:
 
 
 class TestAnaSwitcher:
-    """Panel switcher strip: buttons, state, activation, and deactivation."""
-
-    def test_eight_buttons_exist(self):
-        app = QuantUIApp()
-        assert len(app._ana_btns) == 8
+    """Analysis panel state: activation, deactivation, and placeholder swapping."""
 
     def test_panel_names(self):
         app = QuantUIApp()
@@ -1128,53 +1132,42 @@ class TestAnaSwitcher:
             "NMR",
         ]
 
-    def test_buttons_initially_dimmed(self):
-        app = QuantUIApp()
-        for btn in app._ana_btns:
-            assert btn.layout.opacity == "0.35"
-
     def test_no_panels_available_initially(self):
         app = QuantUIApp()
         assert len(app._ana_available) == 0
 
-    def test_all_accordions_hidden_initially(self):
+    def test_all_accordions_visible_and_collapsed_initially(self):
         app = QuantUIApp()
         for acc in app._ana_accordions:
-            assert acc.layout.display == "none"
-
-    def test_switcher_box_in_analysis_tab(self):
-        app = QuantUIApp()
-        assert app._ana_switcher_box in app.analysis_tab_panel.children
+            assert acc.layout.display == ""
+            assert acc.selected_index is None
 
     def test_activate_panel_marks_available(self):
         app = QuantUIApp()
         app._activate_ana_panel("Energies")
         assert "Energies" in app._ana_available
 
-    def test_activate_panel_sets_opacity(self):
-        app = QuantUIApp()
-        app._activate_ana_panel("Energies")
-        orb_btn = app._ana_btns[0]
-        assert orb_btn.layout.opacity == "1.0"
-
     def test_activate_panel_auto_selects(self):
         app = QuantUIApp()
         app._activate_ana_panel("Energies")
-        assert app._orb_accordion.layout.display == ""
         assert app._orb_accordion.selected_index == 0
 
     def test_activate_panel_no_auto_select(self):
         app = QuantUIApp()
         app._activate_ana_panel("Energies", auto_select=False)
-        assert app._orb_accordion.layout.display == "none"
+        # Panel is available but not expanded; still visible in DOM.
+        assert "Energies" in app._ana_available
+        assert app._orb_accordion.selected_index is None
+        assert app._orb_accordion.layout.display == ""
 
-    def test_activate_hides_other_accordions(self):
+    def test_activate_collapses_other_accordions(self):
         app = QuantUIApp()
         app._activate_ana_panel("Energies")
-        # All other accordions should be hidden
+        # Other accordions remain visible but collapsed (not hidden).
         for name, acc in zip(app._ana_panel_names, app._ana_accordions):
             if name != "Energies":
-                assert acc.layout.display == "none"
+                assert acc.layout.display == ""
+                assert acc.selected_index is None
 
     def test_deactivate_all_clears_available(self):
         app = QuantUIApp()
@@ -1183,32 +1176,34 @@ class TestAnaSwitcher:
         app._deactivate_all_ana_panels()
         assert len(app._ana_available) == 0
 
-    def test_deactivate_all_hides_accordions(self):
+    def test_deactivate_all_collapses_accordions(self):
         app = QuantUIApp()
         app._activate_ana_panel("Energies")
         app._deactivate_all_ana_panels()
+        # All panels remain visible in the DOM but are collapsed.
         for acc in app._ana_accordions:
-            assert acc.layout.display == "none"
+            assert acc.layout.display == ""
+            assert acc.selected_index is None
 
-    def test_deactivate_all_dims_buttons(self):
+    def test_unavail_message_shown_initially(self):
         app = QuantUIApp()
-        app._activate_ana_panel("Energies")
+        # Every panel starts with the unavailable placeholder visible.
+        for name in app._ana_panel_names:
+            assert app._ana_unavail_msgs[name].layout.display == ""
+            assert app._ana_content_boxes[name].layout.display == "none"
+
+    def test_activate_swaps_placeholder_for_content(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies", auto_select=False)
+        assert app._ana_unavail_msgs["Energies"].layout.display == "none"
+        assert app._ana_content_boxes["Energies"].layout.display == ""
+
+    def test_deactivate_restores_placeholder(self):
+        app = QuantUIApp()
+        app._activate_ana_panel("Energies", auto_select=False)
         app._deactivate_all_ana_panels()
-        for btn in app._ana_btns:
-            assert btn.layout.opacity == "0.35"
-
-    def test_click_unavailable_shows_warning(self):
-        app = QuantUIApp()
-        app._on_ana_panel_click("Energies")
-        assert app._ana_unavail_html.layout.display == ""
-        assert "Energies" in app._ana_unavail_html.value
-
-    def test_click_available_selects_panel(self):
-        app = QuantUIApp()
-        app._activate_ana_panel("IR Spectrum", auto_select=False)
-        app._on_ana_panel_click("IR Spectrum")
-        assert app._ir_accordion.layout.display == ""
-        assert app._ana_active == "IR Spectrum"
+        assert app._ana_unavail_msgs["Energies"].layout.display == ""
+        assert app._ana_content_boxes["Energies"].layout.display == "none"
 
 
 # ---------------------------------------------------------------------------
