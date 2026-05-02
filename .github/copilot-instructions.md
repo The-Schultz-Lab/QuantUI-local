@@ -289,6 +289,11 @@ Unavailable panels show a "Not available — run a X calculation first" placehol
    Use `widget.observe(self._safe_cb(self._on_x), names="value")` so exceptions are
    routed to the Log tab instead. See `_safe_cb()` in `app.py`.
 
+10. **After significant code changes, run the pre-commit sequence before handoff.**
+   For meaningful edits in `quantui/`, run:
+   - `pre-commit run --all-files`
+   - `python -m pytest tests/ -q --no-cov`
+
 ---
 
 ## Supported Calculations
