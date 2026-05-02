@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import os
 import re
 import threading
 import time
@@ -26,7 +25,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, List, Literal, Optional
 
 import ipywidgets as widgets
 from IPython import get_ipython
-from IPython.display import HTML, Javascript, display
+from IPython.display import HTML, display
 
 import quantui
 import quantui.calc_log as _calc_log
@@ -173,7 +172,19 @@ from quantui.app_history import (
     on_view_log as _hist_on_view_log,
 )
 from quantui.app_runflow import (
+    do_calibration as _run_do_calibration,
+)
+from quantui.app_runflow import (
     on_accumulate as _run_on_accumulate,
+)
+from quantui.app_runflow import (
+    on_basis_help as _run_on_basis_help,
+)
+from quantui.app_runflow import (
+    on_cal_run as _run_on_cal_run,
+)
+from quantui.app_runflow import (
+    on_cal_stop as _run_on_cal_stop,
 )
 from quantui.app_runflow import (
     on_calc_type_changed as _run_on_calc_type_changed,
@@ -185,13 +196,64 @@ from quantui.app_runflow import (
     on_clear_log as _run_on_clear_log,
 )
 from quantui.app_runflow import (
+    on_clear_log_cache as _run_on_clear_log_cache,
+)
+from quantui.app_runflow import (
+    on_clear_log_cache_confirm as _run_on_clear_log_cache_confirm,
+)
+from quantui.app_runflow import (
+    on_compare as _run_on_compare,
+)
+from quantui.app_runflow import (
     on_compare_clear as _run_on_compare_clear,
 )
 from quantui.app_runflow import (
     on_compare_refresh as _run_on_compare_refresh,
 )
 from quantui.app_runflow import (
+    on_confirm_no as _run_on_confirm_no,
+)
+from quantui.app_runflow import (
+    on_confirm_yes as _run_on_confirm_yes,
+)
+from quantui.app_runflow import (
+    on_copy_results_path as _run_on_copy_results_path,
+)
+from quantui.app_runflow import (
+    on_exit_clicked as _run_on_exit_clicked,
+)
+from quantui.app_runflow import (
+    on_expand_mol_input as _run_on_expand_mol_input,
+)
+from quantui.app_runflow import (
     on_freq_seed_changed as _run_on_freq_seed_changed,
+)
+from quantui.app_runflow import (
+    on_help_toggle as _run_on_help_toggle,
+)
+from quantui.app_runflow import (
+    on_help_topic_changed as _run_on_help_topic_changed,
+)
+from quantui.app_runflow import (
+    on_issue_btn as _run_on_issue_btn,
+)
+from quantui.app_runflow import (
+    on_issue_cancel as _run_on_issue_cancel,
+)
+from quantui.app_runflow import (
+    on_issue_submit as _run_on_issue_submit,
+)
+from quantui.app_runflow import (
+    on_log_clear as _run_on_log_clear,
+)
+from quantui.app_runflow import (
+    on_method_help as _run_on_method_help,
+)
+from quantui.app_runflow import (
+    on_past_refresh as _run_on_past_refresh,
+)
+from quantui.app_runflow import (
+    on_reset_click as _run_on_reset_click,
 )
 from quantui.app_runflow import (
     on_run_clicked as _run_on_run_clicked,
@@ -1440,12 +1502,11 @@ class QuantUIApp:
         threading.Thread(target=_do, daemon=True).start()
 
     def _on_expand_mol_input(self, btn) -> None:
-        _children = [self.mol_input_expanded, self.mol_info_html, self.viz_output]
-        if self.viz_backend_toggle is not None:
-            _children.append(self.viz_backend_toggle)
-        if VISUALIZATION_AVAILABLE:
-            _children.append(self.viz_controls_box)
-        self.mol_input_container.children = _children
+        _run_on_expand_mol_input(
+            self,
+            btn,
+            visualization_available=VISUALIZATION_AVAILABLE,
+        )
 
     # ── Calc type ─────────────────────────────────────────────────────────
 
@@ -1464,10 +1525,10 @@ class QuantUIApp:
     # ── Help buttons ──────────────────────────────────────────────────────
 
     def _on_method_help(self, btn) -> None:
-        self._show_help_topic("method")
+        _run_on_method_help(self, btn)
 
     def _on_basis_help(self, btn) -> None:
-        self._show_help_topic("basis_set")
+        _run_on_basis_help(self, btn)
 
     # ── Run ───────────────────────────────────────────────────────────────
 
@@ -1513,66 +1574,7 @@ class QuantUIApp:
         _run_on_compare_refresh(self, btn)
 
     def _on_compare(self, btn) -> None:
-        selected = self.compare_select.value
-        if not selected or selected == ("",):
-            return
-        self.compare_output.clear_output(wait=True)
-        from quantui import (
-            comparison_table_html,
-            plot_comparison,
-            summary_from_saved_result,
-        )
-        from quantui.results_storage import load_result
-
-        summaries = []
-        valid_dirs: list = []
-        for path_str in selected:
-            if not path_str:
-                continue
-            try:
-                data = load_result(Path(path_str))
-                summaries.append(summary_from_saved_result(data))
-                valid_dirs.append(Path(path_str))
-            except Exception as exc:
-                with self.compare_output:
-                    display(
-                        HTML(
-                            f'<p style="color:#ef4444">Error loading result: {exc}</p>'
-                        )
-                    )
-        if not summaries:
-            return
-        with self.compare_output:
-            display(HTML(comparison_table_html(summaries)))
-            if len(summaries) > 1:
-                try:
-                    import matplotlib.pyplot as plt
-
-                    fig = plot_comparison(summaries)
-                    display(fig)
-                    plt.close(fig)
-                except Exception:
-                    pass
-            # Per-row → Analyse buttons
-            if valid_dirs:
-                _btns = []
-                for s, rdir in zip(summaries, valid_dirs):
-                    _short = f"{s.formula} {s.method}/{s.basis}"
-                    _btn = widgets.Button(
-                        description=f"→ Analyse  {_short}"[:48],
-                        button_style="info",
-                        layout=_layout(width="auto", max_width="340px"),
-                        tooltip=f"Load {_short} into the Analysis tab",
-                    )
-                    _btn.on_click(lambda _, rd=rdir: self._history_load_analysis(rd))
-                    _btns.append(_btn)
-                display(
-                    widgets.HTML(
-                        '<p style="margin:12px 0 4px;color:#475569;'
-                        'font-size:13px;font-weight:600">Analyse a result:</p>'
-                    )
-                )
-                display(widgets.VBox(_btns, layout=_layout(gap="4px")))
+        _run_on_compare(self, btn, layout_fn=_layout)
 
     def _on_compare_clear(self, btn) -> None:
         _run_on_compare_clear(self, btn)
@@ -1583,24 +1585,10 @@ class QuantUIApp:
         _hist_on_past_dd_changed(self, change, layout_fn=_layout)
 
     def _on_past_refresh(self, btn) -> None:
-        self._refresh_results_browser()
+        _run_on_past_refresh(self, btn)
 
     def _on_copy_results_path(self, btn) -> None:
-        p = self._get_results_dir()
-        p.mkdir(parents=True, exist_ok=True)
-        path_str = str(p).replace("\\", "\\\\").replace("'", "\\'")
-        display(Javascript(f"navigator.clipboard.writeText('{path_str}')"))
-        self.results_path_lbl.value = (
-            f'<span style="color:#22c55e;font-size:13px">Copied: {p}</span>'
-        )
-
-        def _reset():
-            time.sleep(3)
-            self.results_path_lbl.value = (
-                f'<span style="font-size:13px;color:#64748b">{p}</span>'
-            )
-
-        threading.Thread(target=_reset, daemon=True).start()
+        _run_on_copy_results_path(self, btn)
 
     def _on_view_log(self, btn) -> None:
         _hist_on_view_log(self, btn)
@@ -1620,158 +1608,45 @@ class QuantUIApp:
     # ── Perf stats reset ──────────────────────────────────────────────────
 
     def _on_reset_click(self, btn) -> None:
-        self._reset_confirm_box.layout.display = ""
+        _run_on_reset_click(self, btn)
 
     def _on_confirm_yes(self, btn) -> None:
-        from quantui.calc_log import reset_perf_log
-
-        reset_perf_log()
-        self._reset_confirm_box.layout.display = "none"
-        self._refresh_perf_stats()
+        _run_on_confirm_yes(self, btn, reset_perf_log_fn=_calc_log.reset_perf_log)
 
     def _on_confirm_no(self, btn) -> None:
-        self._reset_confirm_box.layout.display = "none"
+        _run_on_confirm_no(self, btn)
 
     # ── Calibration ───────────────────────────────────────────────────────
 
     def _on_cal_run(self, btn) -> None:
-        import threading as _threading
-
-        mode = self._cal_mode_toggle.value
-        suite = _BENCHMARK_SUITE if mode == "short" else _BENCHMARK_SUITE_LONG
-        self._cal_stop_event = _threading.Event()
-        self._cal_run_btn.disabled = True
-        self._cal_mode_toggle.disabled = True
-        self._cal_stop_btn.layout.display = ""
-        self._cal_progress.max = len(suite)
-        self._cal_progress.value = 0
-        self._cal_progress.layout.display = ""
-        self._cal_step_label.layout.display = ""
-        self._cal_step_label.value = (
-            '<span style="font-size:12px;color:#475569">Starting…</span>'
+        _run_on_cal_run(
+            self,
+            btn,
+            benchmark_suite=_BENCHMARK_SUITE,
+            benchmark_suite_long=_BENCHMARK_SUITE_LONG,
         )
-        self._cal_results_html.value = ""
-
-        _threading.Thread(target=self._do_calibration, daemon=True).start()
 
     def _on_cal_stop(self, btn) -> None:
-        if hasattr(self, "_cal_stop_event"):
-            self._cal_stop_event.set()
+        _run_on_cal_stop(self, btn)
 
     def _do_calibration(self) -> None:
-        from quantui.benchmarks import run_calibration
-
-        mode = self._cal_mode_toggle.value
-
-        def _progress(
-            step_n: int, total: int, label: str, status: str, elapsed: float
-        ) -> None:
-            _icon = {"ok": "✓", "timed_out": "⏱", "stopped": "⛔", "error": "✗"}.get(
-                status, "?"
-            )
-            self._cal_progress.value = step_n
-            self._cal_step_label.value = (
-                f'<span style="font-size:12px;color:#475569">'
-                f"Step {step_n} / {total} — {label} "
-                f"[{_icon} {elapsed:.1f} s]</span>"
-            )
-
-        result = run_calibration(
-            progress_cb=_progress,
-            stop_event=self._cal_stop_event,
-            timeout_per_step=300.0 if mode == "long" else 120.0,
-            mode=mode,
-        )
-
-        # Render results table
-        _rows = "".join(
-            f"<tr>"
-            f'<td style="padding:2px 12px 2px 0;font-size:12px">{s.label}</td>'
-            f'<td style="padding:2px 8px 2px 0;font-size:12px;text-align:right">'
-            f"{s.n_electrons}</td>"
-            f'<td style="padding:2px 8px 2px 0;font-size:12px;text-align:right">'
-            f"{s.n_basis if s.n_basis is not None else '—'}</td>"
-            f'<td style="padding:2px 8px 2px 0;font-size:12px;text-align:right">'
-            f"{s.elapsed_s:.2f} s</td>"
-            f'<td style="padding:2px 0;font-size:12px">'
-            f'{"✓" if s.status == "ok" else ("⏱ timed out" if s.status == "timed_out" else ("⛔ stopped" if s.status == "stopped" else "✗ error"))}'
-            f"</td>"
-            f"</tr>"
-            for s in result.steps
-        )
-        _summary = f"Completed {result.n_completed} / {result.n_total} steps." + (
-            " (stopped early)" if result.stopped_early else ""
-        )
-        self._cal_results_html.value = (
-            f'<div style="margin-top:8px">'
-            f'<p style="font-size:13px;color:#374151;margin:0 0 6px">{_summary}</p>'
-            f'<table style="border-collapse:collapse">'
-            f"<tr>"
-            f'<th style="padding:2px 12px 2px 0;font-size:12px;text-align:left">Calculation</th>'
-            f'<th style="padding:2px 8px 2px 0;font-size:12px;text-align:right">e⁻</th>'
-            f'<th style="padding:2px 8px 2px 0;font-size:12px;text-align:right">Basis fns</th>'
-            f'<th style="padding:2px 8px 2px 0;font-size:12px;text-align:right">Wall time</th>'
-            f'<th style="padding:2px 0;font-size:12px">Status</th>'
-            f"</tr>"
-            f"{_rows}</table></div>"
-        )
-
-        self._cal_step_label.value = (
-            '<span style="font-size:12px;color:#16a34a"><b>Calibration complete.</b> '
-            "Time estimates are now active.</span>"
-            if result.n_completed > 0
-            else '<span style="font-size:12px;color:#dc2626">No steps completed.</span>'
-        )
-        self._cal_stop_btn.layout.display = "none"
-        self._cal_run_btn.disabled = not _PYSCF_AVAILABLE
-        self._cal_mode_toggle.disabled = False
-        self._refresh_perf_stats()
+        _run_do_calibration(self, pyscf_available=_PYSCF_AVAILABLE)
 
     # ── Output log ────────────────────────────────────────────────────────
 
     def _on_log_clear(self, btn) -> None:
-        self._log_output_html.value = (
-            '<span style="color:#94a3b8;font-size:13px">Log cleared.</span>'
-        )
-        self._log_source_lbl.value = ""
+        _run_on_log_clear(self, btn)
 
     # ── Issue reporting ───────────────────────────────────────────────────
 
     def _on_issue_btn(self, _=None) -> None:
-        """Show the issue report overlay."""
-        self._issue_textarea.value = ""
-        self._issue_status_html.value = ""
-        self._issue_overlay.layout.display = ""
+        _run_on_issue_btn(self, _)
 
     def _on_issue_cancel(self, _=None) -> None:
-        self._issue_overlay.layout.display = "none"
+        _run_on_issue_cancel(self, _)
 
     def _on_issue_submit(self, _=None) -> None:
-        text = self._issue_textarea.value.strip()
-        if not text:
-            self._issue_status_html.value = (
-                '<span style="color:#b91c1c;font-size:12px">'
-                "Please describe the issue before submitting.</span>"
-            )
-            return
-        self._issue_submit_btn.disabled = True
-        try:
-            issue_id = _issue_tracker.log_issue(
-                description=text,
-                context=self._build_issue_context(),
-                session_id=self._session_id,
-            )
-            self._issue_status_html.value = (
-                f'<span style="color:#16a34a;font-size:12px">'
-                f"&#10003; Issue #{issue_id} saved. Thank you!</span>"
-            )
-            self._issue_overlay.layout.display = "none"
-        except Exception as exc:
-            self._issue_status_html.value = (
-                f'<span style="color:#b91c1c;font-size:12px">Save failed: {exc}</span>'
-            )
-        finally:
-            self._issue_submit_btn.disabled = False
+        _run_on_issue_submit(self, issue_tracker_mod=_issue_tracker)
 
     def _build_issue_context(self) -> dict:
         """Snapshot the current app state to attach to an issue report."""
@@ -1826,65 +1701,23 @@ class QuantUIApp:
     # ── Clear log cache ───────────────────────────────────────────────────
 
     def _on_clear_log_cache(self, _=None) -> None:
-        """First click: reveal the confirmation button."""
-        self._clear_log_cache_confirm_btn.layout.display = ""
-        self._clear_log_cache_btn.disabled = True
+        _run_on_clear_log_cache(self, _)
 
     def _on_clear_log_cache_confirm(self, _=None) -> None:
-        """Second click: clear event_log.jsonl and reset the UI."""
-        try:
-            _calc_log.log_event(
-                "log_cleared",
-                "Session event log cleared by user",
-                session_id=self._session_id,
-            )
-            _calc_log.clear_event_log()
-        except Exception:
-            pass
-        self._clear_log_cache_confirm_btn.layout.display = "none"
-        self._clear_log_cache_btn.disabled = False
+        _run_on_clear_log_cache_confirm(self, calc_log_mod=_calc_log)
 
     # ── Exit ──────────────────────────────────────────────────────────────
 
     def _on_exit_clicked(self, _=None) -> None:
-        self._exit_btn.description = "Exiting…"
-        self._exit_btn.disabled = True
-        self._welcome_html.value = (
-            '<div style="display:flex;align-items:center;justify-content:center;'
-            'padding:32px;gap:16px">'
-            '<svg width="40" height="40" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">'
-            '<circle cx="140" cy="140" r="48" fill="rgba(37,99,235,0.15)"/>'
-            '<circle cx="140" cy="140" r="14" fill="#2563eb"/>'
-            '<circle cx="140" cy="140" r="8" fill="#60a5fa"/>'
-            "</svg>"
-            '<div style="font-size:20px;color:#475569">'
-            "QuantUI has shut down. You may close this tab.</div>"
-            "</div>"
-        )
-
-        def _do_exit() -> None:
-            import signal
-            import time
-
-            time.sleep(0.6)
-            try:
-                # Signal the Voilà/Jupyter server process (our parent) to exit cleanly.
-                os.kill(os.getppid(), signal.SIGTERM)
-            except Exception:
-                pass
-            # Terminate the kernel process regardless.
-            os._exit(0)
-
-        threading.Thread(target=_do_exit, daemon=True).start()
+        _run_on_exit_clicked(self, _)
 
     # ── Help ──────────────────────────────────────────────────────────────
 
     def _on_help_toggle(self, _=None) -> None:
-        visible = self.help_tab_panel.layout.display != "none"
-        self.help_tab_panel.layout.display = "none" if visible else ""
+        _run_on_help_toggle(self, _)
 
     def _on_help_topic_changed(self, change=None) -> None:
-        self._render_help_topic()
+        _run_on_help_topic_changed(self, change)
 
     # ══ LOGIC METHODS ════════════════════════════════════════════════════════
 
