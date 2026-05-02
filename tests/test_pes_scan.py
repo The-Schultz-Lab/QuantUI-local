@@ -202,7 +202,7 @@ class TestPesScanWidgets:
         from quantui.app import QuantUIApp
 
         app = QuantUIApp()
-        assert app._pes_plot_html.value == ""
+        assert len(app._pes_plot_html.outputs) == 0
 
     def test_on_calc_type_changed_to_pes_scan_populates_extras(self):
         from quantui.app import QuantUIApp
@@ -212,14 +212,17 @@ class TestPesScanWidgets:
         assert len(app.calc_extra_opts.children) > 0
 
     def test_pes_scan_accordion_collapsed_on_run_clicked(self):
+        from IPython.display import HTML
+
         from quantui.app import QuantUIApp
 
         app = QuantUIApp()
         app._pes_scan_accordion.selected_index = 0
-        app._pes_plot_html.value = "<div>old</div>"
+        app._pes_plot_html.append_display_data(HTML("<div>old</div>"))
+        assert len(app._pes_plot_html.outputs) == 1
         app._on_run_clicked(None)
         assert app._pes_scan_accordion.selected_index is None
-        assert app._pes_plot_html.value == ""
+        assert len(app._pes_plot_html.outputs) == 0
 
 
 # ── Format method ─────────────────────────────────────────────────────────────

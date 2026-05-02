@@ -1020,8 +1020,14 @@ class TestShowOrbitalDiagram:
     def test_diagram_html_populated(self):
         app = QuantUIApp()
         app._show_orbital_diagram(self._make_result_with_mo())
-        # plotly renders an interactive <div>; matplotlib fallback renders <img>
-        val = app._orb_diagram_html.value
+        # Plotly renders an interactive <div>; matplotlib fallback renders <img>.
+        # The diagram is now rendered via Output display_data (not HTML.value).
+        payloads = [
+            out.get("data", {}).get("text/html", "")
+            for out in app._orb_diagram_html.outputs
+            if out.get("output_type") == "display_data"
+        ]
+        val = "\n".join(payloads)
         assert "<div" in val or "<img" in val
 
     def test_isosurface_controls_hidden_when_no_mo_coeff(self):

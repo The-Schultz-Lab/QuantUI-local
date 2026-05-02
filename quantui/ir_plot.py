@@ -18,8 +18,8 @@ from typing import List, Optional
 import numpy as np
 import plotly.graph_objects as go
 
-# x-axis range follows the standard IR convention: high → low wavenumber
-_XRANGE = [4000, 400]
+# x-axis range is low → high wavenumber (user-facing convention in QuantUI)
+_XRANGE = [400, 4000]
 _XGRID = np.arange(400, 4001, 1.0)  # 1 cm⁻¹ resolution for broadened mode
 
 

@@ -1108,9 +1108,7 @@ class QuantUIApp:
 
     def _build_results_section(self) -> None:
         # PES scan energy plot accordion (hidden until a PES Scan completes)
-        self._pes_plot_html = widgets.HTML(
-            value="", layout=widgets.Layout(width="100%")
-        )
+        self._pes_plot_html = widgets.Output(layout=widgets.Layout(width="100%"))
         self._pes_scan_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
@@ -1171,7 +1169,7 @@ class QuantUIApp:
             style={"description_width": "80px"},
             layout=widgets.Layout(width="260px", display="none"),
         )
-        self._ir_fig = widgets.HTML(value="", layout=widgets.Layout(width="100%"))
+        self._ir_fig = widgets.Output(layout=widgets.Layout(width="100%"))
 
         _ir_controls = widgets.HBox(
             [self._ir_mode_toggle, self._ir_fwhm_slider],
@@ -1240,9 +1238,7 @@ class QuantUIApp:
                 margin="0 0 6px 0",
             ),
         )
-        self._orb_diagram_html = widgets.HTML(
-            value="", layout=widgets.Layout(width="100%")
-        )
+        self._orb_diagram_html = widgets.Output(layout=widgets.Layout(width="100%"))
         _orb_diagram_content: list = [_orb_controls_row, self._orb_diagram_html]
         self._orb_diagram_box = widgets.VBox(
             _orb_diagram_content,
@@ -1311,7 +1307,7 @@ class QuantUIApp:
         self._iso_accordion.selected_index = None
 
         # ── UV-Vis spectrum accordion (TD-DFT only — hidden until result) ──
-        self._tddft_fig = widgets.HTML(value="", layout=widgets.Layout(width="100%"))
+        self._tddft_fig = widgets.Output(layout=widgets.Layout(width="100%"))
         self._tddft_accordion = widgets.Accordion(
             children=[
                 widgets.VBox(
@@ -1816,11 +1812,14 @@ class QuantUIApp:
                 yaxis=dict(showgrid=True, gridcolor=tc["grid_color"]),
             )
             self._apply_plotly_theme(_fig)
-            self._tddft_fig.value = _pio.to_html(
-                _fig,
-                include_plotlyjs="require",
-                full_html=False,
-                config={"responsive": True},
+            self._set_html_output(
+                self._tddft_fig,
+                _pio.to_html(
+                    _fig,
+                    include_plotlyjs="require",
+                    full_html=False,
+                    config={"responsive": True},
+                ),
             )
             return True
         except Exception:
@@ -2601,6 +2600,41 @@ class QuantUIApp:
             yaxis=dict(gridcolor=tc["grid_color"]),
         )
 
+    def _set_html_output(self, out: widgets.Output, html: str) -> None:
+        """Render HTML into an Output widget.
+
+        Plotly HTML contains <script> tags. Those scripts do not execute when
+        assigned to widgets.HTML.value (innerHTML path), which leads to blank
+        figure panels. Rendering through Output display_data executes the JS.
+        """
+        self._clear_output_widget(out)
+        out.append_display_data(HTML(html))
+
+    def _render_plotly_figure(self, out: widgets.Output, fig) -> None:
+        """Render a Plotly figure through display() in an Output widget."""
+        self._clear_output_widget(out)
+        with out:
+            display(fig)
+
+    def _set_plotly_figure_output(self, out: widgets.Output, fig) -> None:
+        """Display a Plotly figure via the notebook display pipeline.
+
+        This mirrors the PlotlyMol path (display(fig) in Output) and avoids
+        reliance on raw HTML <script> execution inside widget content.
+        """
+        if threading.current_thread() is threading.main_thread():
+            self._render_plotly_figure(out, fig)
+        else:
+            self._queue_main_thread_callback(self._render_plotly_figure, out, fig)
+
+    def _clear_output_widget(self, out: widgets.Output) -> None:
+        """Clear an Output widget in a way that is deterministic in tests."""
+        out.clear_output()
+        try:
+            out.outputs = ()
+        except Exception:
+            pass
+
     def _rerender_plotly_theme(self) -> None:
         """Re-render all visible Plotly charts in the updated theme."""
         if getattr(self, "_last_orb_info", None) is not None:
@@ -2905,7 +2939,7 @@ class QuantUIApp:
         self._viz_label.layout.display = "none"
         self._viz_label.value = ""
         self._deactivate_all_ana_panels()
-        self._pes_plot_html.value = ""
+        self._clear_output_widget(self._pes_plot_html)
         self._result_dir_label.value = ""
         self._result_dir_label.layout.display = "none"
         self._result_log_accordion.layout.display = "none"
@@ -4432,28 +4466,47 @@ class QuantUIApp:
 
         self._update_ir_figure("Stick", 20.0)
 
-        # Wire callbacks (replace any prior bindings)
+        # _show_ir_spectrum may run from the _do_run background thread.
+        # Wire observers and set widget state on the main thread.
+        self._queue_main_thread_callback(self._wire_ir_controls)
+
+        return True
+
+    def _wire_ir_controls(self) -> None:
+        """(Re)bind IR controls and reset defaults on the main thread."""
         self._ir_mode_toggle.unobserve_all()
         self._ir_fwhm_slider.unobserve_all()
-
-        def _on_mode(change) -> None:
-            mode = change["new"]
-            self._ir_fwhm_slider.layout.display = "" if mode == "Broadened" else "none"
-            self._update_ir_figure(mode, self._ir_fwhm_slider.value)
-
-        def _on_fwhm(change) -> None:
-            if self._ir_mode_toggle.value == "Broadened":
-                self._update_ir_figure("Broadened", change["new"])
-
-        self._ir_mode_toggle.observe(self._safe_cb(_on_mode), names="value")
-        self._ir_fwhm_slider.observe(self._safe_cb(_on_fwhm), names="value")
+        self._ir_mode_toggle.observe(
+            self._safe_cb(self._on_ir_mode_changed), names="value"
+        )
+        self._ir_fwhm_slider.observe(
+            self._safe_cb(self._on_ir_fwhm_changed), names="value"
+        )
 
         # Reset toggle/slider to defaults
         self._ir_mode_toggle.value = "Stick"
         self._ir_fwhm_slider.value = 20.0
         self._ir_fwhm_slider.layout.display = "none"
 
-        return True
+    def _on_ir_mode_changed(self, change) -> None:
+        """Handle Stick/Broadened mode changes for IR panel."""
+        mode = change["new"]
+        try:
+            _calc_log.log_event(
+                "ir_mode_change",
+                mode,
+                mode=mode,
+                session_id=self._session_id,
+            )
+        except Exception:
+            pass
+        self._ir_fwhm_slider.layout.display = "" if mode == "Broadened" else "none"
+        self._update_ir_figure(mode, self._ir_fwhm_slider.value)
+
+    def _on_ir_fwhm_changed(self, change) -> None:
+        """Re-render broadened IR trace when line width slider changes."""
+        if self._ir_mode_toggle.value == "Broadened":
+            self._update_ir_figure("Broadened", change["new"])
 
     def _update_ir_figure(self, mode: str, fwhm: float) -> None:
         """Re-render the IR spectrum chart for the given mode and FWHM."""
@@ -4475,11 +4528,14 @@ class QuantUIApp:
                 yaxis_title=_ytitle,
             )
             self._apply_plotly_theme(fig)
-            self._ir_fig.value = _pio.to_html(
-                fig,
-                include_plotlyjs="require",
-                full_html=False,
-                config={"responsive": True},
+            self._set_html_output(
+                self._ir_fig,
+                _pio.to_html(
+                    fig,
+                    include_plotlyjs="require",
+                    full_html=False,
+                    config={"responsive": True},
+                ),
             )
         except Exception as _e:
             try:
@@ -4533,7 +4589,7 @@ class QuantUIApp:
                 full_html=False,
                 config={"responsive": True},
             )
-            self._orb_diagram_html.value = html_str
+            self._set_html_output(self._orb_diagram_html, html_str)
             _plotly_rendered = True
         except Exception:
             pass
@@ -4556,9 +4612,12 @@ class QuantUIApp:
                 mpl_fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
                 buf.seek(0)
                 img_b64 = base64.b64encode(buf.read()).decode()
-                self._orb_diagram_html.value = (
-                    f'<img src="data:image/png;base64,{img_b64}" '
-                    'style="max-width:100%;height:auto" />'
+                self._set_html_output(
+                    self._orb_diagram_html,
+                    (
+                        f'<img src="data:image/png;base64,{img_b64}" '
+                        'style="max-width:100%;height:auto" />'
+                    ),
                 )
             except Exception:
                 pass
@@ -4622,11 +4681,14 @@ class QuantUIApp:
                 yrange=(ymin, ymax),
             )
             self._apply_plotly_theme(fig)
-            self._orb_diagram_html.value = _pio.to_html(
-                fig,
-                include_plotlyjs="require",
-                full_html=False,
-                config={"responsive": True},
+            self._set_html_output(
+                self._orb_diagram_html,
+                _pio.to_html(
+                    fig,
+                    include_plotlyjs="require",
+                    full_html=False,
+                    config={"responsive": True},
+                ),
             )
         except Exception:
             pass
@@ -5983,11 +6045,14 @@ class QuantUIApp:
                 yaxis=dict(showgrid=True, gridcolor=tc["grid_color"]),
                 hovermode="closest",
             )
-            self._pes_plot_html.value = pio.to_html(
-                fig,
-                include_plotlyjs="require",
-                full_html=False,
-                config={"responsive": True},
+            self._set_html_output(
+                self._pes_plot_html,
+                pio.to_html(
+                    fig,
+                    include_plotlyjs="require",
+                    full_html=False,
+                    config={"responsive": True},
+                ),
             )
         except Exception:
             pass
