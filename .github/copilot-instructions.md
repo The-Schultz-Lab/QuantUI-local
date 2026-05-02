@@ -54,7 +54,7 @@ QuantUI/
 ├── notebooks/
 │   ├── molecule_computations.ipynb  ← Student-facing Voilà app (thin launcher)
 │   └── tutorials/                   ← 01–05 step-by-step tutorial notebooks
-├── tests/                    ← pytest suite (~700 tests)
+├── tests/                    ← pytest suite (~875 tests)
 ├── .github/
 │   └── copilot-instructions.md  ← This file
 ├── apptainer/
@@ -79,19 +79,25 @@ notebooks/molecule_computations.ipynb
                 │
                 ▼
         quantui/app.py — QuantUIApp
-        ┌──────────────────────────────────────────────────────────┐
-        │  _build_shared_widgets()    → StepProgress, run_output   │
-        │  _build_molecule_section()  → mol_input_container        │
-        │  _build_calc_setup()        → method_dd, basis_dd, etc.  │
-        │  _build_run_section()       → run_btn, run_panel         │
-        │  _build_results_section()   → all panel accordions       │
-        │  _build_history_section()   → history_panel              │
-        │  _build_compare_section()   → compare_panel              │
-        │  _build_output_tab()        → log viewer                 │
-        │  _build_help_section()      → help panel                 │
-        │  _build_ana_switcher()      → Analysis tab always-visible panels │
-        │  _assemble_tabs()           → root_tab (Tab widget)      │
-        └──────────────────────────────────────────────────────────┘
+      ┌─────────────────────────────────────────────────────────────────────┐
+      │  __init__()                                                        │
+      │    _build_widgets()                                                │
+      │      _build_theme_selector()                                       │
+      │      _build_status_panel()                                         │
+      │      _build_welcome_header()                                       │
+      │      _build_shared_widgets()                                       │
+      │      _build_molecule_section()                                     │
+      │      _build_calc_setup()                                           │
+      │      _build_run_section()                                          │
+      │      _build_results_section()   → Analysis accordions + _build_ana_switcher() │
+      │      _build_history_section()                                      │
+      │      _build_compare_section()                                      │
+      │      _build_output_tab()                                           │
+      │      _build_help_section()                                         │
+      │      _build_issue_widgets()                                        │
+      │    _wire_callbacks()                                               │
+      │    _assemble_tabs()            → root_tab (7 tabs)                 │
+      └─────────────────────────────────────────────────────────────────────┘
                 │  _do_run() dispatches by calc_type_dd.value:
                 ▼
     ┌──────────────────────────────────────────────────────────────┐
@@ -110,10 +116,12 @@ notebooks/molecule_computations.ipynb
     └──────────────────────────────────────────────────────────────┘
                 │
                 ▼
-    results_storage.save_result()   calc_log.log_perf_record()
+   results_storage.save_result()   calc_log.log_calculation()/log_event()
 ```
 
-**Tab order in the app:** Calculate (0) → History (1) → Compare (2) → Output (3) → Help (4)
+**Root-tab order in the app:** Calculate (0) → Results (1) → Analysis (2) → History (3) → Compare (4) → Log (5) → Status (6)
+
+**Help UI:** Help is a floating overlay panel toggled by `[?]`; it is not a root tab.
 
 ---
 
@@ -159,7 +167,7 @@ class _AnalysisContext:
 _PANEL_REGISTRY = {
     "single_point": [("Energies", "_pop_energies", True), ("Isosurface", "_pop_isosurface", False)],
     "geometry_opt": [("Trajectory", "_pop_geo_trajectory", True), ("Energies", "_pop_energies", False), ...],
-    "frequency":    [("Trajectory", "_pop_preopt_trajectory", False), ("Vibrational", "_pop_vibrational", True), ("IR Spectrum", "_pop_ir_spectrum", False)],
+   "frequency":    [("Vibrational", "_pop_vibrational", True), ("IR Spectrum", "_pop_ir_spectrum", True), ("Trajectory", "_pop_preopt_trajectory", False), ("Energies", "_pop_energies", True)],
     "tddft":        [("UV-Vis", "_pop_uv_vis", True)],
     "nmr":          [("NMR", "_pop_nmr_shielding", True)],
     "pes_scan":     [("PES Scan", "_pop_pes_plot", True), ("Trajectory", "_pop_pes_trajectory", False)],
@@ -176,7 +184,7 @@ _PANEL_REGISTRY = {
 ### Adding a new panel — exactly these steps
 
 1. Create the accordion widget in `_build_results_section()` (follow existing pattern)
-2. Add it to the `analysis_tab_panel` VBox in `_build_analysis_section()`
+2. Add it to the `analysis_tab_panel` VBox in `_build_results_section()`
 3. Add `(panel_name, accordion_attr_name, "available after X")` to `_PANEL_META`
    (class-level `ClassVar` — this is the single source of truth for placeholder text
    and accordion attribute lookup; `_build_ana_switcher()` reads it at init time)
@@ -250,9 +258,9 @@ Unavailable panels show a "Not available — run a X calculation first" placehol
    logic to notebook cells. All logic belongs in `quantui/app.py`.
 
 3. **Thread-safe widget updates only.** `_do_run()` runs in a background thread.
-   Widget updates from threads must use `.value =` assignment,
-   `.append_stdout()`, or `.append_display_data()`. Never call `display()` inside
-   `with output_widget:` from a background thread except via `with output_widget:` context.
+   Widget updates from threads must use `.value =`, `.append_stdout()`, or
+   `.append_display_data()`. For Plotly, prefer `plotly.io.to_html(...)` + HTML append
+   rather than direct `display(fig)` in a thread.
 
 4. **No new top-level dependencies** without updating both `pyproject.toml`
    and the Apptainer container `apptainer/quantui.def`.
@@ -294,8 +302,8 @@ Unavailable panels show a "Not available — run a X calculation first" placehol
 | NMR Shielding | `nmr_calc` | `run_nmr_calc()` | `NMRResult` | `"nmr"` |
 | PES Scan | `pes_scan` | `run_pes_scan()` | `PESScanResult` | `"pes_scan"` |
 
-**Supported methods:** RHF, UHF, B3LYP, PBE, PBE0, M06-2X, MP2, CCSD, CAM-B3LYP,
-M06-L, wB97X-D, PBE-D3 (defined in `config.SUPPORTED_METHODS`).
+**Supported methods:** RHF, UHF, B3LYP, PBE, PBE0, M06-2X, wB97X-D, CAM-B3LYP,
+M06-L, HSE06, PBE-D3, MP2 (defined in `config.SUPPORTED_METHODS`).
 
 **Supported basis sets:** STO-3G, 3-21G, 6-31G, 6-31G\*, 6-31G\*\*, cc-pVDZ,
 cc-pVTZ, def2-SVP, def2-TZVP (defined in `config.SUPPORTED_BASIS_SETS`).
@@ -308,18 +316,22 @@ cc-pVTZ, def2-SVP, def2-TZVP (defined in `config.SUPPORTED_BASIS_SETS`).
 
 ```
 __init__()
-  _build_shared_widgets()
-  _build_molecule_section()
-  _build_calc_setup()
-  _build_run_section()        # uses self.calc_type_dd from _build_calc_setup
-  _build_results_section()    # builds all panel accordions incl. tddft + nmr
-  _build_history_section()
-  _build_compare_section()
-  _build_output_tab()
-  _build_help_section()
-  _build_ana_switcher()        # builds 8-panel switcher strip
-  _assemble_tabs()             # builds self.root_tab
-  _wire_callbacks()            # all .observe() and .on_click() wiring
+   _build_widgets()
+      _build_theme_selector()
+      _build_status_panel()
+      _build_welcome_header()
+      _build_shared_widgets()
+      _build_molecule_section()
+      _build_calc_setup()
+      _build_run_section()
+      _build_results_section()    # also calls _build_ana_switcher()
+      _build_history_section()
+      _build_compare_section()
+      _build_output_tab()
+      _build_help_section()
+      _build_issue_widgets()
+   _wire_callbacks()             # all .observe() and .on_click() wiring
+   _assemble_tabs()              # builds self.root_tab (7 tabs)
 ```
 
 ### Key instance state — Analysis tab
@@ -330,9 +342,9 @@ __init__()
 | `self._ana_active` | `str` | Currently expanded panel name |
 | `self._ana_panel_names` | `list[str]` | Ordered panel names derived from `_PANEL_META` |
 | `self._ana_accordions` | `list[Accordion]` | Ordered accordions derived from `_PANEL_META` |
+| `self._ana_unavail_html` | `widgets.HTML` | Shared unavailable-state message area (usually hidden) |
 | `self._ana_unavail_msgs` | `dict[str, HTML]` | Panel name → "Not available" placeholder widget |
 | `self._ana_content_boxes` | `dict[str, VBox]` | Panel name → real content VBox (hidden until activated) |
-| `self._ana_btns` | `list[Button]` | Switcher buttons — **pending removal in M-PLOT-FIX.3** |
 | `self._pending_traj_result` | `Any` | Trajectory stub; rendered lazily on accordion expand |
 | `self._last_orb_info` | `Optional[...]` | Orbital info from last successful `_show_orbital_diagram` |
 | `self._last_ir_freqs` | `list[float]` | IR frequencies stored by `_show_ir_spectrum` |
@@ -442,7 +454,7 @@ voila notebooks/molecule_computations.ipynb
 jupyter lab notebooks/molecule_computations.ipynb
 
 # Run tests
-python -m pytest --tb=short -q
+python -m pytest tests/ -q --no-cov
 
 # Install/update package
 pip install -e ".[dev]"
@@ -469,44 +481,49 @@ Test files in `tests/`:
 | File | What it covers |
 | --- | --- |
 | `test_app.py` | QuantUIApp — widgets, panel registry, callbacks, always-visible panels |
+| `test_issue_tracker.py` | Issue logging DB integration and context capture |
 | `test_molecule.py` | Molecule parsing, validation, formula |
 | `test_session_calc.py` | `run_in_session()` — PySCF-gated |
+| `test_notebook_interactions.py` | Notebook widget interaction flows |
 | `test_notebook_workflows.py` | End-to-end HF/DFT/preopt/thread-safety — PySCF-gated |
 | `test_optimizer.py` | `optimize_geometry()` — PySCF + ASE required |
 | `test_freq_calc.py` | `run_freq_calc()` — PySCF-gated |
-| `test_tddft_calc.py` | `run_tddft_calc()` — PySCF-gated |
 | `test_nmr_calc.py` | `run_nmr_calc()` — PySCF + pyscf.prop required |
 | `test_pes_scan.py` | `run_pes_scan()` + PES analysis panel |
 | `test_ir_plot.py` | `plot_ir_spectrum()` — stick and broadened modes |
+| `test_visualization.py` / `test_visualization_integration.py` | 3D and animation rendering paths |
+| `test_templates.py` | Export template/script integrity |
 | `test_comparison.py` | Result comparison tables |
 | `test_results_storage.py` | Save/load/list round-trip |
 | `test_security.py` | `SecurityError`, `sanitize_filename()` |
-| `test_code_quality.py` | Static analysis — bans CDN plotlyjs, bare except/pass *(pending M-PLOT-FIX.5)* |
-| `test_sp/` | Single-point analysis history replay (end-to-end) |
-| `test_geo_opt/` | Geometry opt analysis history replay |
-| `test_tddft/` | TD-DFT / UV-Vis analysis history replay |
-| `test_nmr/` | NMR analysis history replay |
+| `test_code_quality.py` | Static analysis — bans CDN plotlyjs and bare `except/pass` |
+| `test_sp_analysis_history.py` | Single-point analysis history replay (end-to-end) |
+| `test_geo_opt_analysis_history.py` | Geometry-opt analysis history replay |
+| `test_tddft_analysis_history.py` | TD-DFT / UV-Vis analysis history replay |
+| `test_nmr_analysis_history.py` | NMR analysis history replay |
 | `test_freq_analysis_history.py` | Frequency analysis history replay (Vibrational + IR) |
 | `test_pes_scan_analysis_history.py` | PES scan analysis history replay |
 
 **PySCF-gated tests** use `@pytest.mark.skipif(not _PYSCF_AVAILABLE, ...)`.
 On Windows, these become skips — not failures.
 
-**Baseline (WSL, 2026-05-01 session 29):** 865 passed, 15 skipped.
+**Baseline (WSL, 2026-05-01; `python -m pytest tests/ -q --no-cov`):**
+860 passed, 15 skipped (875 collected).
 
 ---
 
-## Optional Dependencies
+## Dependency Groups
 
-| Extra | Packages | Gated by |
+| Group | Packages | Notes |
 | --- | --- | --- |
-| `pyscf` | `pyscf>=2.3.0` | `_PYSCF_AVAILABLE` flag |
-| `ase` | `ase>=3.22.0` | `ASE_AVAILABLE` flag |
-| `plotly` | `plotly` | checked inline at render time |
-| `plotlymol` | `plotlymol3d` (local) | checked inline at render time |
-| `app` | `voila, jupyterlab` | Always present in the conda env |
+| Core (always installed) | `jupyter`, `ipywidgets`, `notebook`, `numpy`, `matplotlib`, `plotly`, `plotlymol`, `py3Dmol` | Base UI + visualization stack |
+| `pyscf` extra | `pyscf>=2.13.0`, `pyscf-properties` | Enables SCF/frequency/TDDFT/NMR/PES backends |
+| `ase` extra | `ase>=3.22.0` | Geometry optimization and structure I/O |
+| `app` extra | `voila>=0.5.0`, `ipykernel>=6.0.0` | Student-facing Voilà deployment |
+| `notebook` extra | `nbmake>=1.4.0`, `ipykernel>=6.0.0` | Notebook smoke-testing support |
+| `dev` extra | `pytest`, `pytest-cov`, `pytest-mock`, `mypy`, `ruff`, `black`, `pre-commit` | Development tooling |
 
-Install all: `pip install -e ".[pyscf,ase,app,dev]"`
+Install all runtime + dev extras: `pip install -e ".[pyscf,ase,app,notebook,dev]"`
 
 ---
 
