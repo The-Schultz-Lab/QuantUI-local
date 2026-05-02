@@ -301,6 +301,14 @@ Unavailable panels show a "Not available — run a X calculation first" placehol
    - `pre-commit run --all-files`
    - `python -m pytest tests/ -q --no-cov`
 
+11. **Proactively recommend PR checkpoints for QuantUI codebase work.**
+   This applies to `repos-PUBLIC/QuantUI` development (feature, bugfix, and refactor
+   work), especially when moving into a different roadmap theme/milestone family.
+   Also recommend a PR after completing each major extraction/refactor phase that
+   passes validation.
+   Do not proactively recommend PRs for planning-doc-only updates in
+   `repos-WRITING/Research-Project-Admin` unless the user explicitly asks.
+
 ---
 
 ## Supported Calculations
