@@ -23,7 +23,7 @@ import time
 import uuid as _uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, List, Literal, Optional
 
 import ipywidgets as widgets
 from IPython import get_ipython
@@ -76,6 +76,33 @@ from quantui.app_analysis import (
 )
 from quantui.app_analysis import (
     select_ana_panel as _ana_select_ana_panel,
+)
+from quantui.app_builders import (
+    build_calc_setup as _bld_build_calc_setup,
+)
+from quantui.app_builders import (
+    build_compare_section as _bld_build_compare_section,
+)
+from quantui.app_builders import (
+    build_help_section as _bld_build_help_section,
+)
+from quantui.app_builders import (
+    build_issue_widgets as _bld_build_issue_widgets,
+)
+from quantui.app_builders import (
+    build_molecule_section as _bld_build_molecule_section,
+)
+from quantui.app_builders import (
+    build_output_tab as _bld_build_output_tab,
+)
+from quantui.app_builders import (
+    build_run_section as _bld_build_run_section,
+)
+from quantui.app_builders import (
+    build_theme_selector as _bld_build_theme_selector,
+)
+from quantui.app_builders import (
+    build_welcome_header as _bld_build_welcome_header,
 )
 from quantui.app_exports import (
     export_molecule_and_label as _exp_export_molecule_and_label,
@@ -487,6 +514,51 @@ class QuantUIApp:
         app.display()
     """
 
+    if TYPE_CHECKING:
+        # Attributes initialized in companion builder modules. Keeping these
+        # declarations here avoids attr-defined churn during phased extraction.
+        _clear_log_cache_btn: Any
+        _clear_log_cache_confirm_btn: Any
+        _exit_btn: Any
+        _exit_output: Any
+        _help_btn: Any
+        _issue_btn: Any
+        _issue_cancel_btn: Any
+        _issue_overlay: Any
+        _issue_status_html: Any
+        _issue_submit_btn: Any
+        _issue_textarea: Any
+        _log_clear_btn: Any
+        _log_output_html: Any
+        _log_source_lbl: Any
+        _theme_style: Any
+        _welcome_html: Any
+        advanced_accordion: Any
+        calc_setup_panel: Any
+        change_mol_btn: Any
+        compare_btn: Any
+        compare_clear_btn: Any
+        compare_output: Any
+        compare_panel: Any
+        compare_refresh_btn: Any
+        compare_select: Any
+        help_content_html: Any
+        help_tab_panel: Any
+        help_topic_dd: Any
+        log_tab_panel: Any
+        mol_input_collapsed: Any
+        mol_input_container: Any
+        mol_input_expanded: Any
+        preset_dd: Any
+        pubchem_btn: Any
+        pubchem_msg: Any
+        pubchem_txt: Any
+        run_panel: Any
+        theme_btn: Any
+        xyz_area: Any
+        xyz_btn: Any
+        xyz_msg: Any
+
     def __init__(self) -> None:
         # ── Instance state ────────────────────────────────────────────────
         self._molecule: Optional[Molecule] = None
@@ -562,19 +634,7 @@ class QuantUIApp:
     # ── Theme selector ────────────────────────────────────────────────────
 
     def _build_theme_selector(self) -> None:
-        self._theme_style = widgets.Output(
-            layout=_layout(height="0px", overflow="hidden", margin="0", padding="0")
-        )
-        self.theme_btn = widgets.ToggleButtons(
-            options=["Light", "Dark"],
-            value="Dark",
-            description="Theme:",
-            style={"description_width": "48px", "button_width": "90px"},
-            layout=_layout(margin="0"),
-        )
-        # Apply Dark theme immediately
-        with self._theme_style:
-            display(HTML(self._theme_css("Dark")))
+        _bld_build_theme_selector(self, layout_fn=_layout)
 
     def _theme_css(self, theme: str) -> str:
         """Return the CSS filter block for *theme*, or '' for Light."""
@@ -678,64 +738,7 @@ class QuantUIApp:
     # ── Welcome header ────────────────────────────────────────────────────
 
     def _build_welcome_header(self) -> None:
-        _logo_svg = (
-            '<svg width="120" height="120" viewBox="0 0 280 280"'
-            ' xmlns="http://www.w3.org/2000/svg">'
-            "<defs>"
-            '<filter id="q-glow" x="-50%" y="-50%" width="200%" height="200%">'
-            '<feGaussianBlur stdDeviation="7" result="blur"/>'
-            "<feMerge>"
-            '<feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/>'
-            "</feMerge></filter>"
-            '<filter id="q-halo" x="-80%" y="-80%" width="260%" height="260%">'
-            '<feGaussianBlur stdDeviation="22" result="blur"/>'
-            "<feMerge>"
-            '<feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/>'
-            "</feMerge></filter>"
-            "</defs>"
-            '<circle cx="140" cy="140" r="48"'
-            ' fill="rgba(37,99,235,0.20)" filter="url(#q-halo)"/>'
-            '<g transform="rotate(0,140,140)">'
-            '<ellipse cx="140" cy="140" rx="115" ry="33" fill="none"'
-            ' stroke="#0891b2" stroke-width="1.4" opacity="0.70"/>'
-            '<circle cx="255" cy="140" r="5.5" fill="#67e8f9"/>'
-            "</g>"
-            '<g transform="rotate(60,140,140)">'
-            '<ellipse cx="140" cy="140" rx="115" ry="33" fill="none"'
-            ' stroke="#0891b2" stroke-width="1.4" opacity="0.55"/>'
-            '<circle cx="255" cy="140" r="4.5" fill="#93c5fd"/>'
-            "</g>"
-            '<g transform="rotate(120,140,140)">'
-            '<ellipse cx="140" cy="140" rx="115" ry="33" fill="none"'
-            ' stroke="#3b82f6" stroke-width="1.4" opacity="0.42"/>'
-            '<circle cx="255" cy="140" r="4" fill="#60a5fa"/>'
-            "</g>"
-            '<circle cx="140" cy="140" r="20"'
-            ' fill="rgba(37,99,235,0.25)" filter="url(#q-glow)"/>'
-            '<circle cx="140" cy="140" r="14"'
-            ' fill="#2563eb" filter="url(#q-glow)"/>'
-            '<circle cx="140" cy="140" r="8" fill="#60a5fa"/>'
-            '<circle cx="137" cy="137" r="3" fill="rgba(255,255,255,0.45)"/>'
-            "</svg>"
-        )
-        _html = (
-            f'<div style="display:flex;align-items:center;gap:28px;'
-            f"padding:22px 4px 18px;margin-bottom:4px;"
-            f'border-bottom:1px solid #e2e8f0">'
-            f"{_logo_svg}"
-            f"<div>"
-            f'<div style="font-size:44px;font-weight:700;letter-spacing:-0.8px;'
-            f'color:#0f172a;line-height:1.05">QuantUI</div>'
-            f'<div style="font-size:20px;color:#475569;margin-top:7px">'
-            f"Quantum chemistry calculations, right on your device</div>"
-            f'<div style="font-size:13px;color:#94a3b8;margin-top:5px">'
-            f"v{quantui.__version__} &nbsp;&middot;&nbsp; "
-            f"<b>Help</b> tab for instructions &nbsp;&middot;&nbsp; "
-            f"<b>Status</b> tab for system info</div>"
-            f"</div>"
-            f"</div>"
-        )
-        self._welcome_html = widgets.HTML(value=_html)
+        _bld_build_welcome_header(self)
 
     # ── Shared widgets (Cell 3) ───────────────────────────────────────────
 
@@ -1097,183 +1100,23 @@ class QuantUIApp:
     # ── Molecule section (Cell 4) ─────────────────────────────────────────
 
     def _build_molecule_section(self) -> None:
-        # Preset dropdown
-        _preset_opts = ["(select a molecule)"] + list(MOLECULE_LIBRARY.keys())
-        self.preset_dd = widgets.Dropdown(
-            options=_preset_opts,
-            value="(select a molecule)",
-            description="Molecule:",
-            style={"description_width": "90px"},
-            layout=_layout(width="320px"),
-        )
-
-        # XYZ input
-        self.xyz_area = widgets.Textarea(
-            placeholder=(
-                "Paste XYZ coordinates (symbol  x  y  z):\n"
-                "O  0.000  0.000  0.000\n"
-                "H  0.757  0.587  0.000\n"
-                "H -0.757  0.587  0.000"
-            ),
-            layout=_layout(width="440px", height="130px"),
-        )
-        self.xyz_btn = widgets.Button(
-            description="Load XYZ", button_style="info", icon="upload"
-        )
-        self.xyz_msg = widgets.Label()
-
-        # PubChem search
-        self.pubchem_txt = widgets.Text(
-            placeholder="name or SMILES  (e.g. aspirin, caffeine, CC(=O)O)",
-            layout=_layout(width="380px"),
-        )
-        self.pubchem_btn = widgets.Button(
-            description="Search",
-            button_style="info",
-            icon="search",
-            disabled=not PUBCHEM_AVAILABLE,
-            layout=_layout(width="100px"),
-        )
-        self.pubchem_msg = widgets.Label(
-            value=(
-                ""
-                if PUBCHEM_AVAILABLE
-                else "PubChem unavailable — check internet connection"
-            )
-        )
-
-        # Assemble input tab
-        _hint = '<p style="margin:4px 0 8px;color:#666;font-size:13px">'
-        tab_preset = widgets.VBox(
-            [
-                widgets.HTML(
-                    _hint + "Choose from 20+ curated educational molecules.</p>"
-                ),
-                self.preset_dd,
-            ]
-        )
-        tab_xyz = widgets.VBox(
-            [
-                widgets.HTML(
-                    _hint
-                    + "Paste XYZ coordinates (element x y z, one atom per line).</p>"
-                ),
-                self.xyz_area,
-                widgets.HBox([self.xyz_btn, self.xyz_msg]),
-            ]
-        )
-        tab_pubchem = widgets.VBox(
-            [
-                widgets.HTML(
-                    _hint
-                    + "Search by name or SMILES. Requires internet connection.</p>"
-                ),
-                widgets.HBox([self.pubchem_txt, self.pubchem_btn]),
-                self.pubchem_msg,
-            ]
-        )
-        input_tab = widgets.Tab(children=[tab_preset, tab_xyz, tab_pubchem])
-        for _i, _t in enumerate(["Preset Library", "XYZ Input", "PubChem Search"]):
-            input_tab.set_title(_i, _t)
-
-        # Collapsible container
-        self.mol_input_expanded = widgets.VBox(
-            [
-                widgets.HTML('<h3 style="margin:8px 0 6px">Molecule Input</h3>'),
-                input_tab,
-            ]
-        )
-        self.change_mol_btn = widgets.Button(
-            description="Change",
-            button_style="",
-            icon="pencil",
-            layout=_layout(width="100px", height="32px"),
-            tooltip="Re-expand the molecule input panel",
-        )
-        self.mol_input_collapsed = widgets.HBox(
-            [self.mol_summary_compact, self.change_mol_btn],
-            layout=_layout(align_items="center", gap="12px", padding="6px 0"),
-        )
-        _mol_container_children = [
-            self.mol_input_expanded,
-            self.mol_info_html,
-            self.viz_output,
-        ]
-        if self.viz_backend_toggle is not None:
-            _mol_container_children.append(self.viz_backend_toggle)
-        if VISUALIZATION_AVAILABLE:
-            _mol_container_children.append(self.viz_controls_box)
-        self.mol_input_container = widgets.VBox(
-            _mol_container_children,
-            layout=_layout(margin="0 0 4px 0"),
+        _bld_build_molecule_section(
+            self,
+            layout_fn=_layout,
+            molecule_library=MOLECULE_LIBRARY,
+            pubchem_available=PUBCHEM_AVAILABLE,
+            visualization_available=VISUALIZATION_AVAILABLE,
         )
 
     # ── Calculation setup panel (Cell 5) ──────────────────────────────────
 
     def _build_calc_setup(self) -> None:
-        self.calc_setup_panel = widgets.VBox(
-            [
-                widgets.HTML('<h3 style="margin:14px 0 6px">Calculation Setup</h3>'),
-                widgets.HBox(
-                    [
-                        widgets.VBox(
-                            [
-                                widgets.HBox(
-                                    [self.method_dd, self.method_help_btn],
-                                    layout=_layout(align_items="center", gap="4px"),
-                                ),
-                                widgets.HBox(
-                                    [self.basis_dd, self.basis_help_btn],
-                                    layout=_layout(align_items="center", gap="4px"),
-                                ),
-                            ]
-                        ),
-                        widgets.HTML("&ensp;&ensp;"),
-                        widgets.VBox([self.charge_si, self.mult_si]),
-                    ]
-                ),
-                self.calc_type_dd,
-                self.calc_extra_opts,
-                self.preopt_cb,
-                widgets.HBox(
-                    [self.solvent_cb, self.solvent_dd],
-                    layout=_layout(align_items="center", gap="4px"),
-                ),
-                self.notes_output,
-            ]
-        )
+        _bld_build_calc_setup(self, layout_fn=_layout)
 
     # ── Run panel (Cell 6) ────────────────────────────────────────────────
 
     def _build_run_section(self) -> None:
-        self.run_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<h3 style="margin:14px 0 6px">Run Calculation</h3>'
-                    '<p style="color:#555;font-size:13px;margin:0 0 8px">PySCF runs in this '
-                    "kernel. Output appears live below. Large molecules or high-accuracy basis "
-                    "sets may take several minutes on a laptop.</p>"
-                ),
-                self.perf_estimate_html,
-                widgets.HBox([self.run_btn, self.run_status]),
-                widgets.HBox(
-                    [
-                        widgets.HTML(
-                            '<span style="font-size:13px;font-weight:600;color:#444">'
-                            "Calculation Output</span>"
-                        ),
-                        self.log_clear_btn,
-                    ],
-                    layout=_layout(
-                        align_items="center",
-                        justify_content="space-between",
-                        margin="10px 0 4px",
-                        max_width="460px",
-                    ),
-                ),
-                self.run_output,
-            ]
-        )
+        _bld_build_run_section(self, layout_fn=_layout)
 
     # ── Results panel (Cell 7) ────────────────────────────────────────────
 
@@ -1939,253 +1782,24 @@ class QuantUIApp:
     # ── Compare panel (Cell 9) ────────────────────────────────────────────
 
     def _build_compare_section(self) -> None:
-        self.compare_select = widgets.SelectMultiple(
-            options=[("(no saved results)", "")],
-            rows=8,
-            description="",
-            layout=_layout(width="100%"),
+        _bld_build_compare_section(
+            self,
+            layout_fn=_layout,
+            rdkit_available=_RDKIT_AVAILABLE,
         )
-        self.compare_refresh_btn = widgets.Button(
-            description="Refresh",
-            button_style="",
-            icon="refresh",
-            layout=_layout(width="100px"),
-        )
-        self.compare_btn = widgets.Button(
-            description="Compare selected",
-            button_style="primary",
-            icon="bar-chart",
-            disabled=True,
-            layout=_layout(width="180px"),
-        )
-        self.compare_clear_btn = widgets.Button(
-            description="Clear",
-            button_style="warning",
-            icon="times",
-            layout=_layout(width="90px"),
-        )
-        self.compare_output = widgets.Output()
-
-        self.compare_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<h3 style="margin:14px 0 6px">Compare Calculations</h3>'
-                    '<p style="color:#555;font-size:13px;margin:0 0 8px">'
-                    "Select two or more saved calculations to compare side-by-side. "
-                    "Hold Ctrl (or ⌘) to select multiple entries.</p>"
-                ),
-                widgets.HBox([self.compare_refresh_btn]),
-                self.compare_select,
-                widgets.HBox(
-                    [self.compare_btn, self.compare_clear_btn],
-                    layout=_layout(gap="8px", margin="6px 0"),
-                ),
-                self.compare_output,
-            ],
-            layout=_layout(padding="8px 0"),
-        )
-
-        # Export accordion (Advanced)
-        _rdkit_note = (
-            ""
-            if _RDKIT_AVAILABLE
-            else '<p style="color:#888;font-size:12px;margin:4px 0 0">MOL/PDB export requires RDKit '
-            "(<code>conda install -c conda-forge rdkit</code>).</p>"
-        )
-        _export_content = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:0 0 8px">'
-                    "Download a self-contained PySCF script you can study or run outside the notebook.</p>"
-                ),
-                widgets.HBox([self.export_btn, self.export_status]),
-                widgets.HTML('<hr style="margin:10px 0 8px">'),
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:0 0 6px">'
-                    "Download the molecular structure in a standard chemistry file format.</p>"
-                    + _rdkit_note
-                ),
-                widgets.HBox(
-                    [self.export_xyz_btn, self.export_mol_btn, self.export_pdb_btn],
-                    layout=_layout(flex_flow="row wrap", gap="6px"),
-                ),
-                self.struct_export_status,
-            ]
-        )
-        self.advanced_accordion = widgets.Accordion(children=[_export_content])
-        self.advanced_accordion.set_title(0, "Export")
-        self.advanced_accordion.selected_index = None
-
-        # Populate on startup
-        self._populate_compare_list()
 
     # ── Output log tab (Cell 10) ──────────────────────────────────────────
 
     def _build_output_tab(self) -> None:
-        self._log_output_html = widgets.HTML(
-            '<span style="color:#94a3b8;font-size:13px">'
-            "No log yet — run a calculation first, or use "
-            "<b>View log</b> in the History tab.</span>"
-        )
-        self._log_source_lbl = widgets.HTML()
-        self._log_clear_btn = widgets.Button(
-            description="Clear",
-            button_style="",
-            icon="times",
-            layout=_layout(width="80px"),
-        )
-        self._clear_log_cache_btn = widgets.Button(
-            description="Clear Log Cache",
-            button_style="",
-            icon="trash",
-            tooltip=(
-                "Delete the session event log (event_log.jsonl). "
-                "Calculation performance data is preserved."
-            ),
-            layout=_layout(width="160px"),
-        )
-        self._clear_log_cache_confirm_btn = widgets.Button(
-            description="Confirm clear?",
-            button_style="danger",
-            layout=_layout(width="140px", display="none"),
-        )
-        self.log_tab_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:4px 0 8px">'
-                    "Raw PySCF output for the most recent calculation. "
-                    "Use <b>View log</b> in the History tab to load a saved result's log. "
-                    "Orbital diagrams, trajectories, and spectra are in the "
-                    "<b>Analysis</b> tab.</p>"
-                ),
-                widgets.HBox(
-                    [self._log_clear_btn],
-                    layout=_layout(margin="0 0 8px"),
-                ),
-                self._log_source_lbl,
-                self._log_output_html,
-                self._result_log_accordion,
-                widgets.HTML(
-                    '<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0 10px"/>'
-                    '<p style="color:#94a3b8;font-size:12px;margin:0 0 6px">'
-                    "Session event log — records molecule loads, calculations, "
-                    "and issue reports across this session.</p>"
-                ),
-                widgets.HBox(
-                    [self._clear_log_cache_btn, self._clear_log_cache_confirm_btn],
-                    layout=_layout(align_items="center", gap="8px"),
-                ),
-            ],
-            layout=_layout(padding="8px 0"),
-        )
+        _bld_build_output_tab(self, layout_fn=_layout)
 
     # ── Help section (Cell 10) ────────────────────────────────────────────
 
     def _build_help_section(self) -> None:
-        _help_keys = list(HELP_TOPICS.keys())
-        _help_labels = [HELP_TOPICS[k]["title"] for k in _help_keys]
-        self.help_topic_dd = widgets.Dropdown(
-            options=list(zip(_help_labels, _help_keys)),
-            description="Topic:",
-            style={"description_width": "60px"},
-            layout=_layout(width="460px"),
-        )
-        self.help_content_html = widgets.HTML()
-        self._render_help_topic()  # render first topic immediately
-
-        # [?] toggle button shown in the top bar
-        self._help_btn = widgets.Button(
-            description="?",
-            button_style="",
-            tooltip="Help topics",
-            layout=_layout(width="34px", margin="0 0 0 8px"),
-        )
-
-        # Exit button shown in the top bar
-        self._exit_btn = widgets.Button(
-            description="Exit",
-            button_style="danger",
-            tooltip="Shut down the QuantUI server and close this session",
-            layout=_layout(width="64px", margin="0 0 0 8px"),
-        )
-        self._exit_output = widgets.Output(
-            layout=_layout(height="0px", overflow="hidden")
-        )
-
-        self.help_tab_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
-                    "Browse help topics below. Click <b>?</b> next to the Method or Basis Set "
-                    "dropdown in the Calculate tab to jump directly to a relevant topic.</p>"
-                ),
-                self.help_topic_dd,
-                self.help_content_html,
-            ],
-            layout=_layout(
-                display="none",
-                padding="8px 0",
-                border="1px solid #e2e8f0",
-                border_radius="6px",
-                padding_left="12px",
-                margin="0 0 8px",
-            ),
-        )
+        _bld_build_help_section(self, layout_fn=_layout)
 
     def _build_issue_widgets(self) -> None:
-        """Build the Issue report button, overlay, and related widgets."""
-        # ── Issue button (shown in the top bar) ───────────────────────────
-        self._issue_btn = widgets.Button(
-            description="Report Issue",
-            button_style="warning",
-            icon="flag",
-            tooltip="Report a bug or unexpected behaviour observed in this session",
-            layout=_layout(width="140px", margin="0 0 0 8px"),
-        )
-        # ── Issue overlay (hidden until button is clicked) ────────────────
-        self._issue_textarea = widgets.Textarea(
-            placeholder=(
-                "Describe what you observed — what you did, what you expected, "
-                "and what actually happened."
-            ),
-            layout=_layout(width="100%", height="90px"),
-        )
-        self._issue_submit_btn = widgets.Button(
-            description="Submit",
-            button_style="success",
-            layout=_layout(width="90px"),
-        )
-        self._issue_cancel_btn = widgets.Button(
-            description="Cancel",
-            button_style="",
-            layout=_layout(width="80px"),
-        )
-        self._issue_status_html = widgets.HTML()
-        self._issue_overlay = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="font-size:13px;font-weight:600;margin:0 0 6px;color:#92400e">'
-                    "&#9872; Report Issue</p>"
-                    '<p style="font-size:12px;color:#78350f;margin:0 0 8px">'
-                    "Your report (and a snapshot of the current session state) will be "
-                    "saved to <code>issues.db</code> and the session event log.</p>"
-                ),
-                self._issue_textarea,
-                widgets.HBox(
-                    [self._issue_submit_btn, self._issue_cancel_btn],
-                    layout=_layout(margin="6px 0 0", gap="8px"),
-                ),
-                self._issue_status_html,
-            ],
-            layout=_layout(
-                display="none",
-                border="1px solid #f59e0b",
-                border_radius="6px",
-                padding="12px 14px",
-                margin="0 0 6px",
-                background_color="#fffbeb",
-            ),
-        )
+        _bld_build_issue_widgets(self, layout_fn=_layout)
 
     # ── Tab assembly (Cell 10) ────────────────────────────────────────────
 
