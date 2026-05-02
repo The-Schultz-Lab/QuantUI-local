@@ -173,13 +173,25 @@ from quantui.app_history import (
     on_view_log as _hist_on_view_log,
 )
 from quantui.app_runflow import (
+    on_calc_type_changed as _run_on_calc_type_changed,
+)
+from quantui.app_runflow import (
+    on_freq_seed_changed as _run_on_freq_seed_changed,
+)
+from quantui.app_runflow import (
     on_run_clicked as _run_on_run_clicked,
+)
+from quantui.app_runflow import (
+    refresh_freq_seed_options as _run_refresh_freq_seed_options,
 )
 from quantui.app_runflow import (
     update_estimate as _run_update_estimate,
 )
 from quantui.app_runflow import (
     update_notes as _run_update_notes,
+)
+from quantui.app_runflow import (
+    update_scan_widgets as _run_update_scan_widgets,
 )
 from quantui.app_visualization import (
     build_vib_data_from_freq_result as _viz_build_vib_data_from_freq_result,
@@ -1411,127 +1423,16 @@ class QuantUIApp:
     # ── Calc type ─────────────────────────────────────────────────────────
 
     def _on_calc_type_changed(self, change) -> None:
-        ct = change["new"]
-        if ct == "Geometry Opt":
-            self.calc_extra_opts.children = [
-                widgets.HBox(
-                    [self.fmax_fi, self.max_steps_si],
-                    layout=_layout(gap="8px"),
-                ),
-            ]
-        elif ct == "Frequency":
-            self._refresh_freq_seed_options()
-            self.calc_extra_opts.children = [
-                widgets.HBox(
-                    [self._freq_seed_dd, self._freq_seed_refresh_btn],
-                    layout=_layout(align_items="center", gap="6px"),
-                ),
-                self._freq_preopt_cb,
-                self._freq_seed_note,
-            ]
-        elif ct == "UV-Vis (TD-DFT)":
-            self.calc_extra_opts.children = [
-                self.nstates_si,
-                widgets.HTML(
-                    '<span style="color:#b45309;font-size:12px">⚠ Requires a DFT '
-                    "functional (e.g. B3LYP, PBE0). RHF/UHF will run TDHF (CIS) "
-                    "instead.</span>"
-                ),
-            ]
-        elif ct == "NMR Shielding":
-            self.calc_extra_opts.children = [
-                widgets.HTML(
-                    '<span style="color:#b45309;font-size:12px">'
-                    "⚠ Recommended: B3LYP/6-31G* or better. "
-                    "STO-3G and 3-21G give qualitative results only. "
-                    "Start from an optimised geometry for best accuracy.</span>"
-                ),
-            ]
-        elif ct == "PES Scan":
-            self._update_scan_widgets()
-            self.calc_extra_opts.children = [
-                widgets.HBox(
-                    [self._scan_type_dd],
-                    layout=_layout(margin="0 0 4px 0"),
-                ),
-                widgets.HBox(
-                    [self._scan_atom1, self._scan_atom2],
-                    layout=_layout(gap="4px"),
-                ),
-                self._scan_atom34_box,
-                widgets.HBox(
-                    [
-                        self._scan_start,
-                        self._scan_stop,
-                        self._scan_steps,
-                        self._scan_unit_lbl,
-                    ],
-                    layout=_layout(gap="4px", align_items="center"),
-                ),
-            ]
-        else:
-            self.calc_extra_opts.children = []
+        _run_on_calc_type_changed(self, change, layout_fn=_layout)
 
     def _update_scan_widgets(self, _change=None) -> None:
-        """Show/hide atom3/4 inputs and update unit label based on scan type."""
-        st = self._scan_type_dd.value
-        if st == "Bond":
-            self._scan_atom34_box.layout.display = "none"
-            self._scan_unit_lbl.value = (
-                '<span style="font-size:12px;color:#555">Å</span>'
-            )
-        elif st == "Angle":
-            self._scan_atom4.layout.display = "none"
-            self._scan_atom3.layout.display = ""
-            self._scan_atom34_box.layout.display = ""
-            self._scan_unit_lbl.value = (
-                '<span style="font-size:12px;color:#555">°</span>'
-            )
-        else:  # Dihedral
-            self._scan_atom3.layout.display = ""
-            self._scan_atom4.layout.display = ""
-            self._scan_atom34_box.layout.display = ""
-            self._scan_unit_lbl.value = (
-                '<span style="font-size:12px;color:#555">°</span>'
-            )
+        _run_update_scan_widgets(self, _change)
 
     def _refresh_freq_seed_options(self) -> None:
-        """Populate _freq_seed_dd with saved geometry-opt results."""
-        from quantui.results_storage import list_results, load_result
-
-        options = [("(use current molecule)", "")]
-        for d in list_results():
-            try:
-                data = load_result(d)
-                if data.get("calc_type") != "geometry_opt":
-                    continue
-                traj_file = d / "trajectory.json"
-                if not traj_file.exists():
-                    continue
-                ts = data.get("timestamp", d.name[:19])
-                label = (
-                    f"{data['formula']}  {data['method']}/{data['basis']}" f"  —  {ts}"
-                )
-                options.append((label, str(d)))
-            except Exception:
-                continue
-        self._freq_seed_dd.options = options
+        _run_refresh_freq_seed_options(self)
 
     def _on_freq_seed_changed(self, change) -> None:
-        """Enable/disable pre-opt checkbox and update the seed note."""
-        path_str = change["new"]
-        if path_str:
-            # A history geometry is selected — pre-optimize makes no sense.
-            self._freq_preopt_cb.value = False
-            self._freq_preopt_cb.disabled = True
-            self._freq_seed_note.value = (
-                '<span style="font-size:12px;color:#16a34a">'
-                "✓ Final optimised geometry will be loaded from the selected result."
-                "</span>"
-            )
-        else:
-            self._freq_preopt_cb.disabled = False
-            self._freq_seed_note.value = ""
+        _run_on_freq_seed_changed(self, change)
 
     # ── Help buttons ──────────────────────────────────────────────────────
 
