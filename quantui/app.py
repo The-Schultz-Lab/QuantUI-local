@@ -20,7 +20,6 @@ import re
 import sys
 import threading
 import time
-import types as _types_mod
 import uuid as _uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +32,51 @@ from IPython.display import HTML, Javascript, display
 import quantui
 import quantui.calc_log as _calc_log
 import quantui.issue_tracker as _issue_tracker
+from quantui.app_analysis import (
+    activate_ana_panel as _ana_activate_ana_panel,
+)
+from quantui.app_analysis import (
+    apply_analysis_context as _ana_apply_analysis_context,
+)
+from quantui.app_analysis import (
+    build_ana_switcher as _ana_build_ana_switcher,
+)
+from quantui.app_analysis import (
+    deactivate_all_ana_panels as _ana_deactivate_all_ana_panels,
+)
+from quantui.app_analysis import (
+    pop_energies as _ana_pop_energies,
+)
+from quantui.app_analysis import (
+    pop_geo_trajectory as _ana_pop_geo_trajectory,
+)
+from quantui.app_analysis import (
+    pop_ir_spectrum as _ana_pop_ir_spectrum,
+)
+from quantui.app_analysis import (
+    pop_isosurface as _ana_pop_isosurface,
+)
+from quantui.app_analysis import (
+    pop_nmr_shielding as _ana_pop_nmr_shielding,
+)
+from quantui.app_analysis import (
+    pop_pes_plot as _ana_pop_pes_plot,
+)
+from quantui.app_analysis import (
+    pop_pes_trajectory as _ana_pop_pes_trajectory,
+)
+from quantui.app_analysis import (
+    pop_preopt_trajectory as _ana_pop_preopt_trajectory,
+)
+from quantui.app_analysis import (
+    pop_uv_vis as _ana_pop_uv_vis,
+)
+from quantui.app_analysis import (
+    pop_vibrational as _ana_pop_vibrational,
+)
+from quantui.app_analysis import (
+    select_ana_panel as _ana_select_ana_panel,
+)
 from quantui.app_exports import (
     export_molecule_and_label as _exp_export_molecule_and_label,
 )
@@ -1498,6 +1542,7 @@ class QuantUIApp:
             ),
             layout=_layout(display="none"),
         )
+        self._ana_unavail_html = widgets.HTML(value="", layout=_layout(display="none"))
         self._build_ana_switcher()
         self.analysis_tab_panel = widgets.VBox(
             [
@@ -1522,49 +1567,7 @@ class QuantUIApp:
     # ── Analysis panel switcher ───────────────────────────────────────────
 
     def _build_ana_switcher(self) -> None:
-        """Initialise analysis panel state; wire accordion re-render observers."""
-        panel_meta = [
-            (name, getattr(self, attr), when) for name, attr, when in self._PANEL_META
-        ]
-        self._ana_panel_names: list = [m[0] for m in panel_meta]
-        self._ana_accordions: list = [m[1] for m in panel_meta]
-        self._ana_available: set = set()
-        self._ana_active: str = ""
-        self._ana_unavail_html = widgets.HTML(
-            value="",
-            layout=_layout(display="none", margin="4px 0 8px"),
-        )
-
-        # Wrap each accordion's child so it holds both an "unavailable" message
-        # and the real content.  Real content starts hidden; the unavailable
-        # message is shown until _activate_ana_panel() is called.
-        self._ana_unavail_msgs: dict = {}
-        self._ana_content_boxes: dict = {}
-        for name, acc, when in panel_meta:
-            unavail = widgets.HTML(
-                value=(
-                    f'<div style="padding:12px 16px;color:#6b7280;font-size:13px;'
-                    f'font-style:italic">Not available — run a {when} '
-                    f"calculation first.</div>"
-                ),
-                layout=_layout(display=""),
-            )
-            content = acc.children[0]
-            self._ana_unavail_msgs[name] = unavail
-            self._ana_content_boxes[name] = content
-            content.layout.display = "none"
-            acc.children = (widgets.VBox([unavail, content]),)
-            acc.layout.display = ""  # always in the DOM
-            acc.selected_index = None  # collapsed until activated
-
-        # Re-render Plotly charts when their accordion is expanded by clicking
-        # the header directly (charts rendered into a hidden container have 0 size).
-        self._ir_accordion.observe(
-            self._safe_cb(self._on_ir_accordion_show), names=["selected_index"]
-        )
-        self._orb_accordion.observe(
-            self._safe_cb(self._on_orb_accordion_show), names=["selected_index"]
-        )
+        _ana_build_ana_switcher(self, layout_fn=_layout)
 
     def _on_ir_accordion_show(self, change) -> None:
         if change["new"] == 0 and getattr(self, "_last_ir_freqs", None):
@@ -1577,33 +1580,13 @@ class QuantUIApp:
             self._on_orb_range_changed()
 
     def _select_ana_panel(self, name: str) -> None:
-        """Expand the named panel and collapse all others."""
-        self._ana_active = name
-        self._ana_unavail_html.layout.display = "none"
-        for pname, acc in zip(self._ana_panel_names, self._ana_accordions):
-            acc.selected_index = 0 if pname == name else None
+        _ana_select_ana_panel(self, name)
 
     def _activate_ana_panel(self, name: str, auto_select: bool = True) -> None:
-        """Mark a panel as available: reveal its content."""
-        self._ana_available.add(name)
-        # Swap unavailable placeholder for real content.
-        if name in self._ana_unavail_msgs:
-            self._ana_unavail_msgs[name].layout.display = "none"
-            self._ana_content_boxes[name].layout.display = ""
-        if auto_select:
-            self._select_ana_panel(name)
+        _ana_activate_ana_panel(self, name, auto_select=auto_select)
 
     def _deactivate_all_ana_panels(self) -> None:
-        """Reset all panels to collapsed/unavailable; used at start of each new run."""
-        self._ana_available.clear()
-        self._ana_active = ""
-        self._ana_unavail_html.layout.display = "none"
-        for name, acc in zip(self._ana_panel_names, self._ana_accordions):
-            # Show the "not available" placeholder; hide real content.
-            if name in self._ana_unavail_msgs:
-                self._ana_unavail_msgs[name].layout.display = ""
-                self._ana_content_boxes[name].layout.display = "none"
-            acc.selected_index = None
+        _ana_deactivate_all_ana_panels(self)
 
     # ── Panel registry and unified applier ───────────────────────────────────
     #
@@ -1662,367 +1645,40 @@ class QuantUIApp:
     }
 
     def _apply_analysis_context(self, ctx: _AnalysisContext) -> None:
-        """Populate Analysis panels from *ctx* and activate those that have data.
-
-        Uses ``_PANEL_REGISTRY`` so that live-run and history-replay follow the
-        exact same code path.  The first registry entry that succeeds and has
-        ``auto_select=True`` becomes the visible panel; all others are activated
-        (full opacity, clickable) but not auto-shown.
-        """
-        self._deactivate_all_ana_panels()
-        self._pending_traj_result = None
-        # Reset trajectory accordion title to default
-        self.traj_accordion.set_title(0, "Trajectory Viewer")
-
-        first_auto_selected = False
-        for panel_name, method_name, want_auto in self._PANEL_REGISTRY.get(
-            ctx.calc_type, []
-        ):
-            try:
-                ok = bool(getattr(self, method_name)(ctx))
-            except Exception as _panel_exc:
-                ok = False
-                try:
-                    from quantui import calc_log as _clog
-
-                    _clog.log_event(
-                        "ana_panel_error",
-                        f"{method_name}: {type(_panel_exc).__name__}: {_panel_exc}"[
-                            :300
-                        ],
-                    )
-                except Exception:
-                    pass
-            if ok:
-                do_auto = want_auto and not first_auto_selected
-                self._activate_ana_panel(panel_name, auto_select=do_auto)
-                if do_auto:
-                    first_auto_selected = True
-
-        _src = " (from History)" if ctx.source == "history" else ""
-        self._analysis_context_lbl.value = (
-            f'<p style="color:#555;font-size:13px;margin:4px 0 12px">'
-            f"Analysing: {ctx.label}{_src}</p>"
-        )
-        _has = bool(self._ana_available)
-        self._to_analysis_btn.layout.display = "" if _has else "none"
-        self._analysis_empty_html.layout.display = "none" if _has else ""
+        _ana_apply_analysis_context(self, ctx)
 
     # ── Panel populate methods ────────────────────────────────────────────────
     # Each receives an _AnalysisContext and returns True if data was rendered.
 
     def _pop_energies(self, ctx: _AnalysisContext) -> bool:
-        result = ctx.live_result
-        if result is None and ctx.result_dir is not None:
-            try:
-                from quantui.results_storage import load_orbitals
-
-                orb = load_orbitals(ctx.result_dir)
-                orb.formula = ctx.formula
-                result = orb
-            except Exception:
-                return False
-        return self._show_orbital_diagram(result)
+        return _ana_pop_energies(self, ctx)
 
     def _pop_isosurface(self, ctx: _AnalysisContext) -> bool:
-        # Isosurface controls are enabled by _show_orbital_diagram when MO data
-        # is present; just check whether that data was stashed.
-        return (
-            self._last_orb_mo_coeff is not None
-            and self._last_orb_mol_atom is not None
-            and self._last_orb_mol_basis is not None
-        )
+        return _ana_pop_isosurface(self, ctx)
 
     def _pop_geo_trajectory(self, ctx: _AnalysisContext) -> bool:
-        traj = None
-        energies: list = []
-        if ctx.live_result is not None:
-            traj = getattr(ctx.live_result, "trajectory", None)
-            energies = list(getattr(ctx.live_result, "energies_hartree", []))
-        elif ctx.result_dir is not None:
-            traj_file = ctx.result_dir / "trajectory.json"
-            if traj_file.exists():
-                try:
-                    from quantui.results_storage import load_trajectory
-
-                    traj, energies = load_trajectory(ctx.result_dir)
-                except Exception:
-                    return False
-        if not traj or len(traj) < 2:
-            return False
-        stub = _types_mod.SimpleNamespace(
-            trajectory=traj,
-            energies_hartree=energies,
-            formula=ctx.formula,
-        )
-        self._pending_traj_result = stub
-        return True
+        return _ana_pop_geo_trajectory(self, ctx)
 
     def _pop_preopt_trajectory(self, ctx: _AnalysisContext) -> bool:
-        if ctx.source == "live":
-            pre = ctx.preopt_result
-            if pre is None:
-                return False
-            traj = getattr(pre, "trajectory", None)
-            energies = list(getattr(pre, "energies_hartree", []))
-        else:
-            if ctx.result_dir is None:
-                return False
-            preopt_path = ctx.result_dir / "preopt_trajectory.json"
-            if not preopt_path.exists():
-                return False
-            try:
-                from quantui.results_storage import load_trajectory
-
-                traj, energies = load_trajectory(
-                    ctx.result_dir, filename="preopt_trajectory.json"
-                )
-            except Exception as _exc:
-                from quantui import calc_log as _clog
-
-                _clog.log_event(
-                    "pop_preopt_trajectory_error",
-                    f"{type(_exc).__name__}: {_exc}"[:300],
-                )
-                return False
-        if not traj or len(traj) < 2:
-            return False
-        stub = _types_mod.SimpleNamespace(
-            trajectory=traj,
-            energies_hartree=energies,
-            formula=ctx.formula,
-        )
-        self._pending_traj_result = stub
-        self.traj_accordion.set_title(0, "Pre-optimization Trajectory")
-        return True
+        return _ana_pop_preopt_trajectory(self, ctx)
 
     def _pop_vibrational(self, ctx: _AnalysisContext) -> bool:
-        if ctx.live_result is not None:
-            freq_stub = ctx.live_result
-            mol = ctx.molecule
-        else:
-            ir = ctx.spectra_data.get("ir", {})
-            mol_data = ctx.spectra_data.get("molecule", {})
-            freqs = ir.get("frequencies_cm1")
-            ints = ir.get("ir_intensities")
-            disps = ir.get("displacements")
-            if not (freqs and disps and mol_data.get("atoms")):
-                return False
-            from quantui.molecule import Molecule as _Mol
-
-            mol = _Mol(
-                atoms=mol_data["atoms"],
-                coordinates=mol_data["coords"],
-                charge=mol_data.get("charge", 0),
-                multiplicity=mol_data.get("multiplicity", 1),
-            )
-            freq_stub = _types_mod.SimpleNamespace(
-                frequencies_cm1=freqs,
-                ir_intensities=ints,
-                displacements=disps,
-            )
-        return self._show_vib_animation(freq_stub, mol)
+        return _ana_pop_vibrational(self, ctx)
 
     def _pop_ir_spectrum(self, ctx: _AnalysisContext) -> bool:
-        if ctx.live_result is not None:
-            freq_stub = ctx.live_result
-        else:
-            ir = ctx.spectra_data.get("ir", {})
-            freqs = ir.get("frequencies_cm1")
-            if not freqs:
-                return False
-            freq_stub = _types_mod.SimpleNamespace(
-                frequencies_cm1=freqs,
-                ir_intensities=ir.get("ir_intensities") or [],
-            )
-        return self._show_ir_spectrum(freq_stub)
+        return _ana_pop_ir_spectrum(self, ctx)
 
     def _pop_uv_vis(self, ctx: _AnalysisContext) -> bool:
-        if ctx.live_result is not None:
-            energies_ev = list(getattr(ctx.live_result, "excitation_energies_ev", []))
-            osc = list(getattr(ctx.live_result, "oscillator_strengths", []))
-            try:
-                wl = list(ctx.live_result.wavelengths_nm())
-            except Exception:
-                wl = [1240.0 / e for e in energies_ev if e > 0]
-        else:
-            uv = ctx.spectra_data.get("uv_vis", {})
-            energies_ev = uv.get("excitation_energies_ev", [])
-            osc = uv.get("oscillator_strengths", [])
-            wl = uv.get("wavelengths_nm", [])
-        if not energies_ev or not osc:
-            return False
-        try:
-            import plotly.graph_objects as _go
-            import plotly.io as _pio
-
-            _fig = _go.Figure()
-            _fig.add_trace(
-                _go.Bar(
-                    x=wl,
-                    y=osc,
-                    name="Osc. strength",
-                    marker_color="#2563eb",
-                    width=[4.0] * len(wl),
-                )
-            )
-            tc = self._plotly_theme_colors()
-            _fig.update_layout(
-                xaxis_title="Wavelength (nm)",
-                yaxis_title="Oscillator strength",
-                height=320,
-                margin=dict(l=60, r=20, t=30, b=50),
-                plot_bgcolor=tc["plot_bgcolor"],
-                paper_bgcolor=tc["paper_bgcolor"],
-                font=dict(color=tc["font_color"]),
-                xaxis=dict(showgrid=True, gridcolor=tc["grid_color"]),
-                yaxis=dict(showgrid=True, gridcolor=tc["grid_color"]),
-            )
-            self._apply_plotly_theme(_fig)
-            self._set_html_output(
-                self._tddft_fig,
-                _pio.to_html(
-                    _fig,
-                    include_plotlyjs="require",
-                    full_html=False,
-                    config={"responsive": True},
-                ),
-            )
-            return True
-        except Exception:
-            return False
+        return _ana_pop_uv_vis(self, ctx)
 
     def _pop_nmr_shielding(self, ctx: _AnalysisContext) -> bool:
-        if ctx.live_result is not None:
-            r = ctx.live_result
-            atom_symbols = list(getattr(r, "atom_symbols", []))
-            shielding = list(getattr(r, "shielding_iso_ppm", []))
-            try:
-                h_shifts = r.h_shifts()
-                c_shifts = r.c_shifts()
-            except Exception:
-                h_shifts, c_shifts = [], []
-            ref = getattr(r, "reference_compound", "TMS")
-        else:
-            nmr = ctx.spectra_data.get("nmr", {})
-            atom_symbols = nmr.get("atom_symbols", [])
-            shielding = nmr.get("shielding_iso_ppm", [])
-            chem = nmr.get("chemical_shifts_ppm", {})
-            ref = nmr.get("reference_compound", "TMS")
-            # Reconstruct h/c shifts from stored chemical_shifts_ppm dict
-            h_shifts = [
-                (int(i), d)
-                for i, d in chem.items()
-                if int(i) < len(atom_symbols) and atom_symbols[int(i)] == "H"
-            ]
-            c_shifts = [
-                (int(i), d)
-                for i, d in chem.items()
-                if int(i) < len(atom_symbols) and atom_symbols[int(i)] == "C"
-            ]
-        if not atom_symbols:
-            return False
-
-        def _shift_table(label: str, shifts: list, sym: str) -> str:
-            if not shifts:
-                return ""
-            rows = "".join(
-                f'<tr><td style="padding:2px 14px 2px 0;color:#555">{sym}-{n}</td>'
-                f'<td style="color:#000">{d:.2f} ppm</td></tr>'
-                for n, (_i, d) in enumerate(sorted(shifts, key=lambda x: x[0]), 1)
-            )
-            return (
-                f'<tr><td colspan="2" style="padding:8px 0 2px;font-weight:600">'
-                f"{label} shifts (vs. {ref}):</td></tr>"
-                f'<tr><th style="text-align:left;color:#555;font-size:12px;padding:2px 14px 2px 0">Atom</th>'
-                f'<th style="text-align:left;color:#555;font-size:12px">δ (ppm)</th></tr>'
-                + rows
-            )
-
-        shielding_rows = "".join(
-            f'<tr><td style="padding:2px 10px 2px 0;color:#555">{sym}{i + 1}</td>'
-            f'<td style="color:#000">{s:.2f}</td></tr>'
-            for i, (sym, s) in enumerate(zip(atom_symbols, shielding))
-        )
-        html = (
-            f'<div style="font-size:13px">'
-            f'<table style="border-collapse:collapse;margin-bottom:8px">'
-            f'<tr><th style="text-align:left;color:#555;font-size:12px;padding:2px 10px 2px 0">Atom</th>'
-            f'<th style="text-align:left;color:#555;font-size:12px">σ (ppm)</th></tr>'
-            f"{shielding_rows}</table>"
-            f'<table style="border-collapse:collapse">'
-            f"{_shift_table('¹H', h_shifts, 'H')}"
-            f"{_shift_table('¹³C', c_shifts, 'C')}"
-            f"</table></div>"
-        )
-        self._nmr_output.value = html
-        return True
+        return _ana_pop_nmr_shielding(self, ctx)
 
     def _pop_pes_plot(self, ctx: _AnalysisContext) -> bool:
-        result = ctx.live_result
-        if result is None:
-            scan = ctx.spectra_data.get("pes_scan", {})
-            if not scan or not scan.get("energies_hartree"):
-                return False
-            energies_ha = scan["energies_hartree"]
-            atom_indices = scan.get("atom_indices", [])
-            scan_type = scan.get("scan_type", "bond")
-            x_vals = scan.get("scan_parameter_values", [])
-            e_min = min(energies_ha)
-            _HARTREE_TO_KCAL = 627.5094740631
-            e_rel = [(e - e_min) * _HARTREE_TO_KCAL for e in energies_ha]
-            idx = [i + 1 for i in atom_indices]
-            if scan_type == "bond":
-                label = f"Bond {idx[0]}–{idx[1]} / Å" if len(idx) >= 2 else "Bond / Å"
-            elif scan_type == "angle":
-                label = (
-                    f"Angle {idx[0]}–{idx[1]}–{idx[2]} / °"
-                    if len(idx) >= 3
-                    else "Angle / °"
-                )
-            else:
-                label = (
-                    f"Dihedral {idx[0]}–{idx[1]}–{idx[2]}–{idx[3]} / °"
-                    if len(idx) >= 4
-                    else "Dihedral / °"
-                )
-            result = _types_mod.SimpleNamespace(
-                scan_type=scan_type,
-                atom_indices=atom_indices,
-                scan_parameter_values=x_vals,
-                energies_hartree=energies_ha,
-                energies_relative_kcal=e_rel,
-                scan_coordinate_label=label,
-                converged_all=True,
-            )
-        return self._show_pes_scan_result(result)
+        return _ana_pop_pes_plot(self, ctx)
 
     def _pop_pes_trajectory(self, ctx: _AnalysisContext) -> bool:
-        traj: list = []
-        energies: list = []
-        if ctx.live_result is not None:
-            traj = list(getattr(ctx.live_result, "coordinates_list", []))
-            energies = list(getattr(ctx.live_result, "energies_hartree", []))
-        elif ctx.result_dir is not None:
-            traj_file = ctx.result_dir / "trajectory.json"
-            if traj_file.exists():
-                try:
-                    from quantui.results_storage import load_trajectory
-
-                    traj, energies = load_trajectory(ctx.result_dir)
-                except Exception:
-                    return False
-        if not traj or len(traj) < 2:
-            return False
-        stub = _types_mod.SimpleNamespace(
-            coordinates_list=traj,
-            energies_hartree=energies,
-            trajectory=None,
-            formula=ctx.formula,
-        )
-        self._pending_traj_result = stub
-        self.traj_accordion.set_title(0, "Geometry at Each Scan Point")
-        return True
+        return _ana_pop_pes_trajectory(self, ctx)
 
     # ── History panel (Cell 8) ────────────────────────────────────────────
 
