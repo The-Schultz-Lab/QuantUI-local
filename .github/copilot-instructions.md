@@ -9,14 +9,21 @@
 
 ## Overview
 
-QuantUI is an interactive Jupyter/Voilà interface for running PySCF quantum
-chemistry calculations locally — no cluster account, no SLURM, no queueing. Students
-design molecules, launch RHF/UHF/DFT calculations in their own Python kernel, and
-visualize results in minutes. It is a downstream port of the cluster-focused
+QuantUI is an interactive Jupyter/Voilà platform for running PySCF quantum
+chemistry workflows end-to-end inside one app: setup, execution, analysis,
+visualization, and comparison. It is local-first today (no cluster account, no
+SLURM required for normal use), and is designed to evolve toward optional
+cluster-backed execution through interactive Jupyter/HPC environments. It is a
+downstream port of the cluster-focused
 `QuantUI` repo with all SLURM infrastructure removed.
 
-**Target audience:** Undergraduate chemistry students at North Carolina Central
-University. The UI runs as a Voilà app — students never see code.
+**Primary users:** Undergraduate chemistry students and researchers at North Carolina
+Central University and collaborators. The UI runs as a Voilà app so users can run
+serious quantum chemistry workflows without needing to work directly in code.
+
+**Strategic direction:** Build an open, powerful, researcher-grade alternative to
+closed-source, high-cost GUI quantum chemistry workflows (GaussView-style usability,
+with transparent and extensible open tooling).
 
 ---
 
