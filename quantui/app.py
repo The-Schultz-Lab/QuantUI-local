@@ -33,6 +33,24 @@ from IPython.display import HTML, Javascript, display
 import quantui
 import quantui.calc_log as _calc_log
 import quantui.issue_tracker as _issue_tracker
+from quantui.app_exports import (
+    export_molecule_and_label as _exp_export_molecule_and_label,
+)
+from quantui.app_exports import (
+    molecule_to_rdkit as _exp_molecule_to_rdkit,
+)
+from quantui.app_exports import (
+    on_export as _exp_on_export,
+)
+from quantui.app_exports import (
+    on_export_mol as _exp_on_export_mol,
+)
+from quantui.app_exports import (
+    on_export_pdb as _exp_on_export_pdb,
+)
+from quantui.app_exports import (
+    on_export_xyz as _exp_on_export_xyz,
+)
 from quantui.app_formatters import (
     format_freq_result as _fmt_freq_result,
 )
@@ -3001,142 +3019,23 @@ class QuantUIApp:
         self.comparison_output.clear_output()
 
     def _on_export(self, btn) -> None:
-        if self._molecule is None:
-            self.export_status.value = "Load a molecule first."
-            return
-        try:
-            from quantui import PySCFCalculation
-
-            calc = PySCFCalculation(
-                self._molecule,
-                method=self.method_dd.value,
-                basis=self.basis_dd.value,
-            )
-            fname = (
-                f"{self._molecule.get_formula()}"
-                f"_{self.method_dd.value}_{self.basis_dd.value}.py"
-            )
-            calc.generate_calculation_script(Path(fname))
-            self.export_status.value = f"Saved: {fname}"
-        except Exception as exc:
-            self.export_status.value = f"Error: {exc}"
+        _exp_on_export(self, btn)
 
     def _on_export_xyz(self, btn) -> None:
-        if self._molecule is None:
-            self.struct_export_status.value = "Load a molecule first."
-            return
-        try:
-            mol, method, basis = self._export_molecule_and_label()
-            fname = f"{mol.get_formula()}_{method}_{basis}.xyz"
-            xyz_body = mol.to_xyz_string()
-            full_xyz = (
-                f"{len(mol.atoms)}\n{mol.get_formula()} {method}/{basis}\n{xyz_body}\n"
-            )
-            dest = (
-                (self._last_result_dir / fname)
-                if self._last_result_dir
-                else Path(fname)
-            )
-            dest.write_text(full_xyz, encoding="utf-8")
-            self.struct_export_status.value = f"Saved: {dest}"
-        except Exception as exc:
-            self.struct_export_status.value = f"Error: {exc}"
+        _exp_on_export_xyz(self, btn)
 
     def _on_export_mol(self, btn) -> None:
-        if self._molecule is None:
-            self.struct_export_status.value = "Load a molecule first."
-            return
-        try:
-            from rdkit import Chem
-
-            mol, method, basis = self._export_molecule_and_label()
-            fname = f"{mol.get_formula()}_{method}_{basis}.mol"
-            rdmol = self._molecule_to_rdkit(mol)
-            if rdmol is None:
-                self.struct_export_status.value = "RDKit could not parse the structure."
-                return
-            mol_block = Chem.MolToMolBlock(rdmol)
-            dest = (
-                (self._last_result_dir / fname)
-                if self._last_result_dir
-                else Path(fname)
-            )
-            dest.write_text(mol_block, encoding="utf-8")
-            self.struct_export_status.value = f"Saved: {dest}"
-        except Exception as exc:
-            self.struct_export_status.value = f"Error: {exc}"
+        _exp_on_export_mol(self, btn)
 
     def _on_export_pdb(self, btn) -> None:
-        if self._molecule is None:
-            self.struct_export_status.value = "Load a molecule first."
-            return
-        try:
-            from rdkit import Chem
-
-            mol, method, basis = self._export_molecule_and_label()
-            fname = f"{mol.get_formula()}_{method}_{basis}.pdb"
-            rdmol = self._molecule_to_rdkit(mol)
-            if rdmol is None:
-                self.struct_export_status.value = "RDKit could not parse the structure."
-                return
-            pdb_block = Chem.MolToPDBBlock(rdmol)
-            dest = (
-                (self._last_result_dir / fname)
-                if self._last_result_dir
-                else Path(fname)
-            )
-            dest.write_text(pdb_block, encoding="utf-8")
-            self.struct_export_status.value = f"Saved: {dest}"
-        except Exception as exc:
-            self.struct_export_status.value = f"Error: {exc}"
+        _exp_on_export_pdb(self, btn)
 
     def _export_molecule_and_label(self):
-        """Return (molecule, method, basis) for structure export.
-
-        For geo opt results, returns the final optimised geometry.
-        Falls back to the currently loaded molecule for all other calc types.
-        """
-        from quantui.optimizer import OptimizationResult
-
-        r = self._last_result
-        if isinstance(r, OptimizationResult):
-            mol = r.molecule
-        else:
-            assert self._molecule is not None
-            mol = self._molecule
-        method = (
-            getattr(r, "method", self.method_dd.value)
-            if r is not None
-            else self.method_dd.value
-        )
-        basis = (
-            getattr(r, "basis", self.basis_dd.value)
-            if r is not None
-            else self.basis_dd.value
-        )
-        return mol, method, basis
+        return _exp_export_molecule_and_label(self)
 
     @staticmethod
     def _molecule_to_rdkit(mol):
-        """Convert a Molecule to an RDKit Mol with inferred bonds (best-effort)."""
-        try:
-            from rdkit import Chem
-
-            xyz_block = (
-                f"{len(mol.atoms)}\n{mol.get_formula()}\n{mol.to_xyz_string()}\n"
-            )
-            rdmol = Chem.MolFromXYZBlock(xyz_block)
-            if rdmol is None:
-                return None
-            try:
-                from rdkit.Chem import rdDetermineBonds
-
-                rdDetermineBonds.DetermineBonds(rdmol, charge=mol.charge)
-            except Exception:
-                pass
-            return rdmol
-        except Exception:
-            return None
+        return _exp_molecule_to_rdkit(mol)
 
     # ── Compare ───────────────────────────────────────────────────────────
 
