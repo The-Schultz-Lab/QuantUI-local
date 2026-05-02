@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Any
 
 import ipywidgets as widgets
@@ -9,6 +11,301 @@ from IPython.display import HTML, display
 
 import quantui
 from quantui.help_content import HELP_TOPICS
+
+
+def build_status_panel(
+    app: Any,
+    *,
+    layout_fn: Any,
+    get_session_resources_fn: Any,
+    load_last_calibration_label_fn: Any,
+    pyscf_available: bool,
+    ase_available: bool,
+    pubchem_available: bool,
+    visualization_available: bool,
+) -> None:
+    """Build the Status tab panel."""
+    cores, mem_gb = get_session_resources_fn()
+    mem = f"{mem_gb} GB" if mem_gb is not None else "unknown"
+    py_ver = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    env = os.environ.get("CONDA_DEFAULT_ENV", "") or os.path.basename(
+        os.environ.get("VIRTUAL_ENV", "")
+    )
+    cal_label = load_last_calibration_label_fn()
+
+    def _ok(flag: bool, extra: str = "") -> str:
+        tick = '<span style="color:#22c55e">&#10003;</span>'
+        cross = '<span style="color:#ef4444">&#10007;</span>'
+        return (tick if flag else cross) + (" " + extra if extra else "")
+
+    items = [
+        (
+            "PySCF (calculations)",
+            _ok(
+                pyscf_available,
+                "" if pyscf_available else "&mdash; Linux / macOS / WSL required",
+            ),
+        ),
+        ("ASE (structure I/O, opt.)", _ok(ase_available)),
+        ("PubChem search", _ok(pubchem_available)),
+        ("3D viewer (py3Dmol)", _ok(visualization_available)),
+        ("CPU cores / Memory", f"<b>{cores}</b> cores / <b>{mem}</b>"),
+    ]
+    rows = "".join(
+        f'<tr><td style="padding:3px 16px 3px 0;color:#64748b;font-size:13px">{k}</td>'
+        f'<td style="font-size:13px">{v}</td></tr>'
+        for k, v in items
+    )
+
+    env_badge = (
+        f'&nbsp;&nbsp;<code style="font-size:11px;background:#e0e7ef;'
+        f'padding:1px 5px;border-radius:3px;color:#334155">{env}</code>'
+        if env and env not in ("base", "")
+        else ""
+    )
+    cal_line = (
+        f'<div style="margin-top:6px;font-size:12px;color:#94a3b8">'
+        f"Timing calibration: {cal_label}</div>"
+        if cal_label
+        else '<div style="margin-top:6px;font-size:12px;color:#94a3b8">'
+        "Timing calibration: not yet run &mdash; use the Calibrate panel in History</div>"
+    )
+
+    app._status_html = widgets.HTML(
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;'
+        f'padding:12px 16px;border-radius:6px;margin:4px 0 8px">'
+        f'<div style="font-weight:600;font-size:14px;color:#1e293b">'
+        f"QuantUI {quantui.__version__}"
+        f'<span style="font-weight:400;font-size:12px;color:#94a3b8;margin-left:10px">'
+        f"Python {py_ver}{env_badge}</span></div>"
+        f'<table style="margin-top:10px;border-collapse:collapse">{rows}</table>'
+        f"{cal_line}"
+        f"</div>"
+    )
+
+    steps = [
+        "Select a molecule &mdash; library dropdown, XYZ paste, or PubChem search",
+        "Choose a <b>method</b> (RHF / DFT / MP2) and <b>basis set</b> in the Calculate tab",
+        "Click <b>Run Calculation</b> &mdash; SCF progress appears in real time",
+        "Explore results in the <b>Results</b> and <b>Analysis</b> tabs",
+        "Browse past calculations in <b>History</b>; compare them in <b>Compare</b>",
+    ]
+    steps_html = "".join(
+        f'<li style="margin:5px 0;font-size:13px;color:#475569">{s}</li>' for s in steps
+    )
+    guide_html = widgets.HTML(
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;'
+        f'padding:12px 16px;border-radius:6px;margin:8px 0">'
+        f'<div style="font-weight:600;font-size:13px;color:#1e293b;margin-bottom:8px">'
+        f"Quick start</div>"
+        f'<ol style="margin:0;padding-left:20px">{steps_html}</ol>'
+        f"</div>"
+    )
+
+    app._status_tab_panel = widgets.VBox(
+        [app._status_html, guide_html],
+        layout=layout_fn(padding="8px 0"),
+    )
+
+
+def build_history_section(
+    app: Any,
+    *,
+    layout_fn: Any,
+    pyscf_available: bool,
+    benchmark_suite: list[Any],
+    benchmark_suite_long: list[Any],
+    load_last_calibration_label_fn: Any,
+) -> None:
+    """Build the History tab panel including calibration and perf widgets."""
+    app.past_dd = widgets.Dropdown(
+        description="Load:",
+        options=[("(no saved results)", "")],
+        style={"description_width": "50px"},
+        layout=layout_fn(width="500px"),
+    )
+    app.past_refresh_btn = widgets.Button(
+        description="Refresh",
+        button_style="",
+        icon="refresh",
+        layout=layout_fn(width="100px"),
+        tooltip="Rescan the results directory",
+    )
+    app.copy_path_btn = widgets.Button(
+        description="Copy path",
+        button_style="",
+        icon="clipboard",
+        layout=layout_fn(width="120px"),
+        tooltip="Copy the results directory path to clipboard",
+    )
+    app.results_path_lbl = widgets.HTML()
+    app.past_output = widgets.Output()
+    app.view_log_btn = widgets.Button(
+        description="View log",
+        button_style="",
+        icon="file-text-o",
+        layout=layout_fn(width="110px"),
+        tooltip="Open the full PySCF output log in the Output tab",
+    )
+
+    app._cal_mode_toggle = widgets.ToggleButtons(
+        options=[("Quick (~10 s)", "short"), ("Full (~5 min)", "long")],
+        value="short",
+        description="",
+        button_style="",
+        style={"description_width": "0px", "button_width": "140px"},
+        layout=layout_fn(margin="0 0 8px"),
+    )
+    app._cal_run_btn = widgets.Button(
+        description="Run Calibration",
+        button_style="primary",
+        icon="play",
+        disabled=not pyscf_available,
+        tooltip=(
+            "Run the benchmark suite to calibrate time estimates"
+            if pyscf_available
+            else "PySCF required (Linux / macOS / WSL)"
+        ),
+        layout=layout_fn(width="180px"),
+    )
+    app._cal_stop_btn = widgets.Button(
+        description="Stop",
+        button_style="warning",
+        icon="stop",
+        layout=layout_fn(width="90px", display="none"),
+    )
+    app._cal_progress = widgets.IntProgress(
+        min=0,
+        max=len(benchmark_suite),
+        value=0,
+        description="",
+        bar_style="info",
+        layout=layout_fn(width="300px", display="none"),
+    )
+    app._cal_step_label = widgets.HTML(
+        value="",
+        layout=layout_fn(display="none"),
+    )
+    app._cal_results_html = widgets.HTML(value="")
+
+    app._perf_stats_html = widgets.HTML()
+    app._perf_events_html = widgets.HTML()
+    app._reset_btn = widgets.Button(
+        description="Reset performance database",
+        button_style="danger",
+        icon="trash",
+        layout=layout_fn(width="230px"),
+    )
+    app._reset_confirm_html = widgets.HTML(
+        '<span style="color:#dc2626;font-size:13px">'
+        "<b>Warning:</b> This will permanently delete all performance records. "
+        "Time estimates will reset to &ldquo;no data&rdquo;.</span>"
+    )
+    app._reset_confirm_yes = widgets.Button(
+        description="Yes, delete all records",
+        button_style="danger",
+        icon="check",
+        layout=layout_fn(width="190px"),
+    )
+    app._reset_confirm_no = widgets.Button(
+        description="Cancel",
+        button_style="",
+        icon="times",
+        layout=layout_fn(width="90px"),
+    )
+    app._reset_confirm_box = widgets.VBox(
+        [
+            app._reset_confirm_html,
+            widgets.HBox(
+                [app._reset_confirm_yes, app._reset_confirm_no],
+                layout=layout_fn(gap="8px", margin="4px 0 0"),
+            ),
+        ],
+        layout=layout_fn(
+            display="none",
+            border="1px solid #fca5a5",
+            padding="8px 10px",
+            margin="6px 0 0",
+        ),
+    )
+
+    perf_stats_panel = widgets.VBox(
+        [
+            app._perf_stats_html,
+            widgets.HTML(
+                '<p style="margin:10px 0 4px;color:#475569;font-size:13px;font-weight:600">'
+                "Recent events (last 20)</p>"
+            ),
+            app._perf_events_html,
+            widgets.HBox(
+                [app._reset_btn],
+                layout=layout_fn(margin="14px 0 4px"),
+            ),
+            app._reset_confirm_box,
+        ]
+    )
+    app._perf_accordion = widgets.Accordion(
+        children=[perf_stats_panel], selected_index=None
+    )
+    app._perf_accordion.set_title(0, "Performance stats")
+
+    cal_last = load_last_calibration_label_fn()
+    cal_note = (
+        f'<p style="color:#64748b;font-size:12px;margin:0 0 6px">'
+        f"Last run: {cal_last}</p>"
+        if cal_last
+        else ""
+    )
+    cal_panel = widgets.VBox(
+        [
+            widgets.HTML(
+                f'<p style="color:#555;font-size:13px;margin:0 0 6px">'
+                f"Benchmark this machine so the time estimator uses basis-function "
+                f"scaling (N<sup>β</sup>) rather than generic defaults. "
+                f"<b>Quick</b> runs {len(benchmark_suite)} small calculations (~10 s). "
+                f"<b>Full</b> runs {len(benchmark_suite_long)} calculations spanning "
+                f"all common molecule sizes and methods (~5 min).</p>" + cal_note
+            ),
+            app._cal_mode_toggle,
+            widgets.HBox(
+                [app._cal_run_btn, app._cal_stop_btn],
+                layout=layout_fn(gap="6px", align_items="center"),
+            ),
+            app._cal_progress,
+            app._cal_step_label,
+            app._cal_results_html,
+        ],
+        layout=layout_fn(padding="4px 0"),
+    )
+    app._cal_accordion = widgets.Accordion(children=[cal_panel], selected_index=None)
+    app._cal_accordion.set_title(0, "Calibrate time estimates")
+
+    app.history_panel = widgets.VBox(
+        [
+            widgets.HTML(
+                '<p style="color:#555;font-size:13px;margin:0 0 8px">'
+                "Calculations are saved automatically. Select one below to view its results.</p>"
+            ),
+            widgets.HBox(
+                [
+                    app.past_dd,
+                    app.past_refresh_btn,
+                    app.copy_path_btn,
+                    app.view_log_btn,
+                ],
+                layout=layout_fn(align_items="center", gap="8px"),
+            ),
+            app.results_path_lbl,
+            app.past_output,
+            app._perf_accordion,
+            app._cal_accordion,
+        ]
+    )
+
+    app._refresh_results_browser()
+    app._refresh_perf_stats()
 
 
 def build_theme_selector(app: Any, *, layout_fn: Any) -> None:

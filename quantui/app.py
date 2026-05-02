@@ -17,7 +17,6 @@ import asyncio
 import io
 import os
 import re
-import sys
 import threading
 import time
 import uuid as _uuid
@@ -87,6 +86,9 @@ from quantui.app_builders import (
     build_help_section as _bld_build_help_section,
 )
 from quantui.app_builders import (
+    build_history_section as _bld_build_history_section,
+)
+from quantui.app_builders import (
     build_issue_widgets as _bld_build_issue_widgets,
 )
 from quantui.app_builders import (
@@ -97,6 +99,9 @@ from quantui.app_builders import (
 )
 from quantui.app_builders import (
     build_run_section as _bld_build_run_section,
+)
+from quantui.app_builders import (
+    build_status_panel as _bld_build_status_panel,
 )
 from quantui.app_builders import (
     build_theme_selector as _bld_build_theme_selector,
@@ -528,14 +533,32 @@ class QuantUIApp:
         _issue_status_html: Any
         _issue_submit_btn: Any
         _issue_textarea: Any
+        _cal_accordion: Any
+        _cal_mode_toggle: Any
+        _cal_progress: Any
+        _cal_results_html: Any
+        _cal_run_btn: Any
+        _cal_step_label: Any
+        _cal_stop_btn: Any
         _log_clear_btn: Any
         _log_output_html: Any
         _log_source_lbl: Any
+        _perf_accordion: Any
+        _perf_events_html: Any
+        _perf_stats_html: Any
+        _reset_btn: Any
+        _reset_confirm_box: Any
+        _reset_confirm_html: Any
+        _reset_confirm_no: Any
+        _reset_confirm_yes: Any
+        _status_html: Any
+        _status_tab_panel: Any
         _theme_style: Any
         _welcome_html: Any
         advanced_accordion: Any
         calc_setup_panel: Any
         change_mol_btn: Any
+        copy_path_btn: Any
         compare_btn: Any
         compare_clear_btn: Any
         compare_output: Any
@@ -545,16 +568,22 @@ class QuantUIApp:
         help_content_html: Any
         help_tab_panel: Any
         help_topic_dd: Any
+        history_panel: Any
         log_tab_panel: Any
         mol_input_collapsed: Any
         mol_input_container: Any
         mol_input_expanded: Any
+        past_dd: Any
+        past_output: Any
+        past_refresh_btn: Any
         preset_dd: Any
         pubchem_btn: Any
         pubchem_msg: Any
         pubchem_txt: Any
+        results_path_lbl: Any
         run_panel: Any
         theme_btn: Any
+        view_log_btn: Any
         xyz_area: Any
         xyz_btn: Any
         xyz_msg: Any
@@ -652,87 +681,15 @@ class QuantUIApp:
     # ── Status panel ──────────────────────────────────────────────────────
 
     def _build_status_panel(self) -> None:
-        _cores, _mem_gb = get_session_resources()
-        _mem = f"{_mem_gb} GB" if _mem_gb is not None else "unknown"
-        _py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-        _env = os.environ.get("CONDA_DEFAULT_ENV", "") or os.path.basename(
-            os.environ.get("VIRTUAL_ENV", "")
-        )
-        _cal_label = _load_last_calibration_label()
-
-        def _ok(flag: bool, extra: str = "") -> str:
-            tick = '<span style="color:#22c55e">&#10003;</span>'
-            cross = '<span style="color:#ef4444">&#10007;</span>'
-            return (tick if flag else cross) + (" " + extra if extra else "")
-
-        _items = [
-            (
-                "PySCF (calculations)",
-                _ok(
-                    _PYSCF_AVAILABLE,
-                    "" if _PYSCF_AVAILABLE else "&mdash; Linux / macOS / WSL required",
-                ),
-            ),
-            ("ASE (structure I/O, opt.)", _ok(ASE_AVAILABLE)),
-            ("PubChem search", _ok(PUBCHEM_AVAILABLE)),
-            ("3D viewer (py3Dmol)", _ok(VISUALIZATION_AVAILABLE)),
-            ("CPU cores / Memory", f"<b>{_cores}</b> cores / <b>{_mem}</b>"),
-        ]
-        _rows = "".join(
-            f'<tr><td style="padding:3px 16px 3px 0;color:#64748b;font-size:13px">{k}</td>'
-            f'<td style="font-size:13px">{v}</td></tr>'
-            for k, v in _items
-        )
-
-        _env_badge = (
-            f'&nbsp;&nbsp;<code style="font-size:11px;background:#e0e7ef;'
-            f'padding:1px 5px;border-radius:3px;color:#334155">{_env}</code>'
-            if _env and _env not in ("base", "")
-            else ""
-        )
-        _cal_line = (
-            f'<div style="margin-top:6px;font-size:12px;color:#94a3b8">'
-            f"Timing calibration: {_cal_label}</div>"
-            if _cal_label
-            else '<div style="margin-top:6px;font-size:12px;color:#94a3b8">'
-            "Timing calibration: not yet run &mdash; use the Calibrate panel in History</div>"
-        )
-
-        self._status_html = widgets.HTML(
-            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;'
-            f'padding:12px 16px;border-radius:6px;margin:4px 0 8px">'
-            f'<div style="font-weight:600;font-size:14px;color:#1e293b">'
-            f"QuantUI {quantui.__version__}"
-            f'<span style="font-weight:400;font-size:12px;color:#94a3b8;margin-left:10px">'
-            f"Python {_py_ver}{_env_badge}</span></div>"
-            f'<table style="margin-top:10px;border-collapse:collapse">{_rows}</table>'
-            f"{_cal_line}"
-            f"</div>"
-        )
-
-        _steps = [
-            "Select a molecule &mdash; library dropdown, XYZ paste, or PubChem search",
-            "Choose a <b>method</b> (RHF / DFT / MP2) and <b>basis set</b> in the Calculate tab",
-            "Click <b>Run Calculation</b> &mdash; SCF progress appears in real time",
-            "Explore results in the <b>Results</b> and <b>Analysis</b> tabs",
-            "Browse past calculations in <b>History</b>; compare them in <b>Compare</b>",
-        ]
-        _steps_html = "".join(
-            f'<li style="margin:5px 0;font-size:13px;color:#475569">{s}</li>'
-            for s in _steps
-        )
-        _guide_html = widgets.HTML(
-            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;'
-            f'padding:12px 16px;border-radius:6px;margin:8px 0">'
-            f'<div style="font-weight:600;font-size:13px;color:#1e293b;margin-bottom:8px">'
-            f"Quick start</div>"
-            f'<ol style="margin:0;padding-left:20px">{_steps_html}</ol>'
-            f"</div>"
-        )
-
-        self._status_tab_panel = widgets.VBox(
-            [self._status_html, _guide_html],
-            layout=_layout(padding="8px 0"),
+        _bld_build_status_panel(
+            self,
+            layout_fn=_layout,
+            get_session_resources_fn=get_session_resources,
+            load_last_calibration_label_fn=_load_last_calibration_label,
+            pyscf_available=_PYSCF_AVAILABLE,
+            ase_available=ASE_AVAILABLE,
+            pubchem_available=PUBCHEM_AVAILABLE,
+            visualization_available=VISUALIZATION_AVAILABLE,
         )
 
     # ── Welcome header ────────────────────────────────────────────────────
@@ -1586,198 +1543,14 @@ class QuantUIApp:
     # ── History panel (Cell 8) ────────────────────────────────────────────
 
     def _build_history_section(self) -> None:
-        self.past_dd = widgets.Dropdown(
-            description="Load:",
-            options=[("(no saved results)", "")],
-            style={"description_width": "50px"},
-            layout=_layout(width="500px"),
+        _bld_build_history_section(
+            self,
+            layout_fn=_layout,
+            pyscf_available=_PYSCF_AVAILABLE,
+            benchmark_suite=_BENCHMARK_SUITE,
+            benchmark_suite_long=_BENCHMARK_SUITE_LONG,
+            load_last_calibration_label_fn=_load_last_calibration_label,
         )
-        self.past_refresh_btn = widgets.Button(
-            description="Refresh",
-            button_style="",
-            icon="refresh",
-            layout=_layout(width="100px"),
-            tooltip="Rescan the results directory",
-        )
-        self.copy_path_btn = widgets.Button(
-            description="Copy path",
-            button_style="",
-            icon="clipboard",
-            layout=_layout(width="120px"),
-            tooltip="Copy the results directory path to clipboard",
-        )
-        self.results_path_lbl = widgets.HTML()
-        self.past_output = widgets.Output()
-        self.view_log_btn = widgets.Button(
-            description="View log",
-            button_style="",
-            icon="file-text-o",
-            layout=_layout(width="110px"),
-            tooltip="Open the full PySCF output log in the Output tab",
-        )
-
-        # Calibration widgets
-        self._cal_mode_toggle = widgets.ToggleButtons(
-            options=[("Quick (~10 s)", "short"), ("Full (~5 min)", "long")],
-            value="short",
-            description="",
-            button_style="",
-            style={"description_width": "0px", "button_width": "140px"},
-            layout=_layout(margin="0 0 8px"),
-        )
-        self._cal_run_btn = widgets.Button(
-            description="Run Calibration",
-            button_style="primary",
-            icon="play",
-            disabled=not _PYSCF_AVAILABLE,
-            tooltip=(
-                "Run the benchmark suite to calibrate time estimates"
-                if _PYSCF_AVAILABLE
-                else "PySCF required (Linux / macOS / WSL)"
-            ),
-            layout=_layout(width="180px"),
-        )
-        self._cal_stop_btn = widgets.Button(
-            description="Stop",
-            button_style="warning",
-            icon="stop",
-            layout=_layout(width="90px", display="none"),
-        )
-        self._cal_progress = widgets.IntProgress(
-            min=0,
-            max=len(_BENCHMARK_SUITE),
-            value=0,
-            description="",
-            bar_style="info",
-            layout=_layout(width="300px", display="none"),
-        )
-        self._cal_step_label = widgets.HTML(
-            value="",
-            layout=_layout(display="none"),
-        )
-        self._cal_results_html = widgets.HTML(value="")
-
-        # Performance stats widgets
-        self._perf_stats_html = widgets.HTML()
-        self._perf_events_html = widgets.HTML()
-        self._reset_btn = widgets.Button(
-            description="Reset performance database",
-            button_style="danger",
-            icon="trash",
-            layout=_layout(width="230px"),
-        )
-        self._reset_confirm_html = widgets.HTML(
-            '<span style="color:#dc2626;font-size:13px">'
-            "<b>Warning:</b> This will permanently delete all performance records. "
-            "Time estimates will reset to &ldquo;no data&rdquo;.</span>"
-        )
-        self._reset_confirm_yes = widgets.Button(
-            description="Yes, delete all records",
-            button_style="danger",
-            icon="check",
-            layout=_layout(width="190px"),
-        )
-        self._reset_confirm_no = widgets.Button(
-            description="Cancel",
-            button_style="",
-            icon="times",
-            layout=_layout(width="90px"),
-        )
-        self._reset_confirm_box = widgets.VBox(
-            [
-                self._reset_confirm_html,
-                widgets.HBox(
-                    [self._reset_confirm_yes, self._reset_confirm_no],
-                    layout=_layout(gap="8px", margin="4px 0 0"),
-                ),
-            ],
-            layout=_layout(
-                display="none",
-                border="1px solid #fca5a5",
-                padding="8px 10px",
-                margin="6px 0 0",
-            ),
-        )
-
-        _perf_stats_panel = widgets.VBox(
-            [
-                self._perf_stats_html,
-                widgets.HTML(
-                    '<p style="margin:10px 0 4px;color:#475569;font-size:13px;font-weight:600">'
-                    "Recent events (last 20)</p>"
-                ),
-                self._perf_events_html,
-                widgets.HBox(
-                    [self._reset_btn],
-                    layout=_layout(margin="14px 0 4px"),
-                ),
-                self._reset_confirm_box,
-            ]
-        )
-        self._perf_accordion = widgets.Accordion(
-            children=[_perf_stats_panel], selected_index=None
-        )
-        self._perf_accordion.set_title(0, "Performance stats")
-
-        # Calibration accordion
-        _cal_last = _load_last_calibration_label()
-        _cal_note = (
-            f'<p style="color:#64748b;font-size:12px;margin:0 0 6px">'
-            f"Last run: {_cal_last}</p>"
-            if _cal_last
-            else ""
-        )
-        _cal_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    f'<p style="color:#555;font-size:13px;margin:0 0 6px">'
-                    f"Benchmark this machine so the time estimator uses basis-function "
-                    f"scaling (N<sup>β</sup>) rather than generic defaults. "
-                    f"<b>Quick</b> runs {len(_BENCHMARK_SUITE)} small calculations (~10 s). "
-                    f"<b>Full</b> runs {len(_BENCHMARK_SUITE_LONG)} calculations spanning "
-                    f"all common molecule sizes and methods (~5 min).</p>" + _cal_note
-                ),
-                self._cal_mode_toggle,
-                widgets.HBox(
-                    [self._cal_run_btn, self._cal_stop_btn],
-                    layout=_layout(gap="6px", align_items="center"),
-                ),
-                self._cal_progress,
-                self._cal_step_label,
-                self._cal_results_html,
-            ],
-            layout=_layout(padding="4px 0"),
-        )
-        self._cal_accordion = widgets.Accordion(
-            children=[_cal_panel], selected_index=None
-        )
-        self._cal_accordion.set_title(0, "Calibrate time estimates")
-
-        self.history_panel = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:13px;margin:0 0 8px">'
-                    "Calculations are saved automatically. Select one below to view its results.</p>"
-                ),
-                widgets.HBox(
-                    [
-                        self.past_dd,
-                        self.past_refresh_btn,
-                        self.copy_path_btn,
-                        self.view_log_btn,
-                    ],
-                    layout=_layout(align_items="center", gap="8px"),
-                ),
-                self.results_path_lbl,
-                self.past_output,
-                self._perf_accordion,
-                self._cal_accordion,
-            ]
-        )
-
-        # Populate on startup
-        self._refresh_results_browser()
-        self._refresh_perf_stats()
 
     # ── Compare panel (Cell 9) ────────────────────────────────────────────
 
