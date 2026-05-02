@@ -149,6 +149,42 @@ def on_freq_seed_changed(app: Any, change: Any) -> None:
         app._freq_seed_note.value = ""
 
 
+def on_solvent_cb_changed(app: Any, change: Any) -> None:
+    """Show or hide solvent dropdown based on checkbox state."""
+    app.solvent_dd.layout.display = "" if change["new"] else "none"
+
+
+def on_clear_log(app: Any, btn: Any) -> None:
+    """Clear the live run output panel."""
+    app.run_output.clear_output()
+
+
+def on_accumulate(app: Any, btn: Any) -> None:
+    """Add the latest result to the in-session comparison list."""
+    r = app._last_result
+    if r is None:
+        return
+    app._results.append(r)
+    app._refresh_comparison()
+
+
+def on_clear(app: Any, btn: Any) -> None:
+    """Clear in-session comparison results and rendered output."""
+    app._results.clear()
+    app.comparison_output.clear_output()
+
+
+def on_compare_refresh(app: Any, btn: Any) -> None:
+    """Refresh Compare selector options from saved results."""
+    app._populate_compare_list()
+
+
+def on_compare_clear(app: Any, btn: Any) -> None:
+    """Clear Compare tab selection and output area."""
+    app.compare_select.value = ()
+    app.compare_output.clear_output()
+
+
 def update_notes(app: Any, change: Any = None) -> None:
     """Refresh educational method notes for the active molecule/method."""
     app.notes_output.clear_output(wait=True)
@@ -201,3 +237,72 @@ def update_estimate(app: Any, *, calc_log_mod: Any, change: Any = None) -> None:
         app.perf_estimate_html.value = calc_log_mod.format_estimate(est)
     except Exception:
         app.perf_estimate_html.value = ""
+
+
+def refresh_results_browser(app: Any) -> None:
+    """Refresh the History dropdown with saved result directories."""
+    try:
+        from quantui import list_results, load_result
+    except ImportError:
+        return
+    app.results_path_lbl.value = (
+        f'<span style="font-size:13px;color:#64748b">'
+        f"{app._get_results_dir()}</span>"
+    )
+    dirs = list_results()
+    if not dirs:
+        app.past_dd.options = [("(no saved results)", "")]
+        return
+    options = []
+    for d in dirs:
+        try:
+            data = load_result(d)
+            ts = data.get("timestamp", d.name)
+            label = f"{ts}  ·  {data['formula']}  {data['method']}/{data['basis']}"
+            options.append((label, str(d)))
+        except Exception:
+            pass
+    app.past_dd.options = options if options else [("(no saved results)", "")]
+    if app.calc_type_dd.value == "Frequency":
+        app._refresh_freq_seed_options()
+
+
+def refresh_comparison(app: Any) -> None:
+    """Refresh in-session comparison output from accumulated results."""
+    from quantui import comparison_table_html, summary_from_session_result
+
+    app.comparison_output.clear_output(wait=True)
+    if not app._results:
+        return
+    summaries = [summary_from_session_result(r) for r in app._results]
+    with app.comparison_output:
+        display(HTML(comparison_table_html(summaries)))
+        if len(summaries) > 1:
+            try:
+                from quantui import plot_comparison
+
+                plot_comparison(summaries)
+            except Exception:
+                pass
+
+
+def populate_compare_list(app: Any) -> None:
+    """Populate the Compare tab selector with saved result entries."""
+    from quantui.results_storage import list_results, load_result
+
+    dirs = list_results()
+    if not dirs:
+        app.compare_select.options = [("(no saved results)", "")]
+        app.compare_btn.disabled = True
+        return
+    options = []
+    for d in dirs:
+        try:
+            data = load_result(d)
+            ts = data.get("timestamp", d.name[:19])
+            label = f"{ts}  {data['formula']}  {data['method']}/{data['basis']}"
+            options.append((label, str(d)))
+        except Exception:
+            options.append((d.name, str(d)))
+    app.compare_select.options = options
+    app.compare_btn.disabled = False

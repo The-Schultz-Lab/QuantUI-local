@@ -173,7 +173,22 @@ from quantui.app_history import (
     on_view_log as _hist_on_view_log,
 )
 from quantui.app_runflow import (
+    on_accumulate as _run_on_accumulate,
+)
+from quantui.app_runflow import (
     on_calc_type_changed as _run_on_calc_type_changed,
+)
+from quantui.app_runflow import (
+    on_clear as _run_on_clear,
+)
+from quantui.app_runflow import (
+    on_clear_log as _run_on_clear_log,
+)
+from quantui.app_runflow import (
+    on_compare_clear as _run_on_compare_clear,
+)
+from quantui.app_runflow import (
+    on_compare_refresh as _run_on_compare_refresh,
 )
 from quantui.app_runflow import (
     on_freq_seed_changed as _run_on_freq_seed_changed,
@@ -182,7 +197,19 @@ from quantui.app_runflow import (
     on_run_clicked as _run_on_run_clicked,
 )
 from quantui.app_runflow import (
+    on_solvent_cb_changed as _run_on_solvent_cb_changed,
+)
+from quantui.app_runflow import (
+    populate_compare_list as _run_populate_compare_list,
+)
+from quantui.app_runflow import (
+    refresh_comparison as _run_refresh_comparison,
+)
+from quantui.app_runflow import (
     refresh_freq_seed_options as _run_refresh_freq_seed_options,
+)
+from quantui.app_runflow import (
+    refresh_results_browser as _run_refresh_results_browser,
 )
 from quantui.app_runflow import (
     update_estimate as _run_update_estimate,
@@ -1448,23 +1475,18 @@ class QuantUIApp:
         _run_on_run_clicked(self, btn)
 
     def _on_solvent_cb_changed(self, change) -> None:
-        self.solvent_dd.layout.display = "" if change["new"] else "none"
+        _run_on_solvent_cb_changed(self, change)
 
     def _on_clear_log(self, btn) -> None:
-        self.run_output.clear_output()
+        _run_on_clear_log(self, btn)
 
     # ── Accumulate / export ───────────────────────────────────────────────
 
     def _on_accumulate(self, btn) -> None:
-        r = self._last_result
-        if r is None:
-            return
-        self._results.append(r)
-        self._refresh_comparison()
+        _run_on_accumulate(self, btn)
 
     def _on_clear(self, btn) -> None:
-        self._results.clear()
-        self.comparison_output.clear_output()
+        _run_on_clear(self, btn)
 
     def _on_export(self, btn) -> None:
         _exp_on_export(self, btn)
@@ -1488,7 +1510,7 @@ class QuantUIApp:
     # ── Compare ───────────────────────────────────────────────────────────
 
     def _on_compare_refresh(self, btn) -> None:
-        self._populate_compare_list()
+        _run_on_compare_refresh(self, btn)
 
     def _on_compare(self, btn) -> None:
         selected = self.compare_select.value
@@ -1553,8 +1575,7 @@ class QuantUIApp:
                 display(widgets.VBox(_btns, layout=_layout(gap="4px")))
 
     def _on_compare_clear(self, btn) -> None:
-        self.compare_select.value = ()
-        self.compare_output.clear_output()
+        _run_on_compare_clear(self, btn)
 
     # ── History ───────────────────────────────────────────────────────────
 
@@ -2588,68 +2609,13 @@ class QuantUIApp:
         _run_update_estimate(self, calc_log_mod=_calc_log, change=change)
 
     def _refresh_results_browser(self) -> None:
-        try:
-            from quantui import list_results, load_result
-        except ImportError:
-            return
-        self.results_path_lbl.value = (
-            f'<span style="font-size:13px;color:#64748b">'
-            f"{self._get_results_dir()}</span>"
-        )
-        dirs = list_results()
-        if not dirs:
-            self.past_dd.options = [("(no saved results)", "")]
-            return
-        options = []
-        for d in dirs:
-            try:
-                data = load_result(d)
-                ts = data.get("timestamp", d.name)
-                label = f"{ts}  ·  {data['formula']}  {data['method']}/{data['basis']}"
-                options.append((label, str(d)))
-            except Exception:
-                pass
-        self.past_dd.options = options if options else [("(no saved results)", "")]
-        # Keep frequency seed dropdown in sync if it's currently visible.
-        if self.calc_type_dd.value == "Frequency":
-            self._refresh_freq_seed_options()
+        _run_refresh_results_browser(self)
 
     def _refresh_comparison(self) -> None:
-        from quantui import comparison_table_html, summary_from_session_result
-
-        self.comparison_output.clear_output(wait=True)
-        if not self._results:
-            return
-        summaries = [summary_from_session_result(r) for r in self._results]
-        with self.comparison_output:
-            display(HTML(comparison_table_html(summaries)))
-            if len(summaries) > 1:
-                try:
-                    from quantui import plot_comparison
-
-                    plot_comparison(summaries)
-                except Exception:
-                    pass
+        _run_refresh_comparison(self)
 
     def _populate_compare_list(self) -> None:
-        from quantui.results_storage import list_results, load_result
-
-        dirs = list_results()
-        if not dirs:
-            self.compare_select.options = [("(no saved results)", "")]
-            self.compare_btn.disabled = True
-            return
-        options = []
-        for d in dirs:
-            try:
-                data = load_result(d)
-                ts = data.get("timestamp", d.name[:19])
-                label = f"{ts}  {data['formula']}  {data['method']}/{data['basis']}"
-                options.append((label, str(d)))
-            except Exception:
-                options.append((d.name, str(d)))
-        self.compare_select.options = options
-        self.compare_btn.disabled = False
+        _run_populate_compare_list(self)
 
     def _show_help_topic(self, topic: str) -> None:
         if topic in HELP_TOPICS:
