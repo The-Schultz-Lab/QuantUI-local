@@ -72,6 +72,24 @@ from quantui.app_formatters import (
 from quantui.app_formatters import (
     format_tddft_result as _fmt_tddft_result,
 )
+from quantui.app_history import (
+    build_history_context as _hist_build_history_context,
+)
+from quantui.app_history import (
+    history_load_analysis as _hist_history_load_analysis,
+)
+from quantui.app_history import (
+    history_load_results as _hist_history_load_results,
+)
+from quantui.app_history import (
+    mol_from_result_dir as _hist_mol_from_result_dir,
+)
+from quantui.app_history import (
+    on_past_dd_changed as _hist_on_past_dd_changed,
+)
+from quantui.app_history import (
+    on_view_log as _hist_on_view_log,
+)
 
 # Import directly from submodules to avoid circular-import issues.
 # quantui/__init__.py imports this module (app.py), so using
@@ -3111,51 +3129,7 @@ class QuantUIApp:
     # ── History ───────────────────────────────────────────────────────────
 
     def _on_past_dd_changed(self, change) -> None:
-        path_str = change["new"]
-        # Hide result-specific panels whenever the selection changes so stale
-        # content from a previous "View log" click doesn't persist.
-        self._deactivate_all_ana_panels()
-        self._pending_traj_result = None
-        self._result_log_accordion.layout.display = "none"
-        self._result_dir_label.layout.display = "none"
-        self._iso_generate_btn.disabled = True
-        if not path_str:
-            self.past_output.clear_output()
-            return
-        self.past_output.clear_output()
-        with self.past_output:
-            try:
-                from quantui import load_result
-
-                _result_dir = Path(path_str)
-                data = load_result(_result_dir)
-                display(HTML(self._format_past_result(data, result_dir=_result_dir)))
-                _btn_res = widgets.Button(
-                    description="→ View Results",
-                    button_style="success",
-                    layout=_layout(width="130px"),
-                    tooltip="Show this result in the Results tab",
-                )
-                _btn_ana = widgets.Button(
-                    description="→ View Analysis",
-                    button_style="info",
-                    layout=_layout(width="140px"),
-                    tooltip="Load analysis panels and navigate to the Analysis tab",
-                )
-                _btn_res.on_click(
-                    lambda _, d=data, rd=_result_dir: self._history_load_results(d, rd)
-                )
-                _btn_ana.on_click(
-                    lambda _, rd=_result_dir: self._history_load_analysis(rd)
-                )
-                display(
-                    widgets.HBox(
-                        [_btn_res, _btn_ana],
-                        layout=_layout(gap="8px", margin="6px 0 0"),
-                    )
-                )
-            except Exception as exc:
-                print(f"Could not load result: {exc}")
+        _hist_on_past_dd_changed(self, change, layout_fn=_layout)
 
     def _on_past_refresh(self, btn) -> None:
         self._refresh_results_browser()
@@ -3178,163 +3152,19 @@ class QuantUIApp:
         threading.Thread(target=_reset, daemon=True).start()
 
     def _on_view_log(self, btn) -> None:
-        path_str = self.past_dd.value
-        if not path_str:
-            return
-        result_dir = Path(path_str)
-        try:
-            _calc_log.log_event(
-                "history_view",
-                result_dir.name,
-                result_dir=result_dir.name,
-                session_id=self._session_id,
-            )
-        except Exception:
-            pass
-
-        # Read log text and populate log panel
-        log_path = result_dir / "pyscf.log"
-        if log_path.exists():
-            text = log_path.read_text(encoding="utf-8", errors="replace")
-            label = result_dir.name
-        else:
-            text = "(No pyscf.log found for this result.)"
-            label = ""
-        self._update_log_panel(text, label)
-        self._show_result_log(result_dir, text)
-
-        # Build analysis context from disk and apply via registry
-        ctx = self._build_history_context(result_dir)
-        if ctx is not None:
-            _data_stub = {"calc_type": ctx.calc_type, "spectra": ctx.spectra_data}
-            try:
-                _mol = self._mol_from_result_dir(result_dir, _data_stub)
-                if _mol is not None:
-                    self._show_result_3d(_mol, extra_output=self._analysis_mol_output)
-                else:
-                    self._analysis_mol_output.clear_output()
-            except Exception:
-                pass
-            self._apply_analysis_context(ctx)
-
-        self._goto_output_tab()
+        _hist_on_view_log(self, btn)
 
     def _mol_from_result_dir(self, result_dir: Path, data: dict):
-        """Try to reconstruct a displayable Molecule from a saved result directory.
-
-        Returns a Molecule or None if geometry data is not available.
-        Tries sources in order: frequency spectra → orbitals_meta → trajectory.
-        """
-        import json as _json
-
-        from quantui.molecule import Molecule
-
-        ct = data.get("calc_type", "")
-
-        # Frequency: geometry stored inside spectra.molecule
-        if ct == "frequency":
-            mol_data = data.get("spectra", {}).get("molecule", {})
-            if mol_data.get("atoms") and mol_data.get("coords"):
-                try:
-                    return Molecule(
-                        atoms=mol_data["atoms"],
-                        coordinates=mol_data["coords"],
-                        charge=mol_data.get("charge", 0),
-                        multiplicity=mol_data.get("multiplicity", 1),
-                    )
-                except Exception:
-                    pass
-
-        # Single point / Geo opt: atom list from orbitals_meta.json
-        meta_path = result_dir / "orbitals_meta.json"
-        if meta_path.exists():
-            try:
-                meta = _json.loads(meta_path.read_text())
-                mol_atom = meta.get("mol_atom")
-                if mol_atom:
-                    atoms = [sym for sym, _ in mol_atom]
-                    coords = [c for _, c in mol_atom]
-                    return Molecule(atoms=atoms, coordinates=coords)
-            except Exception:
-                pass
-
-        # Geo opt fallback: last step of trajectory.json
-        if ct == "geometry_opt":
-            traj_path = result_dir / "trajectory.json"
-            if traj_path.exists():
-                try:
-                    traj_data = _json.loads(traj_path.read_text())
-                    steps = traj_data.get("steps", [])
-                    if steps:
-                        return Molecule(
-                            atoms=traj_data["atoms"],
-                            coordinates=steps[-1]["coords"],
-                            charge=traj_data.get("charge", 0),
-                            multiplicity=traj_data.get("multiplicity", 1),
-                        )
-                except Exception:
-                    pass
-
-        return None
+        return _hist_mol_from_result_dir(result_dir, data)
 
     def _history_load_results(self, data: dict, result_dir: Path) -> None:
-        """Display a history result card in the Results tab and navigate there."""
-        self.result_output.clear_output()
-        with self.result_output:
-            display(HTML(self._format_past_result(data, result_dir=result_dir)))
-        self._result_dir_label.layout.display = "none"
-        # Also show 3D structure if geometry is recoverable
-        mol = self._mol_from_result_dir(result_dir, data)
-        if mol is not None:
-            self._show_result_3d(mol)
-        self.root_tab.selected_index = 1
+        _hist_history_load_results(self, data, result_dir)
 
     def _history_load_analysis(self, result_dir: Path) -> None:
-        """Load analysis panels for a history result and navigate to Analysis tab."""
-        log_path = result_dir / "pyscf.log"
-        text = (
-            log_path.read_text(encoding="utf-8", errors="replace")
-            if log_path.exists()
-            else "(No pyscf.log found for this result.)"
-        )
-        self._update_log_panel(result_dir.name if log_path.exists() else "", text)
-        self._show_result_log(result_dir, text)
-
-        ctx = self._build_history_context(result_dir)
-        if ctx is not None:
-            _data_stub = {"calc_type": ctx.calc_type, "spectra": ctx.spectra_data}
-            try:
-                _mol = self._mol_from_result_dir(result_dir, _data_stub)
-                if _mol is not None:
-                    self._show_result_3d(_mol, extra_output=self._analysis_mol_output)
-                else:
-                    self._analysis_mol_output.clear_output()
-            except Exception:
-                pass
-            self._apply_analysis_context(ctx)
-
-        self.root_tab.selected_index = 2
+        _hist_history_load_analysis(self, result_dir)
 
     def _build_history_context(self, result_dir: Path) -> Optional[_AnalysisContext]:
-        """Load result.json from *result_dir* and return an ``_AnalysisContext``.
-
-        Returns ``None`` if result.json cannot be read.
-        """
-        try:
-            from quantui import load_result
-
-            data = load_result(result_dir)
-        except Exception:
-            return None
-        return _AnalysisContext(
-            calc_type=data.get("calc_type", ""),
-            formula=data.get("formula", result_dir.name),
-            method=data.get("method", ""),
-            basis=data.get("basis", ""),
-            result_dir=result_dir,
-            spectra_data=data.get("spectra", {}),
-            source="history",
-        )
+        return _hist_build_history_context(result_dir, context_cls=_AnalysisContext)
 
     # ── Perf stats reset ──────────────────────────────────────────────────
 
