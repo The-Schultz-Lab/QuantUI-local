@@ -98,7 +98,13 @@ from quantui.app_builders import (
     build_output_tab as _bld_build_output_tab,
 )
 from quantui.app_builders import (
+    build_results_section as _bld_build_results_section,
+)
+from quantui.app_builders import (
     build_run_section as _bld_build_run_section,
+)
+from quantui.app_builders import (
+    build_shared_widgets as _bld_build_shared_widgets,
 )
 from quantui.app_builders import (
     build_status_panel as _bld_build_status_panel,
@@ -165,6 +171,15 @@ from quantui.app_history import (
 )
 from quantui.app_history import (
     on_view_log as _hist_on_view_log,
+)
+from quantui.app_runflow import (
+    on_run_clicked as _run_on_run_clicked,
+)
+from quantui.app_runflow import (
+    update_estimate as _run_update_estimate,
+)
+from quantui.app_runflow import (
+    update_notes as _run_update_notes,
 )
 from quantui.app_visualization import (
     build_vib_data_from_freq_result as _viz_build_vib_data_from_freq_result,
@@ -580,13 +595,113 @@ class QuantUIApp:
         pubchem_btn: Any
         pubchem_msg: Any
         pubchem_txt: Any
+        result_output: Any
+        result_viz_output: Any
         results_path_lbl: Any
+        run_btn: Any
+        run_output: Any
         run_panel: Any
+        run_status: Any
+        solvent_cb: Any
+        solvent_dd: Any
+        step_progress: Any
         theme_btn: Any
+        viz_backend_toggle: Any
+        viz_controls_box: Any
+        viz_lighting_dd: Any
+        viz_output: Any
+        viz_style_dd: Any
         view_log_btn: Any
         xyz_area: Any
         xyz_btn: Any
         xyz_msg: Any
+        _freq_preopt_cb: Any
+        _freq_seed_dd: Any
+        _freq_seed_note: Any
+        _freq_seed_refresh_btn: Any
+        _go_analysis_btn: Any
+        _go_results_btn: Any
+        _ir_fig: Any
+        _ir_fwhm_slider: Any
+        _ir_mode_toggle: Any
+        _ir_accordion: Any
+        _iso_accordion: Any
+        _iso_generate_btn: Any
+        _last_result_dir: Any
+        _nmr_accordion: Any
+        _nmr_output: Any
+        _orb_accordion: Any
+        _orb_diagram_box: Any
+        _orb_diagram_html: Any
+        _orb_iso_controls: Any
+        _orb_iso_output: Any
+        _orb_n_orb_input: Any
+        _orb_toggle: Any
+        _orb_ymax_input: Any
+        _orb_ymin_input: Any
+        _pes_plot_html: Any
+        _pes_scan_accordion: Any
+        _result_dir_label: Any
+        _result_log_accordion: Any
+        _result_log_output: Any
+        _scan_atom1: Any
+        _scan_atom2: Any
+        _scan_atom3: Any
+        _scan_atom34_box: Any
+        _scan_atom4: Any
+        _scan_start: Any
+        _scan_steps: Any
+        _scan_stop: Any
+        _scan_type_dd: Any
+        _scan_unit_lbl: Any
+        _tddft_accordion: Any
+        _tddft_fig: Any
+        _to_analysis_btn: Any
+        _viz_backend: Any
+        _viz_label: Any
+        _viz_lighting: Any
+        _viz_style: Any
+        _analysis_context_lbl: Any
+        _analysis_empty_html: Any
+        _analysis_mol_output: Any
+        _ana_unavail_html: Any
+        accumulate_btn: Any
+        analysis_tab_panel: Any
+        basis_dd: Any
+        basis_help_btn: Any
+        calc_extra_opts: Any
+        calc_type_dd: Any
+        charge_si: Any
+        clear_btn: Any
+        _completion_banner: Any
+        _completion_mol_lbl: Any
+        comparison_output: Any
+        export_btn: Any
+        export_mol_btn: Any
+        export_pdb_btn: Any
+        export_status: Any
+        export_xyz_btn: Any
+        fmax_fi: Any
+        log_clear_btn: Any
+        max_steps_si: Any
+        method_dd: Any
+        method_help_btn: Any
+        mol_info_html: Any
+        mol_summary_compact: Any
+        mult_si: Any
+        notes_output: Any
+        nstates_si: Any
+        perf_estimate_html: Any
+        post_calc_panel: Any
+        preopt_cb: Any
+        results_panel: Any
+        results_tab_panel: Any
+        struct_export_status: Any
+        traj_accordion: Any
+        traj_output: Any
+        vib_accordion: Any
+        vib_mode_dd: Any
+        vib_output: Any
 
     def __init__(self) -> None:
         # ── Instance state ────────────────────────────────────────────────
@@ -700,359 +815,29 @@ class QuantUIApp:
     # ── Shared widgets (Cell 3) ───────────────────────────────────────────
 
     def _build_shared_widgets(self) -> None:
-        # Output widgets
-        self.mol_info_html = widgets.HTML(
-            value='<i style="color:#888">No molecule loaded yet.</i>'
+        _bld_build_shared_widgets(
+            self,
+            layout_fn=_layout,
+            step_progress_cls=StepProgress,
+            supported_methods=SUPPORTED_METHODS,
+            supported_basis_sets=SUPPORTED_BASIS_SETS,
+            default_method=DEFAULT_METHOD,
+            default_basis=DEFAULT_BASIS,
+            default_charge=DEFAULT_CHARGE,
+            default_multiplicity=DEFAULT_MULTIPLICITY,
+            default_fmax=DEFAULT_FMAX,
+            default_opt_steps=DEFAULT_OPT_STEPS,
+            preopt_available=_PREOPT_AVAILABLE,
+            visualization_available=VISUALIZATION_AVAILABLE,
+            both_viz_available=_BOTH_VIZ_AVAILABLE,
+            default_viz_backend=_DEFAULT_VIZ_BACKEND,
+            default_viz_style=_DEFAULT_VIZ_STYLE,
+            default_lighting=_DEFAULT_LIGHTING,
+            viz_style_options=_VIZ_STYLE_OPTIONS,
+            plotlymol_viz=_PLOTLYMOL_VIZ,
+            lighting_options=_LIGHTING_OPTIONS,
+            rdkit_available=_RDKIT_AVAILABLE,
         )
-        self.mol_summary_compact = widgets.HTML(value="")
-        self.viz_output = widgets.Output(layout=_layout(min_height="50px"))
-        self.run_output = widgets.Output(
-            layout=_layout(
-                border="1px solid #c0ccd8",
-                min_height="80px",
-                max_height="400px",
-                padding="8px",
-                overflow_y="auto",
-            )
-        )
-        with self.run_output:
-            display(
-                HTML(
-                    '<p style="color:#999;font-style:italic;font-size:13px;margin:2px 0">'
-                    "No calculation run yet. PySCF output and any errors will appear here."
-                    "</p>"
-                )
-            )
-        self.result_output = widgets.Output()
-        self.result_viz_output = widgets.Output()
-        self.comparison_output = widgets.Output()
-        self._last_result_dir: Optional[Path] = None
-
-        # 3D viewer backend selector — shown only when both backends are installed
-        self._viz_backend: _VizBackend = _DEFAULT_VIZ_BACKEND
-        if _BOTH_VIZ_AVAILABLE:
-            self.viz_backend_toggle = widgets.ToggleButtons(
-                options=[("PlotlyMol", "plotlymol"), ("py3Dmol", "py3dmol")],
-                value=_DEFAULT_VIZ_BACKEND,
-                tooltips=["Plotly-based interactive viewer", "WebGL viewer (py3Dmol)"],
-                style={"button_width": "90px"},
-                layout=_layout(margin="2px 0 0 0"),
-            )
-        else:
-            self.viz_backend_toggle = None  # type: ignore[assignment]
-
-        # 3D viewer style and lighting controls
-        self._viz_style: str = _DEFAULT_VIZ_STYLE
-        self._viz_lighting: str = _DEFAULT_LIGHTING
-        self.viz_style_dd = widgets.Dropdown(
-            options=_VIZ_STYLE_OPTIONS,
-            value=_DEFAULT_VIZ_STYLE,
-            description="Style:",
-            style={"description_width": "40px"},
-            layout=_layout(width="180px"),
-            disabled=not VISUALIZATION_AVAILABLE,
-        )
-        # Lighting only applies to the PlotlyMol backend
-        _lighting_available = VISUALIZATION_AVAILABLE and _PLOTLYMOL_VIZ
-        self.viz_lighting_dd = widgets.Dropdown(
-            options=_LIGHTING_OPTIONS,
-            value=_DEFAULT_LIGHTING,
-            description="Lighting:",
-            style={"description_width": "58px"},
-            layout=_layout(width="170px"),
-            disabled=not _lighting_available,
-        )
-        if not _lighting_available:
-            self.viz_lighting_dd.layout.visibility = "hidden"
-        self.viz_controls_box = widgets.HBox(
-            [self.viz_style_dd, self.viz_lighting_dd],
-            layout=_layout(gap="8px", margin="2px 0 0 0", align_items="center"),
-        )
-        self.notes_output = widgets.Output()
-        self.perf_estimate_html = widgets.HTML()
-
-        # Step indicator
-        self.step_progress = StepProgress(
-            ["Choose molecule", "Set method", "Run", "Results"]
-        )
-        self.step_progress.start(0)
-
-        # Calculation setup dropdowns
-        self.method_dd = widgets.Dropdown(
-            options=SUPPORTED_METHODS,
-            value=DEFAULT_METHOD,
-            description="Method:",
-            style={"description_width": "100px"},
-            layout=_layout(width="260px"),
-        )
-        self.basis_dd = widgets.Dropdown(
-            options=SUPPORTED_BASIS_SETS,
-            value=DEFAULT_BASIS,
-            description="Basis Set:",
-            style={"description_width": "100px"},
-            layout=_layout(width="260px"),
-        )
-        self.charge_si = widgets.BoundedIntText(
-            value=DEFAULT_CHARGE,
-            min=-10,
-            max=10,
-            description="Charge:",
-            style={"description_width": "100px"},
-            layout=_layout(width="190px"),
-        )
-        self.mult_si = widgets.BoundedIntText(
-            value=DEFAULT_MULTIPLICITY,
-            min=1,
-            max=10,
-            description="Multiplicity:",
-            style={"description_width": "100px"},
-            layout=_layout(width="190px"),
-        )
-        self.preopt_cb = widgets.Checkbox(
-            value=False,
-            description="Pre-optimize geometry (for a crude starting point)",
-            disabled=not _PREOPT_AVAILABLE,
-            layout=_layout(width="400px"),
-        )
-
-        # Implicit solvent (PCM)
-        from quantui.config import SOLVENT_OPTIONS as _SOLVENT_OPTS
-
-        self.solvent_cb = widgets.Checkbox(
-            value=False,
-            description="Implicit solvent (PCM)",
-            layout=_layout(width="240px"),
-        )
-        self.solvent_dd = widgets.Dropdown(
-            options=list(_SOLVENT_OPTS.keys()),
-            value="Water",
-            description="Solvent:",
-            style={"description_width": "70px"},
-            layout=_layout(width="200px", display="none"),
-        )
-
-        # Calculation type + extra options
-        self.calc_type_dd = widgets.Dropdown(
-            options=[
-                "Single Point",
-                "Geometry Opt",
-                "Frequency",
-                "UV-Vis (TD-DFT)",
-                "NMR Shielding",
-                "PES Scan",
-            ],
-            value="Single Point",
-            description="Calc. Type:",
-            style={"description_width": "100px"},
-            layout=_layout(width="310px"),
-        )
-        self.fmax_fi = widgets.BoundedFloatText(
-            value=DEFAULT_FMAX,
-            min=0.001,
-            max=1.0,
-            step=0.005,
-            description="Force thr. (eV/Å):",
-            style={"description_width": "130px"},
-            layout=_layout(width="270px"),
-        )
-        self.max_steps_si = widgets.BoundedIntText(
-            value=DEFAULT_OPT_STEPS,
-            min=10,
-            max=1000,
-            description="Max steps:",
-            style={"description_width": "100px"},
-            layout=_layout(width="200px"),
-        )
-        self.nstates_si = widgets.BoundedIntText(
-            value=10,
-            min=1,
-            max=50,
-            description="# states:",
-            style={"description_width": "100px"},
-            layout=_layout(width="180px"),
-        )
-
-        # ── Frequency calc extra widgets ──────────────────────────────────────
-        self._freq_seed_dd = widgets.Dropdown(
-            options=[("(use current molecule)", "")],
-            description="Seed geometry:",
-            style={"description_width": "110px"},
-            layout=_layout(width="420px"),
-            tooltip="Optionally load the final optimised geometry from a previous Geo Opt result",
-        )
-        self._freq_seed_refresh_btn = widgets.Button(
-            description="",
-            icon="refresh",
-            layout=_layout(width="32px", height="32px"),
-            tooltip="Refresh the list of saved geometry optimisations",
-        )
-        self._freq_preopt_cb = widgets.Checkbox(
-            value=False,
-            description="Geometry optimization (recommended for unoptimized inputs)",
-            style={"description_width": "initial"},
-            layout=_layout(width="100%"),
-        )
-        self._freq_seed_note = widgets.HTML("")
-
-        # ── PES scan extra widgets ────────────────────────────────────────────
-        self._scan_type_dd = widgets.Dropdown(
-            options=["Bond", "Angle", "Dihedral"],
-            value="Bond",
-            description="Scan type:",
-            style={"description_width": "80px"},
-            layout=_layout(width="220px"),
-        )
-        _atom_idx_layout = _layout(width="95px")
-        _atom_idx_style = {"description_width": "50px"}
-        self._scan_atom1 = widgets.BoundedIntText(
-            value=1,
-            min=1,
-            max=999,
-            description="Atom 1:",
-            style=_atom_idx_style,
-            layout=_atom_idx_layout,
-        )
-        self._scan_atom2 = widgets.BoundedIntText(
-            value=2,
-            min=1,
-            max=999,
-            description="Atom 2:",
-            style=_atom_idx_style,
-            layout=_atom_idx_layout,
-        )
-        self._scan_atom3 = widgets.BoundedIntText(
-            value=3,
-            min=1,
-            max=999,
-            description="Atom 3:",
-            style=_atom_idx_style,
-            layout=_atom_idx_layout,
-        )
-        self._scan_atom4 = widgets.BoundedIntText(
-            value=4,
-            min=1,
-            max=999,
-            description="Atom 4:",
-            style=_atom_idx_style,
-            layout=_atom_idx_layout,
-        )
-        self._scan_atom34_box = widgets.HBox(
-            [self._scan_atom3, self._scan_atom4],
-            layout=_layout(gap="4px"),
-        )
-        self._scan_start = widgets.BoundedFloatText(
-            value=0.5,
-            min=0.01,
-            max=1000.0,
-            step=0.1,
-            description="Start:",
-            style={"description_width": "40px"},
-            layout=_layout(width="140px"),
-        )
-        self._scan_stop = widgets.BoundedFloatText(
-            value=2.0,
-            min=0.01,
-            max=1000.0,
-            step=0.1,
-            description="Stop:",
-            style={"description_width": "40px"},
-            layout=_layout(width="140px"),
-        )
-        self._scan_steps = widgets.BoundedIntText(
-            value=10,
-            min=2,
-            max=100,
-            description="Points:",
-            style={"description_width": "50px"},
-            layout=_layout(width="120px"),
-        )
-        self._scan_unit_lbl = widgets.HTML(
-            '<span style="font-size:12px;color:#555">Å</span>'
-        )
-
-        self.calc_extra_opts = widgets.VBox([])
-
-        # Context-help buttons
-        self.method_help_btn = widgets.Button(
-            description="?",
-            button_style="",
-            layout=_layout(width="28px", height="28px"),
-            tooltip="RHF vs UHF — opens Help tab",
-        )
-        self.basis_help_btn = widgets.Button(
-            description="?",
-            button_style="",
-            layout=_layout(width="28px", height="28px"),
-            tooltip="Choosing a basis set — opens Help tab",
-        )
-
-        # Run widgets
-        self.run_btn = widgets.Button(
-            description="Run Calculation",
-            button_style="success",
-            icon="play",
-            disabled=True,
-            layout=_layout(width="200px", height="36px"),
-        )
-        self.run_status = widgets.Label()
-
-        # Log clear button (in run panel)
-        self.log_clear_btn = widgets.Button(
-            description="Clear",
-            button_style="",
-            icon="times",
-            layout=_layout(width="90px", height="26px"),
-            tooltip="Clear calculation output",
-        )
-
-        # Comparison / export widgets
-        self.accumulate_btn = widgets.Button(
-            description="Add to Comparison",
-            button_style="info",
-            icon="plus",
-            disabled=True,
-            layout=_layout(width="190px"),
-        )
-        self.clear_btn = widgets.Button(
-            description="Clear",
-            button_style="warning",
-            icon="trash",
-            layout=_layout(width="100px"),
-        )
-        self.export_btn = widgets.Button(
-            description="Export Script",
-            button_style="",
-            icon="download",
-            disabled=True,
-            layout=_layout(width="160px"),
-        )
-        self.export_status = widgets.Label()
-        _rdkit_tip = (
-            ""
-            if _RDKIT_AVAILABLE
-            else "Requires RDKit (conda install -c conda-forge rdkit)"
-        )
-        self.export_xyz_btn = widgets.Button(
-            description="Export XYZ",
-            icon="download",
-            disabled=True,
-            layout=_layout(width="130px"),
-        )
-        self.export_mol_btn = widgets.Button(
-            description="Export MOL",
-            icon="download",
-            disabled=True,
-            tooltip=_rdkit_tip,
-            layout=_layout(width="130px"),
-        )
-        self.export_pdb_btn = widgets.Button(
-            description="Export PDB",
-            icon="download",
-            disabled=True,
-            tooltip=_rdkit_tip,
-            layout=_layout(width="130px"),
-        )
-        self.struct_export_status = widgets.Label()
 
     # ── Molecule section (Cell 4) ─────────────────────────────────────────
 
@@ -1078,351 +863,7 @@ class QuantUIApp:
     # ── Results panel (Cell 7) ────────────────────────────────────────────
 
     def _build_results_section(self) -> None:
-        # PES scan energy plot accordion (hidden until a PES Scan completes)
-        self._pes_plot_html = widgets.Output(layout=_layout(width="100%"))
-        self._pes_scan_accordion = widgets.Accordion(
-            children=[
-                widgets.VBox(
-                    [self._pes_plot_html],
-                    layout=_layout(padding="8px"),
-                )
-            ],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self._pes_scan_accordion.set_title(0, "PES Energy Profile")
-        self._pes_scan_accordion.selected_index = None
-
-        # Trajectory accordion (Geo Opt / PES Scan — hidden until result completes)
-        self.traj_output = widgets.Output()
-        self.traj_accordion = widgets.Accordion(
-            children=[self.traj_output],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self.traj_accordion.set_title(0, "Trajectory Viewer")
-        self.traj_accordion.selected_index = None  # collapsed by default
-        self.traj_accordion.observe(
-            self._safe_cb(self._on_traj_expand), names=["selected_index"]
-        )
-
-        # Vibrational animation accordion (Frequency only — hidden until Freq completes)
-        self.vib_mode_dd = widgets.Dropdown(
-            description="Mode:",
-            options=[],
-            style={"description_width": "50px"},
-            layout=_layout(width="360px"),
-        )
-        self.vib_output = widgets.Output()
-        self.vib_accordion = widgets.Accordion(
-            children=[
-                widgets.VBox(
-                    [self.vib_mode_dd, self.vib_output],
-                    layout=_layout(padding="8px"),
-                )
-            ],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self.vib_accordion.set_title(0, "Vibrational Mode Viewer")
-        self.vib_accordion.selected_index = None  # collapsed by default
-
-        # IR Spectrum accordion (hidden until a Frequency result is available)
-        self._ir_mode_toggle = widgets.ToggleButtons(
-            options=["Stick", "Broadened"],
-            value="Stick",
-            style={"button_width": "80px"},
-            layout=_layout(margin="0 8px 0 0"),
-        )
-        self._ir_fwhm_slider = widgets.FloatSlider(
-            value=20.0,
-            min=5.0,
-            max=100.0,
-            step=5.0,
-            description="Line width:",
-            style={"description_width": "80px"},
-            layout=_layout(width="260px", display="none"),
-        )
-        self._ir_fig = widgets.Output(layout=_layout(width="100%"))
-
-        _ir_controls = widgets.HBox(
-            [self._ir_mode_toggle, self._ir_fwhm_slider],
-            layout=_layout(align_items="center", margin="0 0 6px 0"),
-        )
-        _ir_body_children = [_ir_controls, self._ir_fig]
-        self._ir_accordion = widgets.Accordion(
-            children=[
-                widgets.VBox(
-                    _ir_body_children,
-                    layout=_layout(padding="8px"),
-                )
-            ],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self._ir_accordion.set_title(0, "IR Spectrum")
-        self._ir_accordion.selected_index = None
-
-        # Orbital energy diagram + isosurface accordion (Single Point / Geo Opt)
-        # Use plotly.io.to_html so FigureWidget / anywidget dependency is not needed.
-
-        self._orb_ymin_input = widgets.BoundedFloatText(
-            value=-30.0,
-            min=-500.0,
-            max=200.0,
-            step=1.0,
-            description="Y min:",
-            layout=_layout(width="140px"),
-            style={"description_width": "45px"},
-        )
-        self._orb_ymax_input = widgets.BoundedFloatText(
-            value=5.0,
-            min=-500.0,
-            max=500.0,
-            step=1.0,
-            description="Y max:",
-            layout=_layout(width="140px"),
-            style={"description_width": "45px"},
-        )
-        self._orb_n_orb_input = widgets.BoundedIntText(
-            value=20,
-            min=4,
-            max=200,
-            step=2,
-            description="Show N:",
-            layout=_layout(width="120px"),
-            style={"description_width": "50px"},
-        )
-        _orb_controls_row = widgets.HBox(
-            [
-                widgets.HTML(
-                    '<span style="font-size:11px;color:#555;font-weight:600">Y range:</span>'
-                ),
-                self._orb_ymin_input,
-                self._orb_ymax_input,
-                widgets.HTML(
-                    '<span style="font-size:11px;color:#555;font-weight:600;margin-left:8px">'
-                    "Orbitals shown:</span>"
-                ),
-                self._orb_n_orb_input,
-            ],
-            layout=_layout(
-                align_items="center",
-                flex_wrap="wrap",
-                gap="4px",
-                margin="0 0 6px 0",
-            ),
-        )
-        self._orb_diagram_html = widgets.Output(layout=_layout(width="100%"))
-        _orb_diagram_content: list = [_orb_controls_row, self._orb_diagram_html]
-        self._orb_diagram_box = widgets.VBox(
-            _orb_diagram_content,
-            layout=_layout(width="100%"),
-        )
-        self._orb_toggle = widgets.ToggleButtons(
-            options=["HOMO-1", "HOMO", "LUMO", "LUMO+1"],
-            value="HOMO",
-            style={"button_width": "70px"},
-            layout=_layout(margin="8px 0 4px 0"),
-        )
-        self._orb_iso_output = widgets.Output()
-        self._orb_iso_controls = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<span style="font-size:12px;color:#555;font-weight:bold">'
-                    "Orbital isosurface:</span>"
-                ),
-                self._orb_toggle,
-                self._orb_iso_output,
-            ],
-            layout=_layout(display="none", margin="8px 0 0 0"),
-        )
-        self._orb_accordion = widgets.Accordion(
-            children=[
-                widgets.VBox(
-                    [self._orb_diagram_box],
-                    layout=_layout(padding="8px"),
-                )
-            ],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self._orb_accordion.set_title(0, "Orbital Diagram")
-        self._orb_accordion.selected_index = None
-
-        # Post-calculate panel — isosurface and other heavy on-demand analyses
-        self._iso_generate_btn = widgets.Button(
-            description="Generate Isosurface",
-            button_style="primary",
-            icon="flask",
-            disabled=True,
-            tooltip=(
-                "Generate a 3D orbital isosurface. "
-                "Available after running or loading a Single Point or Geometry Optimization."
-            ),
-            layout=_layout(width="200px", margin="8px 0 4px 0"),
-        )
-        _iso_body = widgets.VBox(
-            [
-                widgets.HTML(
-                    '<p style="color:#555;font-size:12px;margin:0 0 8px">'
-                    "Visualise a molecular orbital as a 3D isosurface (Linux / WSL only — "
-                    "requires PySCF and RDKit). Run or load a Single Point or Geometry "
-                    "Optimization first, then click <b>Generate</b>.</p>"
-                ),
-                self._orb_iso_controls,
-                self._iso_generate_btn,
-            ],
-            layout=_layout(padding="8px"),
-        )
-        self._iso_accordion = widgets.Accordion(
-            children=[_iso_body],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self._iso_accordion.set_title(0, "Orbital Isosurface")
-        self._iso_accordion.selected_index = None
-
-        # ── UV-Vis spectrum accordion (TD-DFT only — hidden until result) ──
-        self._tddft_fig = widgets.Output(layout=_layout(width="100%"))
-        self._tddft_accordion = widgets.Accordion(
-            children=[
-                widgets.VBox(
-                    [self._tddft_fig],
-                    layout=_layout(padding="8px"),
-                )
-            ],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self._tddft_accordion.set_title(0, "UV-Vis Absorption Spectrum")
-        self._tddft_accordion.selected_index = None
-
-        # ── NMR shielding accordion (NMR only — hidden until result) ────────
-        self._nmr_output = widgets.HTML(value="", layout=_layout(width="100%"))
-        self._nmr_accordion = widgets.Accordion(
-            children=[
-                widgets.VBox(
-                    [self._nmr_output],
-                    layout=_layout(padding="8px"),
-                )
-            ],
-            layout=_layout(display="none", margin="8px 0"),
-        )
-        self._nmr_accordion.set_title(0, "NMR Chemical Shifts")
-        self._nmr_accordion.selected_index = None
-
-        # ── Result directory path label (hidden until a calculation saves) ──
-        self._result_dir_label = widgets.HTML(
-            value="",
-            layout=_layout(display="none", margin="4px 0 0 0"),
-        )
-
-        # ── Full output log accordion (hidden until a calculation saves) ────
-        self._result_log_output = widgets.Output()
-        self._result_log_accordion = widgets.Accordion(
-            children=[self._result_log_output],
-            layout=_layout(display="none", margin="8px 0 0 0"),
-        )
-        self._result_log_accordion.set_title(0, "Full output log (pyscf.log)")
-        self._result_log_accordion.selected_index = None
-
-        # ── Completion banner (Calculate tab — hidden until run finishes) ───
-        self._go_results_btn = widgets.Button(
-            description="→ View Results",
-            button_style="success",
-            layout=_layout(width="130px"),
-        )
-        self._go_analysis_btn = widgets.Button(
-            description="→ View Analysis",
-            button_style="info",
-            layout=_layout(width="140px"),
-        )
-        self._completion_mol_lbl = widgets.HTML(value="")
-        self._completion_banner = widgets.HBox(
-            [
-                widgets.HTML(
-                    '<span style="color:#22c55e;font-weight:600;font-size:13px">'
-                    "✓ Calculation complete — </span>"
-                ),
-                self._completion_mol_lbl,
-                self._go_results_btn,
-                self._go_analysis_btn,
-            ],
-            layout=_layout(
-                display="none",
-                align_items="center",
-                gap="8px",
-                padding="10px 12px",
-                border="1px solid #bbf7d0",
-                border_radius="6px",
-                background_color="#f0fdf4",
-                margin="8px 0",
-            ),
-        )
-
-        # ── Results tab panel (Tab 1) ─────────────────────────────────────
-        self._to_analysis_btn = widgets.Button(
-            description="→ View Analysis",
-            button_style="",
-            icon="bar-chart",
-            layout=_layout(display="none", width="160px", margin="8px 0 0 0"),
-        )
-        # Label above the 3D viewer — updated by _do_run to say "Optimized geometry"
-        # for Geometry Opt, or hidden for other calc types that don't change geometry.
-        self._viz_label = widgets.HTML(
-            value="",
-            layout=_layout(display="none"),
-        )
-        self.results_tab_panel = widgets.VBox(
-            [
-                widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
-                self.result_output,
-                self._viz_label,
-                self.result_viz_output,
-                self._result_dir_label,
-                # advanced_accordion appended in _assemble_tabs (built later in
-                # _build_compare_section — must run before it can be referenced here)
-                self._to_analysis_btn,
-            ],
-            layout=_layout(padding="8px 0"),
-        )
-        # Backward-compat alias — existing methods that reference results_panel still work
-        self.results_panel = self.results_tab_panel
-
-        # ── Analysis tab: molecule viewer (shown for all calc types) ─────
-        self._analysis_mol_output = widgets.Output()
-
-        # ── Analysis tab panel (Tab 2) ────────────────────────────────────
-        self._analysis_context_lbl = widgets.HTML(
-            value=(
-                '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
-                "No result loaded yet. Run a calculation or load one from History.</p>"
-            )
-        )
-        self._analysis_empty_html = widgets.HTML(
-            value=(
-                '<p style="color:#888;font-size:13px;font-style:italic;margin:8px 0">'
-                "No interactive analysis is available for this calculation type.<br>"
-                "Run a Single Point, Geo Opt, or Frequency calculation to see "
-                "orbital diagrams, trajectory animations, and spectra here.</p>"
-            ),
-            layout=_layout(display="none"),
-        )
-        self._ana_unavail_html = widgets.HTML(value="", layout=_layout(display="none"))
-        self._build_ana_switcher()
-        self.analysis_tab_panel = widgets.VBox(
-            [
-                self._analysis_context_lbl,
-                self._analysis_mol_output,
-                self._analysis_empty_html,
-                self._ana_unavail_html,
-                self._orb_accordion,
-                self._pes_scan_accordion,
-                self.traj_accordion,
-                self.vib_accordion,
-                self._ir_accordion,
-                self._iso_accordion,
-                self._tddft_accordion,
-                self._nmr_accordion,
-            ],
-            layout=_layout(padding="8px 0"),
-        )
-        # Backward-compat alias for post_calc_panel references in tests
-        self.post_calc_panel = self.analysis_tab_panel
+        _bld_build_results_section(self, layout_fn=_layout)
 
     # ── Analysis panel switcher ───────────────────────────────────────────
 
@@ -2103,23 +1544,7 @@ class QuantUIApp:
     # ── Run ───────────────────────────────────────────────────────────────
 
     def _on_run_clicked(self, btn) -> None:
-        self.run_output.clear_output()
-        self.result_output.clear_output()
-        self.result_viz_output.clear_output()
-        self._analysis_mol_output.clear_output()
-        self._viz_label.layout.display = "none"
-        self._viz_label.value = ""
-        self._deactivate_all_ana_panels()
-        self._clear_output_widget(self._pes_plot_html)
-        self._result_dir_label.value = ""
-        self._result_dir_label.layout.display = "none"
-        self._result_log_accordion.layout.display = "none"
-        self._result_log_accordion.selected_index = None
-        self._result_log_output.clear_output()
-        self._completion_banner.layout.display = "none"
-        self._to_analysis_btn.layout.display = "none"
-        self._analysis_empty_html.layout.display = "none"
-        threading.Thread(target=self._do_run, daemon=True).start()
+        _run_on_run_clicked(self, btn)
 
     def _on_solvent_cb_changed(self, change) -> None:
         self.solvent_dd.layout.display = "" if change["new"] else "none"
@@ -3256,54 +2681,10 @@ class QuantUIApp:
             self.run_btn.disabled = False
 
     def _update_notes(self, change=None) -> None:
-        self.notes_output.clear_output(wait=True)
-        if self._molecule is None:
-            return
-        try:
-            from quantui import PySCFCalculation
-
-            calc = PySCFCalculation(
-                self._molecule,
-                method=self.method_dd.value,
-                basis=self.basis_dd.value,
-            )
-            notes = calc.get_educational_notes()
-            if notes:
-                safe = (
-                    notes.replace("**", "<b>", 1)
-                    .replace("**", "</b>", 1)
-                    .replace("\n\n", "<br><br>")
-                )
-                with self.notes_output:
-                    display(
-                        HTML(
-                            '<div style="background:#fffbf0;padding:8px 12px;'
-                            'border-radius:4px;font-size:13px;margin-top:6px">'
-                            + safe
-                            + "</div>"
-                        )
-                    )
-        except Exception:
-            pass
+        _run_update_notes(self, change)
 
     def _update_estimate(self, change=None) -> None:
-        if self._molecule is None:
-            self.perf_estimate_html.value = ""
-            return
-        try:
-            n_basis = _calc_log.count_basis_functions(
-                self._molecule.atoms, self.basis_dd.value
-            )
-            est = _calc_log.estimate_time(
-                n_atoms=len(self._molecule.atoms),
-                n_electrons=self._molecule.get_electron_count(),
-                method=self.method_dd.value,
-                basis=self.basis_dd.value,
-                n_basis=n_basis,
-            )
-            self.perf_estimate_html.value = _calc_log.format_estimate(est)
-        except Exception:
-            self.perf_estimate_html.value = ""
+        _run_update_estimate(self, calc_log_mod=_calc_log, change=change)
 
     def _refresh_results_browser(self) -> None:
         try:

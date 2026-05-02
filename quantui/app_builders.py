@@ -308,6 +308,370 @@ def build_history_section(
     app._refresh_perf_stats()
 
 
+def build_shared_widgets(
+    app: Any,
+    *,
+    layout_fn: Any,
+    step_progress_cls: Any,
+    supported_methods: list[Any],
+    supported_basis_sets: list[Any],
+    default_method: str,
+    default_basis: str,
+    default_charge: int,
+    default_multiplicity: int,
+    default_fmax: float,
+    default_opt_steps: int,
+    preopt_available: bool,
+    visualization_available: bool,
+    both_viz_available: bool,
+    default_viz_backend: Any,
+    default_viz_style: str,
+    default_lighting: str,
+    viz_style_options: list[Any],
+    plotlymol_viz: bool,
+    lighting_options: list[Any],
+    rdkit_available: bool,
+) -> None:
+    """Build shared widgets used across tabs and callbacks."""
+    app.mol_info_html = widgets.HTML(
+        value='<i style="color:#888">No molecule loaded yet.</i>'
+    )
+    app.mol_summary_compact = widgets.HTML(value="")
+    app.viz_output = widgets.Output(layout=layout_fn(min_height="50px"))
+    app.run_output = widgets.Output(
+        layout=layout_fn(
+            border="1px solid #c0ccd8",
+            min_height="80px",
+            max_height="400px",
+            padding="8px",
+            overflow_y="auto",
+        )
+    )
+    with app.run_output:
+        display(
+            HTML(
+                '<p style="color:#999;font-style:italic;font-size:13px;margin:2px 0">'
+                "No calculation run yet. PySCF output and any errors will appear here."
+                "</p>"
+            )
+        )
+    app.result_output = widgets.Output()
+    app.result_viz_output = widgets.Output()
+    app.comparison_output = widgets.Output()
+    app._last_result_dir = None
+
+    app._viz_backend = default_viz_backend
+    if both_viz_available:
+        app.viz_backend_toggle = widgets.ToggleButtons(
+            options=[("PlotlyMol", "plotlymol"), ("py3Dmol", "py3dmol")],
+            value=default_viz_backend,
+            tooltips=["Plotly-based interactive viewer", "WebGL viewer (py3Dmol)"],
+            style={"button_width": "90px"},
+            layout=layout_fn(margin="2px 0 0 0"),
+        )
+    else:
+        app.viz_backend_toggle = None  # type: ignore[assignment]
+
+    app._viz_style = default_viz_style
+    app._viz_lighting = default_lighting
+    app.viz_style_dd = widgets.Dropdown(
+        options=viz_style_options,
+        value=default_viz_style,
+        description="Style:",
+        style={"description_width": "40px"},
+        layout=layout_fn(width="180px"),
+        disabled=not visualization_available,
+    )
+    lighting_available = visualization_available and plotlymol_viz
+    app.viz_lighting_dd = widgets.Dropdown(
+        options=lighting_options,
+        value=default_lighting,
+        description="Lighting:",
+        style={"description_width": "58px"},
+        layout=layout_fn(width="170px"),
+        disabled=not lighting_available,
+    )
+    if not lighting_available:
+        app.viz_lighting_dd.layout.visibility = "hidden"
+    app.viz_controls_box = widgets.HBox(
+        [app.viz_style_dd, app.viz_lighting_dd],
+        layout=layout_fn(gap="8px", margin="2px 0 0 0", align_items="center"),
+    )
+    app.notes_output = widgets.Output()
+    app.perf_estimate_html = widgets.HTML()
+
+    app.step_progress = step_progress_cls(
+        ["Choose molecule", "Set method", "Run", "Results"]
+    )
+    app.step_progress.start(0)
+
+    app.method_dd = widgets.Dropdown(
+        options=supported_methods,
+        value=default_method,
+        description="Method:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="260px"),
+    )
+    app.basis_dd = widgets.Dropdown(
+        options=supported_basis_sets,
+        value=default_basis,
+        description="Basis Set:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="260px"),
+    )
+    app.charge_si = widgets.BoundedIntText(
+        value=default_charge,
+        min=-10,
+        max=10,
+        description="Charge:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="190px"),
+    )
+    app.mult_si = widgets.BoundedIntText(
+        value=default_multiplicity,
+        min=1,
+        max=10,
+        description="Multiplicity:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="190px"),
+    )
+    app.preopt_cb = widgets.Checkbox(
+        value=False,
+        description="Pre-optimize geometry (for a crude starting point)",
+        disabled=not preopt_available,
+        layout=layout_fn(width="400px"),
+    )
+
+    from quantui.config import SOLVENT_OPTIONS as _SOLVENT_OPTS
+
+    app.solvent_cb = widgets.Checkbox(
+        value=False,
+        description="Implicit solvent (PCM)",
+        layout=layout_fn(width="240px"),
+    )
+    app.solvent_dd = widgets.Dropdown(
+        options=list(_SOLVENT_OPTS.keys()),
+        value="Water",
+        description="Solvent:",
+        style={"description_width": "70px"},
+        layout=layout_fn(width="200px", display="none"),
+    )
+
+    app.calc_type_dd = widgets.Dropdown(
+        options=[
+            "Single Point",
+            "Geometry Opt",
+            "Frequency",
+            "UV-Vis (TD-DFT)",
+            "NMR Shielding",
+            "PES Scan",
+        ],
+        value="Single Point",
+        description="Calc. Type:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="310px"),
+    )
+    app.fmax_fi = widgets.BoundedFloatText(
+        value=default_fmax,
+        min=0.001,
+        max=1.0,
+        step=0.005,
+        description="Force thr. (eV/Å):",
+        style={"description_width": "130px"},
+        layout=layout_fn(width="270px"),
+    )
+    app.max_steps_si = widgets.BoundedIntText(
+        value=default_opt_steps,
+        min=10,
+        max=1000,
+        description="Max steps:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="200px"),
+    )
+    app.nstates_si = widgets.BoundedIntText(
+        value=10,
+        min=1,
+        max=50,
+        description="# states:",
+        style={"description_width": "100px"},
+        layout=layout_fn(width="180px"),
+    )
+
+    app._freq_seed_dd = widgets.Dropdown(
+        options=[("(use current molecule)", "")],
+        description="Seed geometry:",
+        style={"description_width": "110px"},
+        layout=layout_fn(width="420px"),
+        tooltip="Optionally load the final optimised geometry from a previous Geo Opt result",
+    )
+    app._freq_seed_refresh_btn = widgets.Button(
+        description="",
+        icon="refresh",
+        layout=layout_fn(width="32px", height="32px"),
+        tooltip="Refresh the list of saved geometry optimisations",
+    )
+    app._freq_preopt_cb = widgets.Checkbox(
+        value=False,
+        description="Geometry optimization (recommended for unoptimized inputs)",
+        style={"description_width": "initial"},
+        layout=layout_fn(width="100%"),
+    )
+    app._freq_seed_note = widgets.HTML("")
+
+    app._scan_type_dd = widgets.Dropdown(
+        options=["Bond", "Angle", "Dihedral"],
+        value="Bond",
+        description="Scan type:",
+        style={"description_width": "80px"},
+        layout=layout_fn(width="220px"),
+    )
+    atom_idx_layout = layout_fn(width="95px")
+    atom_idx_style = {"description_width": "50px"}
+    app._scan_atom1 = widgets.BoundedIntText(
+        value=1,
+        min=1,
+        max=999,
+        description="Atom 1:",
+        style=atom_idx_style,
+        layout=atom_idx_layout,
+    )
+    app._scan_atom2 = widgets.BoundedIntText(
+        value=2,
+        min=1,
+        max=999,
+        description="Atom 2:",
+        style=atom_idx_style,
+        layout=atom_idx_layout,
+    )
+    app._scan_atom3 = widgets.BoundedIntText(
+        value=3,
+        min=1,
+        max=999,
+        description="Atom 3:",
+        style=atom_idx_style,
+        layout=atom_idx_layout,
+    )
+    app._scan_atom4 = widgets.BoundedIntText(
+        value=4,
+        min=1,
+        max=999,
+        description="Atom 4:",
+        style=atom_idx_style,
+        layout=atom_idx_layout,
+    )
+    app._scan_atom34_box = widgets.HBox(
+        [app._scan_atom3, app._scan_atom4],
+        layout=layout_fn(gap="4px"),
+    )
+    app._scan_start = widgets.BoundedFloatText(
+        value=0.5,
+        min=0.01,
+        max=1000.0,
+        step=0.1,
+        description="Start:",
+        style={"description_width": "40px"},
+        layout=layout_fn(width="140px"),
+    )
+    app._scan_stop = widgets.BoundedFloatText(
+        value=2.0,
+        min=0.01,
+        max=1000.0,
+        step=0.1,
+        description="Stop:",
+        style={"description_width": "40px"},
+        layout=layout_fn(width="140px"),
+    )
+    app._scan_steps = widgets.BoundedIntText(
+        value=10,
+        min=2,
+        max=100,
+        description="Points:",
+        style={"description_width": "50px"},
+        layout=layout_fn(width="120px"),
+    )
+    app._scan_unit_lbl = widgets.HTML(
+        '<span style="font-size:12px;color:#555">Å</span>'
+    )
+
+    app.calc_extra_opts = widgets.VBox([])
+
+    app.method_help_btn = widgets.Button(
+        description="?",
+        button_style="",
+        layout=layout_fn(width="28px", height="28px"),
+        tooltip="RHF vs UHF — opens Help tab",
+    )
+    app.basis_help_btn = widgets.Button(
+        description="?",
+        button_style="",
+        layout=layout_fn(width="28px", height="28px"),
+        tooltip="Choosing a basis set — opens Help tab",
+    )
+
+    app.run_btn = widgets.Button(
+        description="Run Calculation",
+        button_style="success",
+        icon="play",
+        disabled=True,
+        layout=layout_fn(width="200px", height="36px"),
+    )
+    app.run_status = widgets.Label()
+
+    app.log_clear_btn = widgets.Button(
+        description="Clear",
+        button_style="",
+        icon="times",
+        layout=layout_fn(width="90px", height="26px"),
+        tooltip="Clear calculation output",
+    )
+
+    app.accumulate_btn = widgets.Button(
+        description="Add to Comparison",
+        button_style="info",
+        icon="plus",
+        disabled=True,
+        layout=layout_fn(width="190px"),
+    )
+    app.clear_btn = widgets.Button(
+        description="Clear",
+        button_style="warning",
+        icon="trash",
+        layout=layout_fn(width="100px"),
+    )
+    app.export_btn = widgets.Button(
+        description="Export Script",
+        button_style="",
+        icon="download",
+        disabled=True,
+        layout=layout_fn(width="160px"),
+    )
+    app.export_status = widgets.Label()
+    rdkit_tip = (
+        "" if rdkit_available else "Requires RDKit (conda install -c conda-forge rdkit)"
+    )
+    app.export_xyz_btn = widgets.Button(
+        description="Export XYZ",
+        icon="download",
+        disabled=True,
+        layout=layout_fn(width="130px"),
+    )
+    app.export_mol_btn = widgets.Button(
+        description="Export MOL",
+        icon="download",
+        disabled=True,
+        tooltip=rdkit_tip,
+        layout=layout_fn(width="130px"),
+    )
+    app.export_pdb_btn = widgets.Button(
+        description="Export PDB",
+        icon="download",
+        disabled=True,
+        tooltip=rdkit_tip,
+        layout=layout_fn(width="130px"),
+    )
+    app.struct_export_status = widgets.Label()
+
+
 def build_theme_selector(app: Any, *, layout_fn: Any) -> None:
     """Build the theme selector widgets and apply default theme CSS."""
     app._theme_style = widgets.Output(
@@ -564,6 +928,333 @@ def build_run_section(app: Any, *, layout_fn: Any) -> None:
             app.run_output,
         ]
     )
+
+
+def build_results_section(app: Any, *, layout_fn: Any) -> None:
+    """Build results and analysis tab panels/widgets."""
+    app._pes_plot_html = widgets.Output(layout=layout_fn(width="100%"))
+    app._pes_scan_accordion = widgets.Accordion(
+        children=[
+            widgets.VBox(
+                [app._pes_plot_html],
+                layout=layout_fn(padding="8px"),
+            )
+        ],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app._pes_scan_accordion.set_title(0, "PES Energy Profile")
+    app._pes_scan_accordion.selected_index = None
+
+    app.traj_output = widgets.Output()
+    app.traj_accordion = widgets.Accordion(
+        children=[app.traj_output],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app.traj_accordion.set_title(0, "Trajectory Viewer")
+    app.traj_accordion.selected_index = None
+    app.traj_accordion.observe(
+        app._safe_cb(app._on_traj_expand), names=["selected_index"]
+    )
+
+    app.vib_mode_dd = widgets.Dropdown(
+        description="Mode:",
+        options=[],
+        style={"description_width": "50px"},
+        layout=layout_fn(width="360px"),
+    )
+    app.vib_output = widgets.Output()
+    app.vib_accordion = widgets.Accordion(
+        children=[
+            widgets.VBox(
+                [app.vib_mode_dd, app.vib_output],
+                layout=layout_fn(padding="8px"),
+            )
+        ],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app.vib_accordion.set_title(0, "Vibrational Mode Viewer")
+    app.vib_accordion.selected_index = None
+
+    app._ir_mode_toggle = widgets.ToggleButtons(
+        options=["Stick", "Broadened"],
+        value="Stick",
+        style={"button_width": "80px"},
+        layout=layout_fn(margin="0 8px 0 0"),
+    )
+    app._ir_fwhm_slider = widgets.FloatSlider(
+        value=20.0,
+        min=5.0,
+        max=100.0,
+        step=5.0,
+        description="Line width:",
+        style={"description_width": "80px"},
+        layout=layout_fn(width="260px", display="none"),
+    )
+    app._ir_fig = widgets.Output(layout=layout_fn(width="100%"))
+
+    ir_controls = widgets.HBox(
+        [app._ir_mode_toggle, app._ir_fwhm_slider],
+        layout=layout_fn(align_items="center", margin="0 0 6px 0"),
+    )
+    ir_body_children = [ir_controls, app._ir_fig]
+    app._ir_accordion = widgets.Accordion(
+        children=[
+            widgets.VBox(
+                ir_body_children,
+                layout=layout_fn(padding="8px"),
+            )
+        ],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app._ir_accordion.set_title(0, "IR Spectrum")
+    app._ir_accordion.selected_index = None
+
+    app._orb_ymin_input = widgets.BoundedFloatText(
+        value=-30.0,
+        min=-500.0,
+        max=200.0,
+        step=1.0,
+        description="Y min:",
+        layout=layout_fn(width="140px"),
+        style={"description_width": "45px"},
+    )
+    app._orb_ymax_input = widgets.BoundedFloatText(
+        value=5.0,
+        min=-500.0,
+        max=500.0,
+        step=1.0,
+        description="Y max:",
+        layout=layout_fn(width="140px"),
+        style={"description_width": "45px"},
+    )
+    app._orb_n_orb_input = widgets.BoundedIntText(
+        value=20,
+        min=4,
+        max=200,
+        step=2,
+        description="Show N:",
+        layout=layout_fn(width="120px"),
+        style={"description_width": "50px"},
+    )
+    orb_controls_row = widgets.HBox(
+        [
+            widgets.HTML(
+                '<span style="font-size:11px;color:#555;font-weight:600">Y range:</span>'
+            ),
+            app._orb_ymin_input,
+            app._orb_ymax_input,
+            widgets.HTML(
+                '<span style="font-size:11px;color:#555;font-weight:600;margin-left:8px">'
+                "Orbitals shown:</span>"
+            ),
+            app._orb_n_orb_input,
+        ],
+        layout=layout_fn(
+            align_items="center",
+            flex_wrap="wrap",
+            gap="4px",
+            margin="0 0 6px 0",
+        ),
+    )
+    app._orb_diagram_html = widgets.Output(layout=layout_fn(width="100%"))
+    orb_diagram_content: list[Any] = [orb_controls_row, app._orb_diagram_html]
+    app._orb_diagram_box = widgets.VBox(
+        orb_diagram_content,
+        layout=layout_fn(width="100%"),
+    )
+    app._orb_toggle = widgets.ToggleButtons(
+        options=["HOMO-1", "HOMO", "LUMO", "LUMO+1"],
+        value="HOMO",
+        style={"button_width": "70px"},
+        layout=layout_fn(margin="8px 0 4px 0"),
+    )
+    app._orb_iso_output = widgets.Output()
+    app._orb_iso_controls = widgets.VBox(
+        [
+            widgets.HTML(
+                '<span style="font-size:12px;color:#555;font-weight:bold">'
+                "Orbital isosurface:</span>"
+            ),
+            app._orb_toggle,
+            app._orb_iso_output,
+        ],
+        layout=layout_fn(display="none", margin="8px 0 0 0"),
+    )
+    app._orb_accordion = widgets.Accordion(
+        children=[
+            widgets.VBox(
+                [app._orb_diagram_box],
+                layout=layout_fn(padding="8px"),
+            )
+        ],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app._orb_accordion.set_title(0, "Orbital Diagram")
+    app._orb_accordion.selected_index = None
+
+    app._iso_generate_btn = widgets.Button(
+        description="Generate Isosurface",
+        button_style="primary",
+        icon="flask",
+        disabled=True,
+        tooltip=(
+            "Generate a 3D orbital isosurface. "
+            "Available after running or loading a Single Point or Geometry Optimization."
+        ),
+        layout=layout_fn(width="200px", margin="8px 0 4px 0"),
+    )
+    iso_body = widgets.VBox(
+        [
+            widgets.HTML(
+                '<p style="color:#555;font-size:12px;margin:0 0 8px">'
+                "Visualise a molecular orbital as a 3D isosurface (Linux / WSL only — "
+                "requires PySCF and RDKit). Run or load a Single Point or Geometry "
+                "Optimization first, then click <b>Generate</b>.</p>"
+            ),
+            app._orb_iso_controls,
+            app._iso_generate_btn,
+        ],
+        layout=layout_fn(padding="8px"),
+    )
+    app._iso_accordion = widgets.Accordion(
+        children=[iso_body],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app._iso_accordion.set_title(0, "Orbital Isosurface")
+    app._iso_accordion.selected_index = None
+
+    app._tddft_fig = widgets.Output(layout=layout_fn(width="100%"))
+    app._tddft_accordion = widgets.Accordion(
+        children=[
+            widgets.VBox(
+                [app._tddft_fig],
+                layout=layout_fn(padding="8px"),
+            )
+        ],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app._tddft_accordion.set_title(0, "UV-Vis Absorption Spectrum")
+    app._tddft_accordion.selected_index = None
+
+    app._nmr_output = widgets.HTML(value="", layout=layout_fn(width="100%"))
+    app._nmr_accordion = widgets.Accordion(
+        children=[
+            widgets.VBox(
+                [app._nmr_output],
+                layout=layout_fn(padding="8px"),
+            )
+        ],
+        layout=layout_fn(display="none", margin="8px 0"),
+    )
+    app._nmr_accordion.set_title(0, "NMR Chemical Shifts")
+    app._nmr_accordion.selected_index = None
+
+    app._result_dir_label = widgets.HTML(
+        value="",
+        layout=layout_fn(display="none", margin="4px 0 0 0"),
+    )
+
+    app._result_log_output = widgets.Output()
+    app._result_log_accordion = widgets.Accordion(
+        children=[app._result_log_output],
+        layout=layout_fn(display="none", margin="8px 0 0 0"),
+    )
+    app._result_log_accordion.set_title(0, "Full output log (pyscf.log)")
+    app._result_log_accordion.selected_index = None
+
+    app._go_results_btn = widgets.Button(
+        description="→ View Results",
+        button_style="success",
+        layout=layout_fn(width="130px"),
+    )
+    app._go_analysis_btn = widgets.Button(
+        description="→ View Analysis",
+        button_style="info",
+        layout=layout_fn(width="140px"),
+    )
+    app._completion_mol_lbl = widgets.HTML(value="")
+    app._completion_banner = widgets.HBox(
+        [
+            widgets.HTML(
+                '<span style="color:#22c55e;font-weight:600;font-size:13px">'
+                "✓ Calculation complete — </span>"
+            ),
+            app._completion_mol_lbl,
+            app._go_results_btn,
+            app._go_analysis_btn,
+        ],
+        layout=layout_fn(
+            display="none",
+            align_items="center",
+            gap="8px",
+            padding="10px 12px",
+            border="1px solid #bbf7d0",
+            border_radius="6px",
+            background_color="#f0fdf4",
+            margin="8px 0",
+        ),
+    )
+
+    app._to_analysis_btn = widgets.Button(
+        description="→ View Analysis",
+        button_style="",
+        icon="bar-chart",
+        layout=layout_fn(display="none", width="160px", margin="8px 0 0 0"),
+    )
+    app._viz_label = widgets.HTML(
+        value="",
+        layout=layout_fn(display="none"),
+    )
+    app.results_tab_panel = widgets.VBox(
+        [
+            widgets.HTML('<h3 style="margin:14px 0 6px">Results</h3>'),
+            app.result_output,
+            app._viz_label,
+            app.result_viz_output,
+            app._result_dir_label,
+            app._to_analysis_btn,
+        ],
+        layout=layout_fn(padding="8px 0"),
+    )
+    app.results_panel = app.results_tab_panel
+
+    app._analysis_mol_output = widgets.Output()
+
+    app._analysis_context_lbl = widgets.HTML(
+        value=(
+            '<p style="color:#555;font-size:13px;margin:4px 0 12px">'
+            "No result loaded yet. Run a calculation or load one from History.</p>"
+        )
+    )
+    app._analysis_empty_html = widgets.HTML(
+        value=(
+            '<p style="color:#888;font-size:13px;font-style:italic;margin:8px 0">'
+            "No interactive analysis is available for this calculation type.<br>"
+            "Run a Single Point, Geo Opt, or Frequency calculation to see "
+            "orbital diagrams, trajectory animations, and spectra here.</p>"
+        ),
+        layout=layout_fn(display="none"),
+    )
+    app._ana_unavail_html = widgets.HTML(value="", layout=layout_fn(display="none"))
+    app._build_ana_switcher()
+    app.analysis_tab_panel = widgets.VBox(
+        [
+            app._analysis_context_lbl,
+            app._analysis_mol_output,
+            app._analysis_empty_html,
+            app._ana_unavail_html,
+            app._orb_accordion,
+            app._pes_scan_accordion,
+            app.traj_accordion,
+            app.vib_accordion,
+            app._ir_accordion,
+            app._iso_accordion,
+            app._tddft_accordion,
+            app._nmr_accordion,
+        ],
+        layout=layout_fn(padding="8px 0"),
+    )
+    app.post_calc_panel = app.analysis_tab_panel
 
 
 def build_compare_section(app: Any, *, layout_fn: Any, rdkit_available: bool) -> None:
